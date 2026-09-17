@@ -1,0 +1,387 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum Role {
+  ADMIN
+  TEACHER
+  STUDENT
+  PARENT
+}
+
+enum StudentStatus {
+  ACTIVE
+  PAUSED
+  INACTIVE
+  COMPLETED
+  LEFT
+}
+
+enum GroupStatus {
+  ACTIVE
+  CLOSED
+  ARCHIVED
+}
+
+enum EnrollmentStatus {
+  ACTIVE
+  ENDED
+}
+
+enum EnrollmentEndReason {
+  GROUP_CHANGE
+  STUDENT_LEFT
+  COMPLETED
+  OTHER
+}
+
+enum LinkingTargetType {
+  STUDENT
+  PARENT
+}
+
+enum LessonMaterialType {
+  PDF
+  DOCUMENT
+  IMAGE
+  VIDEO
+  AUDIO
+  LINK
+  TEXT
+}
+
+enum HomeworkResultStatus {
+  COMPLETED
+  NOT_COMPLETED
+}
+
+enum AttendanceStatus {
+  PRESENT
+  ABSENT
+  LATE
+  EXCUSED
+}
+
+enum AssessmentType {
+  WEEKLY
+  MONTHLY
+  GENERAL
+  CUSTOM
+}
+
+// One authenticated identity. Admin/Teacher log in with username+password;
+// Student/Parent are identified by a linked Telegram chat id (see LinkingCode).
+model User {
+  id             String   @id @default(cuid())
+  role           Role
+  username       String?  @unique
+  passwordHash   String?
+  telegramChatId String?  @unique
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  student Student?
+  parent  Parent?
+  teacher Teacher?
+
+  @@map("users")
+}
+
+model Student {
+  id        String        @id @default(cuid())
+  firstName String
+  lastName  String
+  dob       DateTime
+  phone     String?
+  status    StudentStatus @default(ACTIVE)
+  userId    String?       @unique
+  user      User?         @relation(fields: [userId], references: [id])
+  createdAt DateTime      @default(now())
+  updatedAt DateTime      @updatedAt
+
+  enrollments        Enrollment[]
+  parentLinks        ParentStudentLink[]
+  attendances        Attendance[]
+  homeworkResults    HomeworkResult[]
+  assessmentResults  AssessmentResult[]
+
+  @@map("students")
+}
+
+model Parent {
+  id        String   @id @default(cuid())
+  fullName  String
+  phone     String?
+  userId    String?  @unique
+  user      User?    @relation(fields: [userId], references: [id])
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  studentLinks ParentStudentLink[]
+
+  @@map("parents")
+}
+
+model Teacher {
+  id        String   @id @default(cuid())
+  fullName  String
+  userId    String   @unique
+  user      User     @relation(fields: [userId], references: [id])
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  groups         Group[]
+  lessonSessions LessonSession[]
+
+  @@map("teachers")
+}
+
+// The family relationship: which guardians can see which children.
+// Created directly by an admin (independent of Telegram linking).
+// Never hard-deleted -- unlinkedAt records when access was revoked.
+model ParentStudentLink {
+  id         String    @id @default(cuid())
+  parentId   String
+  parent     Parent    @relation(fields: [parentId], references: [id])
+  studentId  String
+  student    Student   @relation(fields: [studentId], references: [id])
+  linkedAt   DateTime  @default(now())
+  unlinkedAt DateTime?
+
+  @@index([studentId])
+  @@index([parentId])
+  @@map("parent_student_links")
+}
+
+// A one-time code an admin issues so a Telegram user can bind their account
+// to a specific Student or Parent record.
+model LinkingCode {
+  code       String            @id
+  targetType LinkingTargetType
+  targetId   String
+  issuedAt   DateTime          @default(now())
+  expiresAt  DateTime
+  consumedAt DateTime?
+
+  @@map("linking_codes")
+}
+
+model Subject {
+  id      String   @id @default(cuid())
+  name    String   @unique
+  courses Course[]
+
+  enrollments Enrollment[]
+
+  @@map("subjects")
+}
+
+model Course {
+  id        String  @id @default(cuid())
+  subjectId String
+  subject   Subject @relation(fields: [subjectId], references: [id])
+  name      String
+  levels    Level[]
+
+  @@unique([subjectId, name])
+  @@map("courses")
+}
+
+model Level {
+  id       String  @id @default(cuid())
+  courseId String
+  course   Course  @relation(fields: [courseId], references: [id])
+  name     String
+  groups   Group[]
+
+  assessmentCategories AssessmentCategory[]
+
+  @@unique([courseId, name])
+  @@map("levels")
+}
+
+// A configurable skill/grading dimension scoped to a Level (§18/§43). Once
+// referenced by any Assessment, a category is retired rather than edited or
+// deleted, so historical reports keep the category set active at the time
+// they were produced (ADR: see docs/DOMAIN-MODEL.md §51.2).
+model AssessmentCategory {
+  id        String    @id @default(cuid())
+  levelId   String
+  level     Level     @relation(fields: [levelId], references: [id])
+  name      String
+  retiredAt DateTime?
+  createdAt DateTime  @default(now())
+
+  assessments Assessment[]
+
+  @@unique([levelId, name])
+  @@map("assessment_categories")
+}
+
+model Group {
+  id           String      @id @default(cuid())
+  levelId      String
+  level        Level       @relation(fields: [levelId], references: [id])
+  teacherId    String
+  teacher      Teacher     @relation(fields: [teacherId], references: [id])
+  name         String
+  scheduleDays String[]
+  scheduleTime String
+  startDate    DateTime
+  status       GroupStatus @default(ACTIVE)
+  createdAt    DateTime    @default(now())
+  updatedAt    DateTime    @updatedAt
+
+  enrollments    Enrollment[]
+  lessonSessions LessonSession[]
+  assessments    Assessment[]
+
+  @@map("groups")
+}
+
+// Time-bounded membership of a Student in a Group. `subjectId` is denormalized
+// from group.level.course.subject purely to support the partial unique index
+// (added in a follow-up migration) enforcing one active enrollment per subject.
+model Enrollment {
+  id        String               @id @default(cuid())
+  studentId String
+  student   Student              @relation(fields: [studentId], references: [id])
+  groupId   String
+  group     Group                @relation(fields: [groupId], references: [id])
+  subjectId String
+  subject   Subject              @relation(fields: [subjectId], references: [id])
+  startDate DateTime
+  endDate   DateTime?
+  status    EnrollmentStatus     @default(ACTIVE)
+  endReason EnrollmentEndReason?
+  createdAt DateTime             @default(now())
+  updatedAt DateTime             @updatedAt
+
+  @@index([studentId])
+  @@index([groupId])
+  @@map("enrollments")
+}
+
+// One actual, dated occurrence of a Group meeting (CONTEXT.md: LessonSession).
+// One per (group, date) -- the teacher's single "save the lesson" action
+// (requirements §29) upserts this row plus its materials/homework/attendance.
+model LessonSession {
+  id        String   @id @default(cuid())
+  groupId   String
+  group     Group    @relation(fields: [groupId], references: [id])
+  teacherId String
+  teacher   Teacher  @relation(fields: [teacherId], references: [id])
+  date      DateTime
+  topic     String?
+  notes     String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  materials   LessonMaterial[]
+  homework    Homework?
+  attendances Attendance[]
+
+  @@unique([groupId, date])
+  @@map("lesson_sessions")
+}
+
+model LessonMaterial {
+  id              String             @id @default(cuid())
+  lessonSessionId String
+  lessonSession   LessonSession      @relation(fields: [lessonSessionId], references: [id])
+  type            LessonMaterialType
+  content         String
+  createdAt       DateTime           @default(now())
+
+  @@map("lesson_materials")
+}
+
+// The instructions a Teacher records against a LessonSession. The Student
+// never submits it through the platform (§16) -- HomeworkResult is entered
+// later, by the Teacher, typically during a subsequent session.
+model Homework {
+  id              String    @id @default(cuid())
+  lessonSessionId String    @unique
+  lessonSession   LessonSession @relation(fields: [lessonSessionId], references: [id])
+  instructions    String
+  dueDate         DateTime?
+  createdAt       DateTime  @default(now())
+
+  results HomeworkResult[]
+
+  @@map("homeworks")
+}
+
+// A completion status is always required; `score` is optional and, when
+// absent, the entry is excluded from homework-performance averages (§51.1).
+model HomeworkResult {
+  id             String               @id @default(cuid())
+  homeworkId     String
+  homework       Homework             @relation(fields: [homeworkId], references: [id])
+  studentId      String
+  student        Student              @relation(fields: [studentId], references: [id])
+  status         HomeworkResultStatus
+  score          Int?
+  teacherComment String?
+  createdAt      DateTime             @default(now())
+  updatedAt      DateTime             @updatedAt
+
+  @@unique([homeworkId, studentId])
+  @@map("homework_results")
+}
+
+// Present/Late credit fully, Absent credits nothing, Excused is removed from
+// the denominator entirely when computing attendance % (§51.1).
+model Attendance {
+  id              String           @id @default(cuid())
+  lessonSessionId String
+  lessonSession   LessonSession    @relation(fields: [lessonSessionId], references: [id])
+  studentId       String
+  student         Student          @relation(fields: [studentId], references: [id])
+  status          AttendanceStatus
+  createdAt       DateTime         @default(now())
+  updatedAt       DateTime         @updatedAt
+
+  @@unique([lessonSessionId, studentId])
+  @@map("attendances")
+}
+
+// A single-category, Teacher-created grading event for a Group on a date.
+// A "Monthly Assessment" spanning several categories is several Assessment
+// rows sharing (title, type, date, group) -- see ADR-0001.
+model Assessment {
+  id             String             @id @default(cuid())
+  groupId        String
+  group          Group              @relation(fields: [groupId], references: [id])
+  categoryId     String
+  category       AssessmentCategory @relation(fields: [categoryId], references: [id])
+  title          String
+  type           AssessmentType
+  date           DateTime
+  maxScore       Int
+  teacherComment String?
+  createdAt      DateTime           @default(now())
+
+  results AssessmentResult[]
+
+  @@map("assessments")
+}
+
+model AssessmentResult {
+  id           String     @id @default(cuid())
+  assessmentId String
+  assessment   Assessment @relation(fields: [assessmentId], references: [id])
+  studentId    String
+  student      Student    @relation(fields: [studentId], references: [id])
+  score        Int
+  createdAt    DateTime   @default(now())
+  updatedAt    DateTime   @updatedAt
+
+  @@unique([assessmentId, studentId])
+  @@map("assessment_results")
+}

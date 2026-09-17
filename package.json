@@ -1,0 +1,31 @@
+{
+  "name": "tashkurgan-academy",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "workspaces": [
+    "apps/*",
+    "packages/*"
+  ],
+  "scripts": {
+    "typecheck": "npm run typecheck --workspaces --if-present",
+    "lint": "eslint .",
+    "test": "vitest run",
+    "db:generate": "npm run generate --workspace=@tashkurgan/db",
+    "db:migrate": "npm run migrate --workspace=@tashkurgan/db",
+    "db:migrate:deploy": "npm run migrate:deploy --workspace=@tashkurgan/db",
+    "db:seed": "npm run seed --workspace=@tashkurgan/db",
+    "dev:server": "npm run dev --workspace=@tashkurgan/server"
+  },
+  "devDependencies": {
+    "@eslint/js": "^9.13.0",
+    "@types/node": "^22.7.5",
+    "dotenv": "^16.4.5",
+    "eslint": "^9.13.0",
+    "prettier": "^3.3.3",
+    "tsx": "^4.19.1",
+    "typescript": "^5.6.3",
+    "typescript-eslint": "^8.12.2",
+    "vitest": "^2.1.4"
+  }
+}
