@@ -2,11 +2,18 @@ import { useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { useParams } from 'react-router-dom'
 import { KeyRound } from 'lucide-react'
-import { ApiError, students as studentsApi } from '../lib/api'
-import { enrollmentEndReasonLabel, formatDate, studentStatusLabel } from '../lib/format'
+import { students as studentsApi } from '../lib/api'
+import { formatDate, studentStatusLabel } from '../lib/format'
+import { notifyError, notifySuccess } from '../lib/toast'
 import type { StudentStatus } from '../lib/types'
 import { useAuth } from '../lib/auth'
-import { Badge, Button, Card, ErrorBanner, PageHeader, Select, Spinner } from '../components/ui'
+import { Button, Card, ErrorBanner, PageHeader, Select, Spinner } from '../components/ui'
+import { GroupsCard } from '../components/student/GroupsCard'
+import { ParentsCard } from '../components/student/ParentsCard'
+import { AttendanceCard } from '../components/student/AttendanceCard'
+import { MarksCard } from '../components/student/MarksCard'
+import { PointsCard } from '../components/student/PointsCard'
+import { PaymentsCard } from '../components/student/PaymentsCard'
 
 const STATUSES: StudentStatus[] = ['ACTIVE', 'PAUSED', 'INACTIVE', 'COMPLETED', 'LEFT']
 
@@ -15,30 +22,37 @@ export function StudentDetailPage() {
   const { actor } = useAuth()
   const queryClient = useQueryClient()
   const [code, setCode] = useState<string | null>(null)
-  const [error, setError] = useState<string | null>(null)
 
-  const studentQuery = useQuery({
-    queryKey: ['student', id],
-    queryFn: () => studentsApi.get(id!),
+  const overviewQuery = useQuery({
+    queryKey: ['student-overview', id],
+    queryFn: () => studentsApi.overview(id!),
     enabled: !!id,
   })
 
   const statusMutation = useMutation({
     mutationFn: (status: StudentStatus) => studentsApi.update(id!, { status }),
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['student', id] }),
-    onError: (err) => setError(err instanceof ApiError ? err.message : 'Holatni yangilab boʻlmadi'),
+    onSuccess: () => {
+      notifySuccess('Holat yangilandi')
+      queryClient.invalidateQueries({ queryKey: ['student-overview', id] })
+    },
+    onError: (err) => notifyError(err, 'Holatni yangilab boʻlmadi'),
   })
 
   const linkingCodeMutation = useMutation({
     mutationFn: () => studentsApi.issueLinkingCode(id!),
-    onSuccess: (result) => setCode(result.code),
-    onError: (err) => setError(err instanceof ApiError ? err.message : 'Kod berib boʻlmadi'),
+    onSuccess: (result) => {
+      setCode(result.code)
+      notifySuccess('Kod yaratildi')
+    },
+    onError: (err) => notifyError(err, 'Kod berib boʻlmadi'),
   })
 
-  if (studentQuery.isLoading) return <Spinner />
-  if (studentQuery.isError || !studentQuery.data) return <ErrorBanner message="Oʻquvchi topilmadi" />
+  if (overviewQuery.isLoading) return <Spinner />
+  if (overviewQuery.isError || !overviewQuery.data) return <ErrorBanner message="Oʻquvchi topilmadi" />
 
-  const student = studentQuery.data
+  const overview = overviewQuery.data
+  const { student } = overview
+  const activeEnrollments = overview.enrollments.filter((e) => e.status === 'ACTIVE')
 
   return (
     <div>
@@ -62,48 +76,38 @@ export function StudentDetailPage() {
         }
       />
 
-      {error && (
-        <div className="mb-4">
-          <ErrorBanner message={error} />
-        </div>
-      )}
-
       <div className="grid gap-6 lg:grid-cols-2">
-        <Card className="p-5">
-          <h2 className="mb-3 text-sm font-semibold text-slate-900">Oʻqish tarixi</h2>
-          {student.enrollments?.length ? (
-            <ul className="divide-y divide-slate-100">
-              {student.enrollments.map((enrollment) => (
-                <li key={enrollment.id} className="flex items-center justify-between py-2">
-                  <div className="text-sm text-slate-700">
-                    {formatDate(enrollment.startDate)} –{' '}
-                    {enrollment.endDate ? formatDate(enrollment.endDate) : 'hozirgacha'}
-                  </div>
-                  <Badge tone={enrollment.status === 'ACTIVE' ? 'green' : 'slate'}>
-                    {enrollment.status === 'ACTIVE'
-                      ? 'Faol'
-                      : (enrollment.endReason && enrollmentEndReasonLabel[enrollment.endReason]) ?? 'Tugagan'}
-                  </Badge>
-                </li>
-              ))}
-            </ul>
-          ) : (
-            <p className="text-sm text-slate-400">Hali oʻqish tarixi yoʻq.</p>
-          )}
-        </Card>
+        <GroupsCard enrollments={overview.enrollments} />
+        <ParentsCard studentId={student.id} links={overview.parents} />
+
+        <AttendanceCard
+          totals={overview.attendance.totals}
+          rate={overview.attendance.rate}
+          recent={overview.attendance.recent}
+        />
+        <PointsCard
+          studentId={student.id}
+          total={overview.points.total}
+          recent={overview.points.recent}
+          activeEnrollments={activeEnrollments}
+          actor={actor}
+        />
+
+        <MarksCard assessmentResults={overview.assessmentResults} homeworkResults={overview.homeworkResults} />
+        <PaymentsCard studentId={student.id} payments={overview.payments.list} outstanding={overview.payments.outstanding} />
 
         <Card className="p-5">
-          <h2 className="mb-3 text-sm font-semibold text-slate-900">Telegram kirish huquqi</h2>
-          <p className="mb-3 text-sm text-slate-500">
+          <h2 className="mb-3 text-sm font-semibold text-slate-900 dark:text-slate-100">Telegram kirish huquqi</h2>
+          <p className="mb-3 text-sm text-slate-500 dark:text-slate-400">
             Oʻquvchi Telegram hisobini ulashi uchun bir martalik kod bering.
           </p>
           <Button variant="secondary" onClick={() => linkingCodeMutation.mutate()} loading={linkingCodeMutation.isPending}>
             <KeyRound className="h-4 w-4" /> Kod berish
           </Button>
           {code && (
-            <div className="mt-4 rounded-lg bg-slate-50 p-4 text-center">
-              <p className="text-xs text-slate-500">Ushbu kodni oʻquvchiga bering</p>
-              <p className="mt-1 font-mono text-2xl font-semibold tracking-widest text-slate-900">{code}</p>
+            <div className="mt-4 rounded-lg bg-slate-50 dark:bg-slate-800/60 p-4 text-center">
+              <p className="text-xs text-slate-500 dark:text-slate-400">Ushbu kodni oʻquvchiga bering</p>
+              <p className="mt-1 font-mono text-2xl font-semibold tracking-widest text-slate-900 dark:text-slate-100">{code}</p>
             </div>
           )}
         </Card>

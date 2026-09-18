@@ -14,6 +14,8 @@ import { groupRoutes } from './routes/groups'
 import { lessonSessionRoutes } from './routes/lessonSessions'
 import { assessmentRoutes } from './routes/assessments'
 import { progressRoutes } from './routes/progress'
+import { paymentRoutes } from './routes/payments'
+import { pointRoutes } from './routes/points'
 
 export async function buildApp() {
   const app = Fastify({ logger: process.env.NODE_ENV !== 'test' })
@@ -37,6 +39,8 @@ export async function buildApp() {
   await app.register(lessonSessionRoutes)
   await app.register(assessmentRoutes)
   await app.register(progressRoutes)
+  await app.register(paymentRoutes)
+  await app.register(pointRoutes)
 
   return app
 }

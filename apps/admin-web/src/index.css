@@ -1,5 +1,7 @@
 @import 'tailwindcss';
 
+@custom-variant dark (&:where(.dark, .dark *));
+
 @theme {
   --font-sans: 'Inter', ui-sans-serif, system-ui, sans-serif;
   --color-brand-50: #eef2ff;
@@ -16,5 +18,46 @@
 
 body {
   font-family: var(--font-sans);
-  @apply bg-slate-50 text-slate-900;
+  @apply bg-slate-50 text-slate-900 dark:bg-slate-950 dark:text-slate-100;
+  color-scheme: light;
+}
+
+.dark body {
+  color-scheme: dark;
+}
+
+/* Toast notifications, restyled to match the app's card language (rounded-xl,
+   brand palette) instead of react-toastify's boxy defaults -- see lib/toast.ts. */
+:root {
+  --toastify-color-light: #fff;
+  --toastify-color-dark: #0f172a;
+  --toastify-color-info: #4f46e5;
+  --toastify-color-success: #10b981;
+  --toastify-color-warning: #f59e0b;
+  --toastify-color-error: #ef4444;
+  --toastify-text-color-light: #0f172a;
+  --toastify-text-color-dark: #f1f5f9;
+  --toastify-font-family: var(--font-sans);
+  --toastify-toast-bd-radius: 0.75rem;
+  --toastify-toast-min-height: 56px;
+  --toastify-toast-shadow: 0 10px 25px -5px rgb(0 0 0 / 0.12), 0 8px 10px -6px rgb(0 0 0 / 0.08);
+  --toastify-color-progress-light: #4f46e5;
+  --toastify-color-progress-dark: #818cf8;
+}
+
+.Toastify__toast {
+  @apply border border-slate-200 font-sans text-sm dark:border-slate-800;
+}
+
+.Toastify__toast-body {
+  @apply font-medium;
+}
+
+.Toastify__close-button {
+  align-self: center;
+  opacity: 0.5;
+}
+
+.Toastify__close-button:hover {
+  opacity: 1;
 }

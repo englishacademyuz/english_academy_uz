@@ -15,13 +15,39 @@ const UZ_MONTHS = [
   'iyul', 'avgust', 'sentabr', 'oktabr', 'noyabr', 'dekabr',
 ]
 
+export function weekdayName(value: string | Date): string {
+  const date = typeof value === 'string' ? new Date(value) : value
+  return UZ_WEEKDAYS[date.getDay()]
+}
+
+export function dayMonthYearLabel(value: string | Date): string {
+  const date = typeof value === 'string' ? new Date(value) : value
+  return `${date.getDate()}-${UZ_MONTHS[date.getMonth()]}, ${date.getFullYear()}`
+}
+
 // Full weekday/month names spelled out directly rather than via
 // Intl's 'uz-UZ' long-form options -- some browsers ship reduced ICU data
 // for less common locales and silently fall back to placeholders (see
 // formatDate's comment) for exactly this kind of formatting.
 export function formatLongDate(value: string | Date): string {
   const date = typeof value === 'string' ? new Date(value) : value
-  return `${UZ_WEEKDAYS[date.getDay()]}, ${date.getDate()}-${UZ_MONTHS[date.getMonth()]}, ${date.getFullYear()}`
+  return `${weekdayName(date)}, ${dayMonthYearLabel(date)}`
+}
+
+export function formatTime(value: string | Date, withSeconds = false): string {
+  const date = typeof value === 'string' ? new Date(value) : value
+  const h = String(date.getHours()).padStart(2, '0')
+  const m = String(date.getMinutes()).padStart(2, '0')
+  if (!withSeconds) return `${h}:${m}`
+  const s = String(date.getSeconds()).padStart(2, '0')
+  return `${h}:${m}:${s}`
+}
+
+export function formatDayMonth(value: string | Date): string {
+  const date = typeof value === 'string' ? new Date(value) : value
+  const day = String(date.getDate()).padStart(2, '0')
+  const month = String(date.getMonth() + 1).padStart(2, '0')
+  return `${day}.${month}`
 }
 
 export function toDateInputValue(value: string | Date): string {
@@ -120,4 +146,38 @@ export const roleLabel: Record<string, string> = {
   TEACHER: "Oʻqituvchi",
   STUDENT: "Oʻquvchi",
   PARENT: 'Ota-ona',
+}
+
+export const paymentStatusLabel: Record<string, string> = {
+  DEBT: 'Qarzdor',
+  PARTIAL: "Qisman toʻlangan",
+  PAID: "Toʻlangan",
+}
+
+export const paymentStatusTone: Record<string, 'green' | 'amber' | 'slate' | 'red'> = {
+  DEBT: 'red',
+  PARTIAL: 'amber',
+  PAID: 'green',
+}
+
+export const pointActivityTypeLabel: Record<string, string> = {
+  HOMEWORK: 'Uy vazifasi',
+  PARTICIPATION: 'Faollik',
+  QUIZ: 'Test',
+  ASSESSMENT: 'Baholash',
+  ATTENDANCE: 'Davomat',
+  OTHER: 'Boshqa',
+}
+
+const UZ_MONTHS_SHORT = [
+  'Yanvar', 'Fevral', 'Mart', 'Aprel', 'May', 'Iyun',
+  'Iyul', 'Avgust', 'Sentabr', 'Oktabr', 'Noyabr', 'Dekabr',
+]
+
+export function formatMonthYear(month: number, year: number): string {
+  return `${UZ_MONTHS_SHORT[month - 1]} ${year}`
+}
+
+export function formatMoney(amount: number): string {
+  return `${amount.toLocaleString('ru-RU')} soʻm`
 }

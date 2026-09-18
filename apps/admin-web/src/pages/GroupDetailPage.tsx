@@ -1,15 +1,20 @@
+import { useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { useParams } from 'react-router-dom'
+import { BookOpen, Users } from 'lucide-react'
 import { groups as groupsApi } from '../lib/api'
 import { formatScheduleDays } from '../lib/format'
-import { PageHeader, Spinner, ErrorBanner } from '../components/ui'
+import { PageHeader, Spinner, ErrorBanner, PageTabs } from '../components/ui'
+import { LiveClock } from '../components/dashboard/LiveClock'
 import { TodayLessonCard } from '../components/group/TodayLessonCard'
-import { RosterCard } from '../components/group/RosterCard'
 import { RecentSessionsCard } from '../components/group/RecentSessionsCard'
-import { AssessmentsCard } from '../components/group/AssessmentsCard'
+import { StudentsTab } from '../components/group/StudentsTab'
+
+type GroupViewTab = 'lesson' | 'students'
 
 export function GroupDetailPage() {
   const { id } = useParams<{ id: string }>()
+  const [tab, setTab] = useState<GroupViewTab>('lesson')
   const groupQuery = useQuery({
     queryKey: ['group', id],
     queryFn: () => groupsApi.get(id!),
@@ -26,18 +31,28 @@ export function GroupDetailPage() {
       <PageHeader
         title={group.name}
         description={`${group.level?.name ?? ''} · ${group.teacher?.fullName ?? ''} · ${formatScheduleDays(group.scheduleDays)} soat ${group.scheduleTime} da`}
+        actions={<LiveClock />}
       />
 
-      <div className="grid gap-6 lg:grid-cols-3">
-        <div className="space-y-6 lg:col-span-2">
+      <div className="mb-6">
+        <PageTabs
+          tabs={[
+            { key: 'lesson' as const, label: 'Dars', icon: BookOpen },
+            { key: 'students' as const, label: "Oʻquvchilar", icon: Users },
+          ]}
+          active={tab}
+          onChange={setTab}
+        />
+      </div>
+
+      {tab === 'lesson' ? (
+        <div className="space-y-6">
           <TodayLessonCard group={group} />
           <RecentSessionsCard group={group} />
-          <AssessmentsCard group={group} />
         </div>
-        <div>
-          <RosterCard group={group} />
-        </div>
-      </div>
+      ) : (
+        <StudentsTab group={group} />
+      )}
     </div>
   )
 }

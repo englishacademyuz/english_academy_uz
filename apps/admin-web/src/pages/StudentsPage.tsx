@@ -2,21 +2,11 @@ import { useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { Link } from 'react-router-dom'
 import { Plus } from 'lucide-react'
-import { ApiError, students as studentsApi } from '../lib/api'
+import { students as studentsApi } from '../lib/api'
 import { studentStatusLabel, studentStatusTone } from '../lib/format'
+import { notifyError, notifySuccess } from '../lib/toast'
 import type { StudentStatus } from '../lib/types'
-import {
-  Badge,
-  Button,
-  Card,
-  EmptyState,
-  ErrorBanner,
-  Field,
-  Input,
-  Modal,
-  PageHeader,
-  Spinner,
-} from '../components/ui'
+import { Badge, Button, Card, EmptyState, Field, Input, Modal, PageHeader, Spinner } from '../components/ui'
 
 const STATUSES: StudentStatus[] = ['ACTIVE', 'PAUSED', 'INACTIVE', 'COMPLETED', 'LEFT']
 
@@ -50,7 +40,7 @@ export function StudentsPage() {
             className={`rounded-full px-3 py-1 text-xs font-medium ${
               statusFilter === status
                 ? 'bg-brand-600 text-white'
-                : 'bg-white text-slate-600 ring-1 ring-inset ring-slate-200 hover:bg-slate-50'
+                : 'bg-white dark:bg-slate-900 text-slate-600 dark:text-slate-400 ring-1 ring-inset ring-slate-200 dark:ring-slate-700 hover:bg-slate-50 dark:hover:bg-slate-800'
             }`}
           >
             {status ? studentStatusLabel[status] : 'Barchasi'}
@@ -64,14 +54,14 @@ export function StudentsPage() {
         ) : studentsQuery.data?.length === 0 ? (
           <EmptyState title="Ushbu filtrga mos oʻquvchi topilmadi" />
         ) : (
-          <ul className="divide-y divide-slate-100">
+          <ul className="divide-y divide-slate-100 dark:divide-slate-800">
             {studentsQuery.data?.map((student) => (
               <li key={student.id}>
                 <Link
                   to={`/students/${student.id}`}
-                  className="flex items-center justify-between px-5 py-3 transition-colors hover:bg-slate-50"
+                  className="flex items-center justify-between px-5 py-3 transition-colors hover:bg-slate-50 dark:hover:bg-slate-800/60"
                 >
-                  <span className="text-sm font-medium text-slate-900">
+                  <span className="text-sm font-medium text-slate-900 dark:text-slate-100">
                     {student.firstName} {student.lastName}
                   </span>
                   <Badge tone={studentStatusTone[student.status]}>{studentStatusLabel[student.status]}</Badge>
@@ -100,12 +90,14 @@ function CreateStudentModal({ onClose, onCreated }: { onClose: () => void; onCre
   const [lastName, setLastName] = useState('')
   const [dob, setDob] = useState('')
   const [phone, setPhone] = useState('')
-  const [error, setError] = useState<string | null>(null)
 
   const createMutation = useMutation({
     mutationFn: () => studentsApi.create({ firstName, lastName, dob, phone: phone || undefined }),
-    onSuccess: onCreated,
-    onError: (err) => setError(err instanceof ApiError ? err.message : "Oʻquvchi yaratib boʻlmadi"),
+    onSuccess: () => {
+      notifySuccess("Oʻquvchi yaratildi")
+      onCreated()
+    },
+    onError: (err) => notifyError(err, "Oʻquvchi yaratib boʻlmadi"),
   })
 
   return (
@@ -113,13 +105,10 @@ function CreateStudentModal({ onClose, onCreated }: { onClose: () => void; onCre
       <form
         onSubmit={(e) => {
           e.preventDefault()
-          setError(null)
           createMutation.mutate()
         }}
         className="space-y-4"
       >
-        {error && <ErrorBanner message={error} />}
-
         <div className="grid grid-cols-2 gap-4">
           <Field label="Ism">
             <Input value={firstName} onChange={(e) => setFirstName(e.target.value)} required />

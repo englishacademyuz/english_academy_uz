@@ -5,6 +5,8 @@ export type HomeworkResultStatus = 'COMPLETED' | 'NOT_COMPLETED'
 export type AssessmentType = 'WEEKLY' | 'MONTHLY' | 'GENERAL' | 'CUSTOM'
 export type LessonMaterialType = 'PDF' | 'DOCUMENT' | 'IMAGE' | 'VIDEO' | 'AUDIO' | 'LINK' | 'TEXT'
 export type EnrollmentEndReason = 'GROUP_CHANGE' | 'STUDENT_LEFT' | 'COMPLETED' | 'OTHER'
+export type PaymentStatus = 'DEBT' | 'PARTIAL' | 'PAID'
+export type PointActivityType = 'HOMEWORK' | 'PARTICIPATION' | 'QUIZ' | 'ASSESSMENT' | 'ATTENDANCE' | 'OTHER'
 
 export type Actor = {
   userId: string
@@ -15,8 +17,8 @@ export type Actor = {
 }
 
 export type Subject = { id: string; name: string; courses?: Course[] }
-export type Course = { id: string; subjectId: string; name: string; levels?: Level[] }
-export type Level = { id: string; courseId: string; name: string }
+export type Course = { id: string; subjectId: string; name: string; levels?: Level[]; subject?: Subject }
+export type Level = { id: string; courseId: string; name: string; course?: Course }
 
 export type Teacher = { id: string; fullName: string; userId: string }
 
@@ -65,6 +67,7 @@ export type Enrollment = {
   status: 'ACTIVE' | 'ENDED'
   endReason: EnrollmentEndReason | null
   student?: Student
+  group?: Group
 }
 
 export type LessonMaterial = { id: string; type: LessonMaterialType; content: string }
@@ -98,3 +101,65 @@ export type Assessment = {
   category?: AssessmentCategory
   results: AssessmentResult[]
 }
+
+export type Payment = {
+  id: string
+  studentId: string
+  year: number
+  month: number
+  amountDue: number
+  amountPaid: number
+  status: PaymentStatus
+  paidAt: string | null
+  recordedByUserId: string
+  note: string | null
+  createdAt: string
+}
+
+export type PointTransaction = {
+  id: string
+  studentId: string
+  groupId: string
+  activityType: PointActivityType
+  points: number
+  note: string | null
+  createdAt: string
+  group?: Group
+}
+
+export type StudentOverviewAttendanceEntry = {
+  id: string
+  status: AttendanceStatus
+  lessonSession: { id: string; date: string; group: Group }
+}
+
+export type StudentOverviewAssessmentResult = AssessmentResult & {
+  assessment: Assessment & { category: AssessmentCategory; group: Group }
+}
+
+export type StudentOverviewHomeworkResult = {
+  id: string
+  status: HomeworkResultStatus
+  score: number | null
+  teacherComment: string | null
+  homework: { id: string; instructions: string; dueDate: string | null; lessonSession: { date: string; group: Group } }
+}
+
+export type StudentOverview = {
+  student: Student
+  enrollments: Enrollment[]
+  parents: Array<ParentStudentLink & { parent: Parent }>
+  attendance: {
+    totals: Record<AttendanceStatus, number>
+    rate: number | null
+    recent: StudentOverviewAttendanceEntry[]
+  }
+  assessmentResults: StudentOverviewAssessmentResult[]
+  homeworkResults: StudentOverviewHomeworkResult[]
+  payments: { list: Payment[]; outstanding: number }
+  points: { total: number; recent: PointTransaction[] }
+}
+
+export type GroupLeaderboardEntry = { student: Student; points: number }
+export type GroupPaymentEntry = { student: Student; payment: Payment | null }
+export type GroupPaymentHistory = { students: Student[]; payments: Payment[] }

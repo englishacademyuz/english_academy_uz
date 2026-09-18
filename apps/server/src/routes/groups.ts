@@ -48,7 +48,10 @@ export const groupRoutes: FastifyPluginAsync = async (app) => {
   app.get('/groups', { preHandler: app.authenticate }, async (request) => {
     const actor = request.actor!
     const where = actor.role === 'TEACHER' ? { teacherId: actor.teacherId } : undefined
-    return prisma.group.findMany({ where, include: { level: true, teacher: true } })
+    return prisma.group.findMany({
+      where,
+      include: { level: true, teacher: true, enrollments: { where: { status: 'ACTIVE' } } },
+    })
   })
 
   app.get('/groups/:id', { preHandler: app.authenticate }, async (request) => {
@@ -58,7 +61,7 @@ export const groupRoutes: FastifyPluginAsync = async (app) => {
       include: {
         level: true,
         teacher: true,
-        enrollments: { where: { status: 'ACTIVE' }, include: { student: true } },
+        enrollments: { where: { status: 'ACTIVE' }, include: { student: true }, orderBy: { startDate: 'asc' } },
       },
     })
     if (!group) throw new NotFoundError('Group not found')

@@ -10,6 +10,13 @@
       rel="stylesheet"
     />
     <title>Tashkurgan Academy — Boshqaruv paneli</title>
+    <script>
+      try {
+        var stored = localStorage.getItem('admin-web:theme')
+        var isDark = stored ? stored === 'dark' : window.matchMedia('(prefers-color-scheme: dark)').matches
+        document.documentElement.classList.toggle('dark', isDark)
+      } catch (e) {}
+    </script>
   </head>
   <body>
     <div id="root"></div>

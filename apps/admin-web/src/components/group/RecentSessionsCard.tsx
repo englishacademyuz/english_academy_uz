@@ -1,10 +1,11 @@
 import { useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { ChevronDown, ChevronRight } from 'lucide-react'
-import { ApiError, sessions as sessionsApi } from '../../lib/api'
+import { sessions as sessionsApi } from '../../lib/api'
 import { attendanceStatusShortLabel, attendanceStatusTone, formatDate, homeworkResultStatusLabel } from '../../lib/format'
+import { notifyError, notifySuccess } from '../../lib/toast'
 import type { Group, HomeworkResultStatus } from '../../lib/types'
-import { Badge, Button, Card, EmptyState, ErrorBanner, Input, Select, Spinner } from '../ui'
+import { Badge, Button, Card, EmptyState, Input, Select, Spinner } from '../ui'
 
 export function RecentSessionsCard({ group }: { group: Group }) {
   const [expandedId, setExpandedId] = useState<string | null>(null)
@@ -15,14 +16,14 @@ export function RecentSessionsCard({ group }: { group: Group }) {
 
   return (
     <Card className="p-5">
-      <h2 className="mb-4 text-sm font-semibold text-slate-900">Soʻnggi darslar</h2>
+      <h2 className="mb-4 text-sm font-semibold text-slate-900 dark:text-slate-100">Soʻnggi darslar</h2>
 
       {sessionsQuery.isLoading ? (
         <Spinner />
       ) : sessionsQuery.data?.length === 0 ? (
         <EmptyState title="Hali darslar qayd etilmagan" />
       ) : (
-        <ul className="divide-y divide-slate-100">
+        <ul className="divide-y divide-slate-100 dark:divide-slate-800">
           {sessionsQuery.data?.map((session) => (
             <li key={session.id}>
               <button
@@ -30,7 +31,7 @@ export function RecentSessionsCard({ group }: { group: Group }) {
                 className="flex w-full items-center justify-between py-3 text-left"
               >
                 <div>
-                  <p className="text-sm font-medium text-slate-900">
+                  <p className="text-sm font-medium text-slate-900 dark:text-slate-100">
                     {formatDate(session.date)} — {session.topic || 'Mavzu kiritilmagan'}
                   </p>
                   <div className="mt-1 flex flex-wrap gap-1">
@@ -43,9 +44,9 @@ export function RecentSessionsCard({ group }: { group: Group }) {
                   </div>
                 </div>
                 {expandedId === session.id ? (
-                  <ChevronDown className="h-4 w-4 shrink-0 text-slate-400" />
+                  <ChevronDown className="h-4 w-4 shrink-0 text-slate-400 dark:text-slate-500" />
                 ) : (
-                  <ChevronRight className="h-4 w-4 shrink-0 text-slate-400" />
+                  <ChevronRight className="h-4 w-4 shrink-0 text-slate-400 dark:text-slate-500" />
                 )}
               </button>
 
@@ -82,7 +83,6 @@ function GradeHomeworkForm({
   const [entries, setEntries] = useState<Record<string, { status: HomeworkResultStatus; score: string }>>(
     Object.fromEntries(roster.map((e) => [e.studentId, { status: 'COMPLETED' as HomeworkResultStatus, score: '' }])),
   )
-  const [error, setError] = useState<string | null>(null)
 
   const gradeMutation = useMutation({
     mutationFn: () =>
@@ -94,24 +94,22 @@ function GradeHomeworkForm({
           score: entry.score === '' ? null : Number(entry.score),
         })),
       ),
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['group-sessions', group.id] }),
-    onError: (err) => setError(err instanceof ApiError ? err.message : 'Uy vazifasi natijalarini saqlab boʻlmadi'),
+    onSuccess: () => {
+      notifySuccess('Uy vazifasi natijalari saqlandi')
+      queryClient.invalidateQueries({ queryKey: ['group-sessions', group.id] })
+    },
+    onError: (err) => notifyError(err, 'Uy vazifasi natijalarini saqlab boʻlmadi'),
   })
 
   return (
-    <div className="rounded-lg bg-slate-50 p-4">
-      <p className="mb-3 text-xs text-slate-500">Uy vazifasi: {instructions}</p>
-      {error && (
-        <div className="mb-3">
-          <ErrorBanner message={error} />
-        </div>
-      )}
+    <div className="rounded-lg bg-slate-50 dark:bg-slate-800/60 p-4">
+      <p className="mb-3 text-xs text-slate-500 dark:text-slate-400">Uy vazifasi: {instructions}</p>
       <div className="space-y-2">
         {roster.map((enrollment) => {
           const entry = entries[enrollment.studentId]
           return (
             <div key={enrollment.id} className="flex items-center gap-2">
-              <span className="w-32 shrink-0 truncate text-sm text-slate-700">
+              <span className="w-32 shrink-0 truncate text-sm text-slate-700 dark:text-slate-300">
                 {enrollment.student?.firstName} {enrollment.student?.lastName}
               </span>
               <Select

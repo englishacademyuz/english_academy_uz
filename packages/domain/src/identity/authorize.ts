@@ -25,6 +25,12 @@ export type Permission =
   | { resource: 'assessment'; action: 'manage' | 'view'; ownerTeacherId: string }
   | { resource: 'assessmentCategory'; action: 'manage' | 'view' }
   | { resource: 'progress'; action: 'view'; ownerTeacherId?: string }
+  // Both Admin and Teacher may record/edit payments -- a small center's
+  // teacher often collects payment in person (§51.4) -- so this is
+  // unrestricted by group, unlike the Teacher's other writes.
+  | { resource: 'payment'; action: 'manage' | 'view' }
+  | { resource: 'pointTransaction'; action: 'view' }
+  | { resource: 'pointTransaction'; action: 'manage'; ownerTeacherId: string }
 
 export function can(actor: Actor, permission: Permission): boolean {
   if (actor.role === 'ADMIN') return true
@@ -43,6 +49,10 @@ export function can(actor: Actor, permission: Permission): boolean {
         // A Teacher may only view progress scoped to one of their own
         // groups -- cross-group student progress stays ADMIN-only.
         return permission.ownerTeacherId === actor.teacherId
+      case 'payment':
+        return true
+      case 'pointTransaction':
+        return permission.action === 'view' || permission.ownerTeacherId === actor.teacherId
       case 'student':
       case 'parent':
       case 'teacher':

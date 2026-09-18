@@ -1,4 +1,5 @@
 import { Navigate, Route, Routes } from 'react-router-dom'
+import { ToastContainer } from 'react-toastify'
 import { Layout } from './components/Layout'
 import { AdminOnlyRoute, ProtectedRoute } from './components/ProtectedRoute'
 import { LoginPage } from './pages/LoginPage'
@@ -10,29 +11,37 @@ import { StudentDetailPage } from './pages/StudentDetailPage'
 import { TeachersPage } from './pages/TeachersPage'
 import { SubjectsPage } from './pages/SubjectsPage'
 import { ParentsPage } from './pages/ParentsPage'
+import { useTheme } from './lib/theme'
+import 'react-toastify/dist/ReactToastify.css'
 
 export function App() {
+  const { theme } = useTheme()
+
   return (
-    <Routes>
-      <Route path="/login" element={<LoginPage />} />
+    <>
+      <Routes>
+        <Route path="/login" element={<LoginPage />} />
 
-      <Route element={<ProtectedRoute />}>
-        <Route element={<Layout />}>
-          <Route index element={<DashboardPage />} />
-          <Route path="groups" element={<GroupsPage />} />
-          <Route path="groups/:id" element={<GroupDetailPage />} />
-          <Route path="students" element={<StudentsPage />} />
-          <Route path="students/:id" element={<StudentDetailPage />} />
+        <Route element={<ProtectedRoute />}>
+          <Route element={<Layout />}>
+            <Route index element={<DashboardPage />} />
+            <Route path="groups" element={<GroupsPage />} />
+            <Route path="groups/:id" element={<GroupDetailPage />} />
+            <Route path="students" element={<StudentsPage />} />
+            <Route path="students/:id" element={<StudentDetailPage />} />
 
-          <Route element={<AdminOnlyRoute />}>
-            <Route path="teachers" element={<TeachersPage />} />
-            <Route path="subjects" element={<SubjectsPage />} />
-            <Route path="parents" element={<ParentsPage />} />
+            <Route element={<AdminOnlyRoute />}>
+              <Route path="teachers" element={<TeachersPage />} />
+              <Route path="subjects" element={<SubjectsPage />} />
+              <Route path="parents" element={<ParentsPage />} />
+            </Route>
           </Route>
         </Route>
-      </Route>
 
-      <Route path="*" element={<Navigate to="/" replace />} />
-    </Routes>
+        <Route path="*" element={<Navigate to="/" replace />} />
+      </Routes>
+
+      <ToastContainer position="top-center" autoClose={3500} theme={theme} newestOnTop closeButton toastClassName="!mb-2" />
+    </>
   )
 }

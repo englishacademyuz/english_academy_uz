@@ -4,20 +4,9 @@ import { Link } from 'react-router-dom'
 import { Plus } from 'lucide-react'
 import { groups as groupsApi, levels as levelsApi, subjects as subjectsApi, teachers as teachersApi } from '../lib/api'
 import { useAuth } from '../lib/auth'
-import { ApiError } from '../lib/api'
 import { dayLabel, formatScheduleDays } from '../lib/format'
-import {
-  Button,
-  Card,
-  EmptyState,
-  ErrorBanner,
-  Field,
-  Input,
-  Modal,
-  PageHeader,
-  Select,
-  Spinner,
-} from '../components/ui'
+import { notifyError, notifySuccess } from '../lib/toast'
+import { Button, Card, EmptyState, Field, Input, Modal, PageHeader, Select, Spinner } from '../components/ui'
 
 const WEEKDAYS = ['MON', 'TUE', 'WED', 'THU', 'FRI', 'SAT', 'SUN']
 
@@ -48,16 +37,16 @@ export function GroupsPage() {
         {groupsQuery.data?.length === 0 ? (
           <EmptyState title="Hozircha guruhlar yoʻq" description="Boshlash uchun birinchi guruhni yarating." />
         ) : (
-          <ul className="divide-y divide-slate-100">
+          <ul className="divide-y divide-slate-100 dark:divide-slate-800">
             {groupsQuery.data?.map((group) => (
               <li key={group.id}>
                 <Link
                   to={`/groups/${group.id}`}
-                  className="flex items-center justify-between px-5 py-4 transition-colors hover:bg-slate-50"
+                  className="flex items-center justify-between px-5 py-4 transition-colors hover:bg-slate-50 dark:hover:bg-slate-800/60"
                 >
                   <div>
-                    <p className="text-sm font-medium text-slate-900">{group.name}</p>
-                    <p className="text-xs text-slate-500">
+                    <p className="text-sm font-medium text-slate-900 dark:text-slate-100">{group.name}</p>
+                    <p className="text-xs text-slate-500 dark:text-slate-400">
                       {group.level?.name} · {group.teacher?.fullName} · {formatScheduleDays(group.scheduleDays)}{' '}
                       soat {group.scheduleTime} da
                     </p>
@@ -90,7 +79,6 @@ function CreateGroupModal({ onClose, onCreated }: { onClose: () => void; onCreat
   const [scheduleDays, setScheduleDays] = useState<string[]>([])
   const [scheduleTime, setScheduleTime] = useState('18:00')
   const [startDate, setStartDate] = useState('')
-  const [error, setError] = useState<string | null>(null)
 
   const subjectsQuery = useQuery({ queryKey: ['subjects'], queryFn: subjectsApi.list })
   const levelsQuery = useQuery({
@@ -110,8 +98,11 @@ function CreateGroupModal({ onClose, onCreated }: { onClose: () => void; onCreat
   const createMutation = useMutation({
     mutationFn: () =>
       groupsApi.create({ levelId, teacherId, name, scheduleDays, scheduleTime, startDate }),
-    onSuccess: onCreated,
-    onError: (err) => setError(err instanceof ApiError ? err.message : 'Guruh yaratib boʻlmadi'),
+    onSuccess: () => {
+      notifySuccess('Guruh yaratildi')
+      onCreated()
+    },
+    onError: (err) => notifyError(err, 'Guruh yaratib boʻlmadi'),
   })
 
   function toggleDay(day: string) {
@@ -123,13 +114,10 @@ function CreateGroupModal({ onClose, onCreated }: { onClose: () => void; onCreat
       <form
         onSubmit={(e) => {
           e.preventDefault()
-          setError(null)
           createMutation.mutate()
         }}
         className="space-y-4"
       >
-        {error && <ErrorBanner message={error} />}
-
         <Field label="Nomi">
           <Input value={name} onChange={(e) => setName(e.target.value)} required placeholder="Oʻrta daraja 02" />
         </Field>
@@ -168,7 +156,7 @@ function CreateGroupModal({ onClose, onCreated }: { onClose: () => void; onCreat
         </Field>
 
         <div>
-          <span className="mb-1 block text-sm font-medium text-slate-700">Dars kunlari</span>
+          <span className="mb-1 block text-sm font-medium text-slate-700 dark:text-slate-300">Dars kunlari</span>
           <div className="flex flex-wrap gap-2">
             {WEEKDAYS.map((day) => (
               <button
@@ -177,8 +165,8 @@ function CreateGroupModal({ onClose, onCreated }: { onClose: () => void; onCreat
                 onClick={() => toggleDay(day)}
                 className={`rounded-lg border px-2.5 py-1 text-xs font-medium ${
                   scheduleDays.includes(day)
-                    ? 'border-brand-600 bg-brand-50 text-brand-700'
-                    : 'border-slate-300 text-slate-600 hover:bg-slate-50'
+                    ? 'border-brand-600 dark:border-brand-400 bg-brand-50 dark:bg-brand-500/10 text-brand-700 dark:text-brand-300'
+                    : 'border-slate-300 dark:border-slate-600 text-slate-600 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-800/60'
                 }`}
               >
                 {dayLabel[day]}

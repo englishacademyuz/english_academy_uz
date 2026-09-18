@@ -1,7 +1,7 @@
 import type { FastifyPluginAsync } from 'fastify'
 import { z } from 'zod'
 import { prisma } from '@tashkurgan/db'
-import { assertCan, issueLinkingCode } from '@tashkurgan/domain'
+import { assertCan, getStudentOverview, issueLinkingCode } from '@tashkurgan/domain'
 import { NotFoundError } from '@tashkurgan/shared'
 
 const createSchema = z.object({
@@ -53,6 +53,14 @@ export const studentRoutes: FastifyPluginAsync = async (app) => {
     const { id } = paramsSchema.parse(request.params)
     const body = updateSchema.parse(request.body)
     return prisma.student.update({ where: { id }, data: body })
+  })
+
+  // The single deep read model backing the student detail screen -- groups,
+  // parents, attendance, marks, payments, and points in one call (§28).
+  app.get('/:id/overview', { preHandler: app.authenticate }, async (request) => {
+    assertCan(request.actor!, { resource: 'student', action: 'view' })
+    const { id } = paramsSchema.parse(request.params)
+    return getStudentOverview(id)
   })
 
   app.post('/:id/linking-code', { preHandler: app.authenticate }, async (request) => {

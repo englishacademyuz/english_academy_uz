@@ -8,13 +8,20 @@ import type {
   Enrollment,
   EnrollmentEndReason,
   Group,
+  GroupLeaderboardEntry,
+  GroupPaymentEntry,
+  GroupPaymentHistory,
   HomeworkResultStatus,
   Level,
   LessonMaterialType,
   LessonSession,
   Parent,
   ParentStudentLink,
+  Payment,
+  PointActivityType,
+  PointTransaction,
   Student,
+  StudentOverview,
   StudentStatus,
   Subject,
   Teacher,
@@ -93,6 +100,7 @@ export const teachers = {
 export const students = {
   list: (status?: StudentStatus) => get<Student[]>(`/students${status ? `?status=${status}` : ''}`),
   get: (id: string) => get<Student>(`/students/${id}`),
+  overview: (id: string) => get<StudentOverview>(`/students/${id}/overview`),
   create: (data: { firstName: string; lastName: string; dob: string; phone?: string }) =>
     post<Student>('/students', data),
   update: (id: string, data: Partial<{ firstName: string; lastName: string; phone: string; status: StudentStatus }>) =>
@@ -172,4 +180,32 @@ export const assessments = {
       results?: Array<{ studentId: string; score: number }>
     },
   ) => post<Assessment>(`/groups/${groupId}/assessments`, data),
+  recordResults: (assessmentId: string, results: Array<{ studentId: string; score: number }>) =>
+    post<unknown>(`/assessments/${assessmentId}/results`, { results }),
+}
+
+export const payments = {
+  listForStudent: (studentId: string) => get<{ payments: Payment[]; outstanding: number }>(`/students/${studentId}/payments`),
+  record: (
+    studentId: string,
+    data: { year: number; month: number; amountDue: number; amountPaid?: number; note?: string },
+  ) => post<Payment>(`/students/${studentId}/payments`, data),
+  update: (paymentId: string, data: Partial<{ amountDue: number; amountPaid: number; note: string }>) =>
+    patch<Payment>(`/payments/${paymentId}`, data),
+  forGroup: (groupId: string, year: number, month: number) =>
+    get<GroupPaymentEntry[]>(`/groups/${groupId}/payments?year=${year}&month=${month}`),
+  historyForGroup: (groupId: string) => get<GroupPaymentHistory>(`/groups/${groupId}/payments-history`),
+}
+
+export const points = {
+  listForStudent: (studentId: string) =>
+    get<{ transactions: PointTransaction[]; total: number }>(`/students/${studentId}/points`),
+  award: (
+    groupId: string,
+    data: { studentId: string; activityType: PointActivityType; points: number; note?: string },
+  ) => post<PointTransaction>(`/groups/${groupId}/points`, data),
+  leaderboardForGroup: (groupId: string, range?: { start: Date; end: Date }) => {
+    const query = range ? `?start=${range.start.toISOString()}&end=${range.end.toISOString()}` : ''
+    return get<GroupLeaderboardEntry[]>(`/groups/${groupId}/leaderboard${query}`)
+  },
 }

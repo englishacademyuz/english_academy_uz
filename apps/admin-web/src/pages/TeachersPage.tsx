@@ -1,8 +1,9 @@
 import { useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { Plus } from 'lucide-react'
-import { ApiError, teachers as teachersApi } from '../lib/api'
-import { Button, Card, EmptyState, ErrorBanner, Field, Input, Modal, PageHeader, Spinner } from '../components/ui'
+import { teachers as teachersApi } from '../lib/api'
+import { notifyError, notifySuccess } from '../lib/toast'
+import { Button, Card, EmptyState, Field, Input, Modal, PageHeader, Spinner } from '../components/ui'
 
 export function TeachersPage() {
   const [showCreate, setShowCreate] = useState(false)
@@ -27,9 +28,9 @@ export function TeachersPage() {
         ) : teachersQuery.data?.length === 0 ? (
           <EmptyState title="Hali oʻqituvchilar yoʻq" />
         ) : (
-          <ul className="divide-y divide-slate-100">
+          <ul className="divide-y divide-slate-100 dark:divide-slate-800">
             {teachersQuery.data?.map((teacher) => (
-              <li key={teacher.id} className="px-5 py-3 text-sm font-medium text-slate-900">
+              <li key={teacher.id} className="px-5 py-3 text-sm font-medium text-slate-900 dark:text-slate-100">
                 {teacher.fullName}
               </li>
             ))}
@@ -54,12 +55,14 @@ function CreateTeacherModal({ onClose, onCreated }: { onClose: () => void; onCre
   const [fullName, setFullName] = useState('')
   const [username, setUsername] = useState('')
   const [password, setPassword] = useState('')
-  const [error, setError] = useState<string | null>(null)
 
   const createMutation = useMutation({
     mutationFn: () => teachersApi.create({ fullName, username, password }),
-    onSuccess: onCreated,
-    onError: (err) => setError(err instanceof ApiError ? err.message : "Oʻqituvchi yaratib boʻlmadi"),
+    onSuccess: () => {
+      notifySuccess("Oʻqituvchi yaratildi")
+      onCreated()
+    },
+    onError: (err) => notifyError(err, "Oʻqituvchi yaratib boʻlmadi"),
   })
 
   return (
@@ -67,13 +70,10 @@ function CreateTeacherModal({ onClose, onCreated }: { onClose: () => void; onCre
       <form
         onSubmit={(e) => {
           e.preventDefault()
-          setError(null)
           createMutation.mutate()
         }}
         className="space-y-4"
       >
-        {error && <ErrorBanner message={error} />}
-
         <Field label="Toʻliq ism">
           <Input value={fullName} onChange={(e) => setFullName(e.target.value)} required />
         </Field>

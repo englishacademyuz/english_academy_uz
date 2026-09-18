@@ -3,6 +3,7 @@ import { NotFoundError, ValidationError } from '@tashkurgan/shared'
 import { calculateAttendanceRate } from '../attendance/attendance'
 import { calculateHomeworkRate } from '../homework/homework'
 import { toPercentage } from '../assessment/assessment'
+import { sumPoints } from '../points/points'
 
 /**
  * 'sinceEnrollment' and 'course' both require a groupId to resolve a date
@@ -22,7 +23,7 @@ export type ProgressSnapshot = {
   /** Not yet populated -- there is no quiz module yet (docs/DOMAIN-MODEL.md §10). */
   quizAverage: number | null
   academicByCategory: Record<string, number>
-  /** Not yet populated -- there is no points ledger yet (docs/DOMAIN-MODEL.md §51.3). */
+  /** Sum of PointTransaction entries earned in this timeframe (and group, when scoped) -- §51.3. */
   points: number
 }
 
@@ -131,12 +132,17 @@ export async function getProgress(
     academicByCategory[name] = total / count
   }
 
+  const pointTransactions = await prisma.pointTransaction.findMany({
+    where: { studentId, createdAt: dateFilter, ...(groupId ? { groupId } : {}) },
+    select: { points: true },
+  })
+
   return {
     timeframe,
     attendanceRate,
     homeworkRate,
     quizAverage: null,
     academicByCategory,
-    points: 0,
+    points: sumPoints(pointTransactions),
   }
 }

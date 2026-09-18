@@ -1,33 +1,25 @@
 import { useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { KeyRound, Link2, Plus } from 'lucide-react'
-import { ApiError, parents as parentsApi, students as studentsApi } from '../lib/api'
-import {
-  Button,
-  Card,
-  EmptyState,
-  ErrorBanner,
-  Field,
-  Input,
-  Modal,
-  PageHeader,
-  Select,
-  Spinner,
-} from '../components/ui'
+import { parents as parentsApi, students as studentsApi } from '../lib/api'
+import { notifyError, notifySuccess } from '../lib/toast'
+import { Button, Card, EmptyState, Field, Input, Modal, PageHeader, Select, Spinner } from '../components/ui'
 
 export function ParentsPage() {
   const [showCreate, setShowCreate] = useState(false)
   const [linkingParentId, setLinkingParentId] = useState<string | null>(null)
   const [codeByParent, setCodeByParent] = useState<Record<string, string>>({})
-  const [error, setError] = useState<string | null>(null)
   const queryClient = useQueryClient()
 
   const parentsQuery = useQuery({ queryKey: ['parents'], queryFn: parentsApi.list })
 
   const linkingCodeMutation = useMutation({
     mutationFn: (parentId: string) => parentsApi.issueLinkingCode(parentId),
-    onSuccess: (result, parentId) => setCodeByParent((prev) => ({ ...prev, [parentId]: result.code })),
-    onError: (err) => setError(err instanceof ApiError ? err.message : 'Kod berib boʻlmadi'),
+    onSuccess: (result, parentId) => {
+      setCodeByParent((prev) => ({ ...prev, [parentId]: result.code }))
+      notifySuccess('Kod yaratildi')
+    },
+    onError: (err) => notifyError(err, 'Kod berib boʻlmadi'),
   })
 
   return (
@@ -42,26 +34,20 @@ export function ParentsPage() {
         }
       />
 
-      {error && (
-        <div className="mb-4">
-          <ErrorBanner message={error} />
-        </div>
-      )}
-
       <Card>
         {parentsQuery.isLoading ? (
           <Spinner />
         ) : parentsQuery.data?.length === 0 ? (
           <EmptyState title="Hali ota-onalar yoʻq" />
         ) : (
-          <ul className="divide-y divide-slate-100">
+          <ul className="divide-y divide-slate-100 dark:divide-slate-800">
             {parentsQuery.data?.map((parent) => (
               <li key={parent.id} className="flex items-center justify-between px-5 py-3">
                 <div>
-                  <p className="text-sm font-medium text-slate-900">{parent.fullName}</p>
-                  {parent.phone && <p className="text-xs text-slate-500">{parent.phone}</p>}
+                  <p className="text-sm font-medium text-slate-900 dark:text-slate-100">{parent.fullName}</p>
+                  {parent.phone && <p className="text-xs text-slate-500 dark:text-slate-400">{parent.phone}</p>}
                   {codeByParent[parent.id] && (
-                    <p className="mt-1 font-mono text-sm font-semibold tracking-widest text-brand-700">
+                    <p className="mt-1 font-mono text-sm font-semibold tracking-widest text-brand-700 dark:text-brand-300">
                       {codeByParent[parent.id]}
                     </p>
                   )}
@@ -108,12 +94,14 @@ export function ParentsPage() {
 function CreateParentModal({ onClose, onCreated }: { onClose: () => void; onCreated: () => void }) {
   const [fullName, setFullName] = useState('')
   const [phone, setPhone] = useState('')
-  const [error, setError] = useState<string | null>(null)
 
   const createMutation = useMutation({
     mutationFn: () => parentsApi.create({ fullName, phone: phone || undefined }),
-    onSuccess: onCreated,
-    onError: (err) => setError(err instanceof ApiError ? err.message : "Ota-ona yaratib boʻlmadi"),
+    onSuccess: () => {
+      notifySuccess('Ota-ona yaratildi')
+      onCreated()
+    },
+    onError: (err) => notifyError(err, "Ota-ona yaratib boʻlmadi"),
   })
 
   return (
@@ -121,12 +109,10 @@ function CreateParentModal({ onClose, onCreated }: { onClose: () => void; onCrea
       <form
         onSubmit={(e) => {
           e.preventDefault()
-          setError(null)
           createMutation.mutate()
         }}
         className="space-y-4"
       >
-        {error && <ErrorBanner message={error} />}
         <Field label="Toʻliq ism">
           <Input value={fullName} onChange={(e) => setFullName(e.target.value)} required />
         </Field>
@@ -156,13 +142,15 @@ function LinkChildModal({
   onLinked: () => void
 }) {
   const [studentId, setStudentId] = useState('')
-  const [error, setError] = useState<string | null>(null)
   const studentsQuery = useQuery({ queryKey: ['students', 'ACTIVE'], queryFn: () => studentsApi.list('ACTIVE') })
 
   const linkMutation = useMutation({
     mutationFn: () => parentsApi.link(parentId, studentId),
-    onSuccess: onLinked,
-    onError: (err) => setError(err instanceof ApiError ? err.message : "Oʻquvchini bogʻlab boʻlmadi"),
+    onSuccess: () => {
+      notifySuccess('Farzand bogʻlandi')
+      onLinked()
+    },
+    onError: (err) => notifyError(err, "Oʻquvchini bogʻlab boʻlmadi"),
   })
 
   return (
@@ -170,12 +158,10 @@ function LinkChildModal({
       <form
         onSubmit={(e) => {
           e.preventDefault()
-          setError(null)
           if (studentId) linkMutation.mutate()
         }}
         className="space-y-4"
       >
-        {error && <ErrorBanner message={error} />}
         <Field label="Oʻquvchi">
           <Select value={studentId} onChange={(e) => setStudentId(e.target.value)} required>
             <option value="">Oʻquvchini tanlang</option>

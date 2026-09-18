@@ -74,6 +74,21 @@ enum AssessmentType {
   CUSTOM
 }
 
+enum PaymentStatus {
+  DEBT
+  PARTIAL
+  PAID
+}
+
+enum PointActivityType {
+  HOMEWORK
+  PARTICIPATION
+  QUIZ
+  ASSESSMENT
+  ATTENDANCE
+  OTHER
+}
+
 // One authenticated identity. Admin/Teacher log in with username+password;
 // Student/Parent are identified by a linked Telegram chat id (see LinkingCode).
 model User {
@@ -109,6 +124,8 @@ model Student {
   attendances        Attendance[]
   homeworkResults    HomeworkResult[]
   assessmentResults  AssessmentResult[]
+  payments           Payment[]
+  pointTransactions  PointTransaction[]
 
   @@map("students")
 }
@@ -237,9 +254,10 @@ model Group {
   createdAt    DateTime    @default(now())
   updatedAt    DateTime    @updatedAt
 
-  enrollments    Enrollment[]
-  lessonSessions LessonSession[]
-  assessments    Assessment[]
+  enrollments       Enrollment[]
+  lessonSessions    LessonSession[]
+  assessments       Assessment[]
+  pointTransactions PointTransaction[]
 
   @@map("groups")
 }
@@ -384,4 +402,46 @@ model AssessmentResult {
 
   @@unique([assessmentId, studentId])
   @@map("assessment_results")
+}
+
+// Monthly subscription billing (§27/§51.4) -- one row per (Student, calendar
+// month). `status` is always re-derived from amountDue/amountPaid rather than
+// set independently, so it can never drift out of sync with the amounts.
+model Payment {
+  id             String        @id @default(cuid())
+  studentId      String
+  student        Student       @relation(fields: [studentId], references: [id])
+  year           Int
+  month          Int
+  amountDue      Int
+  amountPaid     Int           @default(0)
+  status         PaymentStatus @default(DEBT)
+  paidAt         DateTime?
+  recordedByUserId String
+  note           String?
+  createdAt      DateTime      @default(now())
+  updatedAt      DateTime      @updatedAt
+
+  @@unique([studentId, year, month])
+  @@index([studentId])
+  @@map("payments")
+}
+
+// Append-only points ledger entry (§11/§51.3) -- never edited or deleted,
+// always tagged with the Group active when the points were earned so a
+// group's leaderboard only ever sums transactions tagged to that Group.
+model PointTransaction {
+  id           String            @id @default(cuid())
+  studentId    String
+  student      Student           @relation(fields: [studentId], references: [id])
+  groupId      String
+  group        Group             @relation(fields: [groupId], references: [id])
+  activityType PointActivityType
+  points       Int
+  note         String?
+  createdAt    DateTime          @default(now())
+
+  @@index([studentId])
+  @@index([groupId])
+  @@map("point_transactions")
 }
