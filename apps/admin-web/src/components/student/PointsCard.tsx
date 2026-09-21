@@ -29,7 +29,7 @@ export function PointsCard({
   return (
     <Card className="p-5">
       <div className="mb-3 flex items-center justify-between">
-        <h2 className="text-sm font-semibold text-slate-900 dark:text-slate-100">Ballar</h2>
+        <h2 className="text-sm font-semibold text-slate-900 dark:text-slate-100">Reyting</h2>
         <Button variant="secondary" onClick={() => setShowAward(true)} disabled={eligibleGroups.length === 0}>
           <Plus className="h-4 w-4" /> Ball berish
         </Button>

@@ -5,6 +5,7 @@ import { buildApp } from '../src/app'
 type App = Awaited<ReturnType<typeof buildApp>>
 
 export async function resetDb() {
+  await prisma.pointTransaction.deleteMany()
   await prisma.assessmentResult.deleteMany()
   await prisma.assessment.deleteMany()
   await prisma.assessmentCategory.deleteMany()

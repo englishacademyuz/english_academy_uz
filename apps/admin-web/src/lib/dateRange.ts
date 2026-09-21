@@ -14,7 +14,7 @@ function startOfWeek(date: Date): Date {
   return d
 }
 
-function startOfMonth(date: Date): Date {
+export function startOfMonth(date: Date): Date {
   return new Date(date.getFullYear(), date.getMonth(), 1)
 }
 

@@ -8,7 +8,7 @@ import { Button, Field, Input, Modal, Select } from '../ui'
 
 const ACTIVITY_TYPES: PointActivityType[] = ['HOMEWORK', 'PARTICIPATION', 'QUIZ', 'ASSESSMENT', 'ATTENDANCE', 'OTHER']
 
-/** Shared by the student profile's Points card and the group roster's Ballar view -- awarding is always tagged to one Group (§51.3). */
+/** Shared by the student profile's Points card and the group roster's Reyting view -- awarding is always tagged to one Group (§51.3). */
 export function AwardPointsModal({
   studentId,
   studentName,

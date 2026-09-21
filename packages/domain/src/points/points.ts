@@ -1,4 +1,4 @@
-import { prisma, type PointActivityType } from '@tashkurgan/db'
+import { prisma, type PointActivityType, type Prisma } from '@tashkurgan/db'
 import { NotFoundError } from '@tashkurgan/shared'
 
 /** Sums a set of ledger entries -- the only supported way to get a total; there is no separately maintained running total (§39/§51.3). */
@@ -32,6 +32,36 @@ export async function awardPoints(input: AwardPointsInput) {
       activityType: input.activityType,
       points: input.points,
       note: input.note,
+    },
+  })
+}
+
+export type SyncAssessmentPointsInput = {
+  assessmentResultId: string
+  studentId: string
+  groupId: string
+  points: number
+}
+
+/**
+ * Upserts the one PointTransaction derived from an AssessmentResult, keyed on that result so
+ * re-grading recomputes it instead of appending a duplicate entry -- unlike a manual award (which
+ * stays append-only, corrected by appending a new entry, §51.3), this row always mirrors the
+ * result's current score because that source itself is directly editable.
+ */
+export async function syncAssessmentPoints(
+  tx: Prisma.TransactionClient,
+  input: SyncAssessmentPointsInput,
+) {
+  return tx.pointTransaction.upsert({
+    where: { assessmentResultId: input.assessmentResultId },
+    update: { points: input.points },
+    create: {
+      studentId: input.studentId,
+      groupId: input.groupId,
+      activityType: 'ASSESSMENT',
+      points: input.points,
+      assessmentResultId: input.assessmentResultId,
     },
   })
 }

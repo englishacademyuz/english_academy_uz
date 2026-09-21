@@ -41,8 +41,15 @@ const buttonVariants = {
     'bg-white text-red-600 border border-red-200 hover:bg-red-50 dark:bg-slate-900 dark:text-red-400 dark:border-red-900/50 dark:hover:bg-red-950/40',
 }
 
+const buttonSizes = {
+  sm: 'gap-1.5 rounded-md px-2.5 py-1.5 text-xs',
+  md: 'gap-2 rounded-lg px-3.5 py-2 text-sm',
+  lg: 'gap-2.5 rounded-xl px-6 py-3.5 text-base',
+}
+
 export function Button({
   variant = 'primary',
+  size = 'md',
   loading = false,
   className = '',
   children,
@@ -50,15 +57,18 @@ export function Button({
   ...props
 }: ButtonHTMLAttributes<HTMLButtonElement> & {
   variant?: keyof typeof buttonVariants
+  size?: keyof typeof buttonSizes
   loading?: boolean
 }) {
   return (
     <button
-      className={`inline-flex items-center justify-center gap-2 rounded-lg px-3.5 py-2 text-sm font-medium transition-colors focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 disabled:cursor-not-allowed disabled:opacity-50 ${buttonVariants[variant]} ${className}`}
+      className={`inline-flex items-center justify-center font-medium transition-colors focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 disabled:cursor-not-allowed disabled:opacity-50 ${buttonSizes[size]} ${buttonVariants[variant]} ${className}`}
       disabled={disabled || loading}
       {...props}
     >
-      {loading && <Loader2 className="h-4 w-4 animate-spin" />}
+      {loading && (
+        <Loader2 className={`animate-spin ${size === 'lg' ? 'h-5 w-5' : size === 'sm' ? 'h-3.5 w-3.5' : 'h-4 w-4'}`} />
+      )}
       {children}
     </button>
   )
@@ -112,28 +122,83 @@ export function Badge({ tone = 'slate', children }: { tone?: keyof typeof badgeT
   )
 }
 
+const tabSizeClasses = {
+  xs: { button: 'gap-1 rounded-md px-2 py-1 text-xs', icon: 'h-3 w-3' },
+  sm: { button: 'gap-1.5 rounded-full px-3 py-1.5 text-sm', icon: 'h-3.5 w-3.5' },
+  md: { button: 'gap-1.5 rounded-lg px-3 py-1.5 text-sm', icon: 'h-4 w-4' },
+  lg: { button: 'gap-2 rounded-xl px-5 py-3 text-base', icon: 'h-5 w-5' },
+}
+
 export function Tabs<T extends string>({
   tabs,
   active,
   onChange,
+  size = 'sm',
+  variant = 'pills',
 }: {
   tabs: Array<{ key: T; label: string; icon?: LucideIcon }>
   active: T
   onChange: (key: T) => void
+  size?: keyof typeof tabSizeClasses
+  // 'pills': each tab its own separate rounded pill (the default). 'segmented':
+  // one grouped track with a single sliding highlight that moves under
+  // whichever tab is active -- used where the options are a single filter,
+  // e.g. Reyting's week/month/all range picker.
+  variant?: 'pills' | 'segmented'
 }) {
+  const { button, icon } = tabSizeClasses[size]
+
+  if (variant === 'segmented') {
+    const activeIndex = Math.max(0, tabs.findIndex((tab) => tab.key === active))
+    return (
+      <div
+        className="relative inline-grid rounded-lg bg-slate-100 p-1 ring-1 ring-inset ring-slate-200 dark:bg-slate-800 dark:ring-slate-700"
+        // Grid, not flex -- `flex-1` only equalizes widths when the container has a definite
+        // width to distribute; here the container shrink-wraps its content, so equal `1fr`
+        // grid tracks are what actually make every column as wide as the widest label
+        // ("Barcha vaqt") instead of collapsing each button to its own text width.
+        style={{ gridTemplateColumns: `repeat(${tabs.length}, 1fr)` }}
+      >
+        {/* The one moving piece -- sized to a single column and slid over by index * 100% of
+        its own width, so it lands under whichever tab is active without knowing pixel widths. */}
+        <div
+          aria-hidden
+          className="absolute bottom-1 left-1 top-1 rounded-md bg-brand-600 shadow-sm transition-transform duration-200 ease-out"
+          style={{ width: `calc((100% - 0.5rem) / ${tabs.length})`, transform: `translateX(${activeIndex * 100}%)` }}
+        />
+        {tabs.map((tab) => (
+          <button
+            key={tab.key}
+            onClick={() => onChange(tab.key)}
+            className={`relative z-10 whitespace-nowrap text-center font-semibold transition-colors ${button} ${
+              active === tab.key
+                ? 'text-white'
+                : 'text-slate-500 hover:text-slate-800 dark:text-slate-400 dark:hover:text-slate-100'
+            }`}
+          >
+            {tab.icon && <tab.icon className={icon} />}
+            {tab.label}
+          </button>
+        ))}
+      </div>
+    )
+  }
+
   return (
     <div className="flex flex-wrap gap-2">
       {tabs.map((tab) => (
         <button
           key={tab.key}
           onClick={() => onChange(tab.key)}
-          className={`inline-flex items-center gap-1.5 rounded-full px-3 py-1.5 text-sm font-medium transition-colors ${
+          className={`inline-flex items-center font-semibold transition-colors ${button} ${
             active === tab.key
-              ? 'bg-brand-600 text-white'
-              : 'bg-white dark:bg-slate-900 text-slate-600 dark:text-slate-400 ring-1 ring-inset ring-slate-200 dark:ring-slate-700 hover:bg-slate-50 dark:hover:bg-slate-800'
+              ? 'bg-brand-600 text-white shadow-sm'
+              : size === 'sm'
+                ? 'bg-white dark:bg-slate-900 text-slate-600 dark:text-slate-400 ring-1 ring-inset ring-slate-200 dark:ring-slate-700 hover:bg-slate-50 dark:hover:bg-slate-800'
+                : 'text-slate-500 hover:bg-slate-100 hover:text-slate-700 dark:text-slate-400 dark:hover:bg-slate-800 dark:hover:text-slate-200'
           }`}
         >
-          {tab.icon && <tab.icon className="h-3.5 w-3.5" />}
+          {tab.icon && <tab.icon className={icon} />}
           {tab.label}
         </button>
       ))}
@@ -170,6 +235,15 @@ export function PageTabs<T extends string>({
         ))}
       </nav>
     </div>
+  )
+}
+
+/** Small caps label used for matrix-table column headers (frozen-roster tables). */
+export function ColumnLabel({ children }: { children: ReactNode }) {
+  return (
+    <span className="block max-w-full truncate text-[11px] font-semibold uppercase tracking-wide text-slate-400 dark:text-slate-500">
+      {children}
+    </span>
   )
 }
 

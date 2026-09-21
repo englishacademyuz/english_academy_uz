@@ -35,7 +35,13 @@ const homeworkResultsSchema = z.object({
 
 const groupIdParams = z.object({ groupId: z.string() })
 const sessionIdParams = z.object({ id: z.string() })
-const dateQuery = z.object({ date: z.coerce.date().optional() })
+// `date` picks one exact day; `from`/`to` pick a range (e.g. one calendar month) --
+// callers use whichever shape fits, never both at once.
+const dateQuery = z.object({
+  date: z.coerce.date().optional(),
+  from: z.coerce.date().optional(),
+  to: z.coerce.date().optional(),
+})
 
 async function requireGroup(groupId: string) {
   const group = await prisma.group.findUnique({ where: { id: groupId } })
@@ -77,9 +83,16 @@ export const lessonSessionRoutes: FastifyPluginAsync = async (app) => {
       ownerTeacherId: group.teacherId,
     })
 
-    const { date } = dateQuery.parse(request.query)
+    const { date, from, to } = dateQuery.parse(request.query)
     return prisma.lessonSession.findMany({
-      where: { groupId, ...(date ? { date } : {}) },
+      where: {
+        groupId,
+        ...(date
+          ? { date }
+          : from || to
+            ? { date: { ...(from ? { gte: from } : {}), ...(to ? { lt: to } : {}) } }
+            : {}),
+      },
       include: { materials: true, homework: true, attendances: true },
       orderBy: { date: 'desc' },
     })

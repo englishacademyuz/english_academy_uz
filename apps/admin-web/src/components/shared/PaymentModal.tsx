@@ -1,10 +1,15 @@
 import { useState } from 'react'
 import { useMutation } from '@tanstack/react-query'
 import { payments as paymentsApi } from '../../lib/api'
-import { formatMonthYear } from '../../lib/format'
+import { formatMonthYear, type FirstCycleProration } from '../../lib/format'
 import { notifyError, notifySuccess } from '../../lib/toast'
 import type { Payment } from '../../lib/types'
 import { Button, Field, Input, Modal } from '../ui'
+
+// Placeholder "full month" fee the amount fields default to -- there's no stored per-group
+// tariff (§51.4 keeps Payment.amountDue a free-entry Money value), so a partial first cycle's
+// suggested amount is this default scaled by the proration ratio, not a real configured price.
+const DEFAULT_MONTHLY_FEE = 500_000
 
 /**
  * Shared by the student profile's Payments card and the group roster's
@@ -18,6 +23,7 @@ export function PaymentModal({
   initialYear,
   initialMonth,
   existing,
+  proration,
   onClose,
   onSaved,
 }: {
@@ -26,12 +32,22 @@ export function PaymentModal({
   initialYear: number
   initialMonth: number
   existing?: Payment | null
+  /** Set when this row is the student's first billing cycle and they joined the group mid-cycle
+   * -- e.g. a group starting 5 September with a student joining the 15th owes only 20 of that
+   * cycle's 30 days. Ignored once `existing` is set, since an already-recorded amount was a
+   * deliberate choice, not something to silently overwrite. */
+  proration?: FirstCycleProration | null
   onClose: () => void
   onSaved: () => void
 }) {
+  const applyProration = !existing && !!proration
   const [year, setYear] = useState(existing?.year ?? initialYear)
   const [month, setMonth] = useState(existing?.month ?? initialMonth)
-  const [amountDue, setAmountDue] = useState(existing?.amountDue ?? 500_000)
+  const [amountDue, setAmountDue] = useState(() => {
+    if (existing) return existing.amountDue
+    if (proration) return Math.round((DEFAULT_MONTHLY_FEE * proration.ratio) / 1000) * 1000
+    return DEFAULT_MONTHLY_FEE
+  })
   const [amountPaid, setAmountPaid] = useState(existing?.amountPaid ?? 0)
   const [note, setNote] = useState(existing?.note ?? '')
 
@@ -70,6 +86,14 @@ export function PaymentModal({
               <Input type="number" value={year} onChange={(e) => setYear(Number(e.target.value))} required />
             </Field>
           </div>
+        )}
+
+        {applyProration && (
+          <p className="rounded-lg bg-amber-50 px-3 py-2 text-xs text-amber-700 dark:bg-amber-500/10 dark:text-amber-400">
+            Oʻquvchi ushbu oyning bir qismida qoʻshilgan — {proration.cycleDays} kunlik oydan{' '}
+            {proration.enrolledDays} kuni hisoblanadi. Belgilangan summa shunga mos taklif qilindi, xohlasangiz
+            oʻzgartiring.
+          </p>
         )}
 
         <div className="grid grid-cols-2 gap-4">

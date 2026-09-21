@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { toPercentage, averagePercentage } from '../src/assessment/assessment'
+import { toPercentage, averagePercentage, pointsForScore } from '../src/assessment/assessment'
 
 describe('toPercentage', () => {
   it('normalizes a raw score against its own max', () => {
@@ -24,5 +24,18 @@ describe('averagePercentage', () => {
 
   it('returns null for an empty result set', () => {
     expect(averagePercentage([])).toBeNull()
+  })
+})
+
+describe('pointsForScore', () => {
+  it('scales linearly off pointsWorth regardless of the category\'s own grading scale', () => {
+    expect(pointsForScore(2, 100, 100)).toBe(2)
+    expect(pointsForScore(2, 50, 100)).toBe(1)
+    expect(pointsForScore(2, 25, 100)).toBe(1) // rounds 0.5 up
+    expect(pointsForScore(2, 3, 5)).toBe(1) // 60% of a 2-point category, rounded down
+  })
+
+  it('is 0 when the category doesn\'t feed the Rating ledger', () => {
+    expect(pointsForScore(0, 100, 100)).toBe(0)
   })
 })

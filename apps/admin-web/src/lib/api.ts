@@ -140,8 +140,16 @@ export const enrollments = {
 }
 
 export const sessions = {
-  listForGroup: (groupId: string, date?: string) =>
-    get<LessonSession[]>(`/groups/${groupId}/sessions${date ? `?date=${date}` : ''}`),
+  // `date` picks one exact day; `from`/`to` picks a range (e.g. one calendar month) --
+  // pass whichever shape fits, never both.
+  listForGroup: (groupId: string, params?: { date?: string; from?: string; to?: string }) => {
+    const query = new URLSearchParams()
+    if (params?.date) query.set('date', params.date)
+    if (params?.from) query.set('from', params.from)
+    if (params?.to) query.set('to', params.to)
+    const qs = query.toString()
+    return get<LessonSession[]>(`/groups/${groupId}/sessions${qs ? `?${qs}` : ''}`)
+  },
   get: (id: string) => get<LessonSession>(`/sessions/${id}`),
   record: (
     groupId: string,
@@ -162,13 +170,25 @@ export const sessions = {
 
 export const assessmentCategories = {
   list: (levelId: string) => get<AssessmentCategory[]>(`/levels/${levelId}/assessment-categories`),
-  create: (levelId: string, name: string) =>
-    post<AssessmentCategory>(`/levels/${levelId}/assessment-categories`, { name }),
+  create: (levelId: string, name: string, maxScore: number, pointsWorth: number) =>
+    post<AssessmentCategory>(`/levels/${levelId}/assessment-categories`, { name, maxScore, pointsWorth }),
   retire: (id: string) => patch<AssessmentCategory>(`/assessment-categories/${id}/retire`),
 }
 
 export const assessments = {
-  listForGroup: (groupId: string) => get<Assessment[]>(`/groups/${groupId}/assessments`),
+  // `date` picks one exact day; `from`/`to` picks a range (e.g. one calendar month) --
+  // pass whichever shape fits, never both.
+  listForGroup: (groupId: string, params?: { date?: string; from?: string; to?: string }) => {
+    const query = new URLSearchParams()
+    if (params?.date) query.set('date', params.date)
+    if (params?.from) query.set('from', params.from)
+    if (params?.to) query.set('to', params.to)
+    const qs = query.toString()
+    return get<Assessment[]>(`/groups/${groupId}/assessments${qs ? `?${qs}` : ''}`)
+  },
+  // Upserts on (group, category, date, title) server-side -- safe to call
+  // repeatedly for the same cell. `maxScore` is optional and falls back to
+  // the category's own configured scale.
   create: (
     groupId: string,
     data: {
@@ -176,7 +196,7 @@ export const assessments = {
       title: string
       type: AssessmentType
       date: string
-      maxScore: number
+      maxScore?: number
       results?: Array<{ studentId: string; score: number }>
     },
   ) => post<Assessment>(`/groups/${groupId}/assessments`, data),

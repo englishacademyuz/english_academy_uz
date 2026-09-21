@@ -23,7 +23,7 @@ export function TodayLessonCard({ group }: { group: Group }) {
 
   const sessionQuery = useQuery({
     queryKey: ['group-sessions', group.id, date],
-    queryFn: () => sessionsApi.listForGroup(group.id, date),
+    queryFn: () => sessionsApi.listForGroup(group.id, { date }),
   })
 
   const existingSession = sessionQuery.data?.[0]

@@ -214,7 +214,7 @@ This is the one entity in the "pay special attention to" list that intentionally
 4. All scores normalize to percentage (`PercentageScore`) before any cross-scale aggregation (§51.1).
 5. Homework performance % excludes ungraded (status-only) completions (§51.1).
 6. Attendance %: Present/Late = full credit, Absent = 0, Excused is excluded from the denominator (§51.1).
-7. PointTransaction is append-only and immutable; always tagged with the Group active when earned (§51.3).
+7. PointTransaction is append-only and immutable for manual awards; always tagged with the Group active when earned (§51.3). The one exception: a PointTransaction derived from an AssessmentResult (via AssessmentCategory.pointsWorth) is keyed to that result and upserted whenever it's (re)graded, since it mirrors a source that is itself directly editable rather than representing a point-in-time award.
 8. A Group's leaderboard only sums PointTransactions tagged to that Group, defaulting to the current calendar month (§51.3).
 9. Rewards never deduct or reset points (§51.3).
 10. Payment is one row per (Student, calendar month); no automatic debt rollover, but a derived "total outstanding" is computed across all months (§51.4).

@@ -86,7 +86,14 @@ export type LessonSession = {
   attendances: Attendance[]
 }
 
-export type AssessmentCategory = { id: string; levelId: string; name: string; retiredAt: string | null }
+export type AssessmentCategory = {
+  id: string
+  levelId: string
+  name: string
+  maxScore: number
+  pointsWorth: number
+  retiredAt: string | null
+}
 
 export type AssessmentResult = { id: string; studentId: string; score: number }
 
