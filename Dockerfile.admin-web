@@ -1,0 +1,31 @@
+# Builds the admin/teacher web panel (a static Vite SPA) and serves the compiled `dist/`.
+# Build context must be the repo root (npm workspaces monorepo -- see Dockerfile.server).
+#
+# VITE_API_URL is baked into the JS bundle at build time (Vite inlines import.meta.env.* --
+# there is no runtime env var for a static SPA), so it must be set as a build-time variable
+# on this Railway service, pointing at the server service's public URL.
+FROM node:20-alpine AS build
+WORKDIR /app
+
+COPY package.json package-lock.json ./
+COPY apps/admin-web/package.json apps/admin-web/package.json
+COPY apps/server/package.json apps/server/package.json
+COPY packages/db/package.json packages/db/package.json
+COPY packages/domain/package.json packages/domain/package.json
+COPY packages/shared/package.json packages/shared/package.json
+RUN npm ci
+
+COPY . .
+ARG VITE_API_URL
+ENV VITE_API_URL=$VITE_API_URL
+RUN npm run build --workspace=@tashkurgan/admin-web
+
+FROM node:20-alpine AS run
+WORKDIR /app
+RUN npm install -g serve@14
+COPY --from=build /app/apps/admin-web/dist ./dist
+
+EXPOSE 4173
+# Railway injects PORT at runtime; -s enables SPA fallback so client-side routes
+# (react-router) resolve to index.html instead of 404ing on refresh.
+CMD ["sh", "-c", "serve -s dist -l ${PORT:-4173}"]

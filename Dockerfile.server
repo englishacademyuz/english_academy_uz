@@ -1,0 +1,28 @@
+# Builds the Fastify API + Telegram bot service. Build context must be the repo root
+# (not apps/server) because this is an npm-workspaces monorepo -- the server depends on
+# the @tashkurgan/db, @tashkurgan/domain, and @tashkurgan/shared workspace packages.
+FROM node:20-alpine AS base
+WORKDIR /app
+
+# Prisma's query engine needs libssl on Alpine (musl) or it silently mis-detects OpenSSL at runtime.
+RUN apk add --no-cache openssl
+
+# Copy just the manifests first so `npm ci` is cached across builds that only touch source.
+COPY package.json package-lock.json ./
+COPY apps/server/package.json apps/server/package.json
+COPY apps/admin-web/package.json apps/admin-web/package.json
+COPY packages/db/package.json packages/db/package.json
+COPY packages/domain/package.json packages/domain/package.json
+COPY packages/shared/package.json packages/shared/package.json
+RUN npm ci
+
+COPY . .
+RUN npm run db:generate
+
+ENV NODE_ENV=production
+EXPOSE 3000
+
+# Applies any pending Prisma migrations against DATABASE_URL, then starts the server. Runs at
+# container start (not build time) because DATABASE_URL/TELEGRAM_BOT_TOKEN/etc. are only
+# available once Railway injects the service's runtime environment.
+CMD ["sh", "-c", "npm run db:migrate:deploy && npm run start:prod --workspace=@tashkurgan/server"]
