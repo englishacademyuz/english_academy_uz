@@ -74,6 +74,16 @@ enum AssessmentType {
   CUSTOM
 }
 
+// How often a category is meant to be graded. DAILY categories are always
+// open for entry on every lesson day; WEEKLY/MONTHLY categories are only
+// graded when a teacher explicitly opens that period's round (the existing
+// "add marking" flow), so they don't clutter every single lesson day.
+enum AssessmentCategoryCadence {
+  DAILY
+  WEEKLY
+  MONTHLY
+}
+
 enum PaymentStatus {
   DEBT
   PARTIAL
@@ -241,6 +251,9 @@ model AssessmentCategory {
   // category doesn't feed the Rating ledger at all -- an admin opts a category
   // in by giving it a positive value.
   pointsWorth Int     @default(0)
+  // DAILY categories auto-show as a gradeable column every lesson day.
+  // WEEKLY/MONTHLY ones only appear when a teacher opens that period's round.
+  cadence   AssessmentCategoryCadence @default(DAILY)
   retiredAt DateTime?
   createdAt DateTime  @default(now())
 

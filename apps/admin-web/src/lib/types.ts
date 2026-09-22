@@ -3,6 +3,7 @@ export type StudentStatus = 'ACTIVE' | 'PAUSED' | 'INACTIVE' | 'COMPLETED' | 'LE
 export type AttendanceStatus = 'PRESENT' | 'ABSENT' | 'LATE' | 'EXCUSED'
 export type HomeworkResultStatus = 'COMPLETED' | 'NOT_COMPLETED'
 export type AssessmentType = 'WEEKLY' | 'MONTHLY' | 'GENERAL' | 'CUSTOM'
+export type AssessmentCategoryCadence = 'DAILY' | 'WEEKLY' | 'MONTHLY'
 export type LessonMaterialType = 'PDF' | 'DOCUMENT' | 'IMAGE' | 'VIDEO' | 'AUDIO' | 'LINK' | 'TEXT'
 export type EnrollmentEndReason = 'GROUP_CHANGE' | 'STUDENT_LEFT' | 'COMPLETED' | 'OTHER'
 export type PaymentStatus = 'DEBT' | 'PARTIAL' | 'PAID'
@@ -92,6 +93,7 @@ export type AssessmentCategory = {
   name: string
   maxScore: number
   pointsWorth: number
+  cadence: AssessmentCategoryCadence
   retiredAt: string | null
 }
 

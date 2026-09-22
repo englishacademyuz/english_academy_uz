@@ -8,8 +8,9 @@ import {
   subjects as subjectsApi,
 } from '../lib/api'
 import { notifyError, notifySuccess } from '../lib/toast'
-import { Badge, Button, Card, Input, PageHeader, Spinner } from '../components/ui'
-import type { AssessmentCategory } from '../lib/types'
+import { Badge, Button, Card, Input, PageHeader, Select, Spinner } from '../components/ui'
+import { assessmentCategoryCadenceLabel } from '../lib/format'
+import type { AssessmentCategory, AssessmentCategoryCadence } from '../lib/types'
 
 function InlineAddForm({
   placeholder,
@@ -308,8 +309,17 @@ function DetailPanel({ levelId, pathLabel }: { levelId: string | null; pathLabel
   })
 
   const createCategory = useMutation({
-    mutationFn: ({ name, maxScore, pointsWorth }: { name: string; maxScore: number; pointsWorth: number }) =>
-      categoriesApi.create(levelId!, name, maxScore, pointsWorth),
+    mutationFn: ({
+      name,
+      maxScore,
+      pointsWorth,
+      cadence,
+    }: {
+      name: string
+      maxScore: number
+      pointsWorth: number
+      cadence: AssessmentCategoryCadence
+    }) => categoriesApi.create(levelId!, name, maxScore, pointsWorth, cadence),
     onSuccess: () => {
       notifySuccess('Toifa yaratildi')
       queryClient.invalidateQueries({ queryKey: ['assessment-categories', levelId] })
@@ -347,7 +357,9 @@ function DetailPanel({ levelId, pathLabel }: { levelId: string | null; pathLabel
           )}
 
           <CategoryAddForm
-            onSubmit={(name, maxScore, pointsWorth) => createCategory.mutate({ name, maxScore, pointsWorth })}
+            onSubmit={(name, maxScore, pointsWorth, cadence) =>
+              createCategory.mutate({ name, maxScore, pointsWorth, cadence })
+            }
             pending={createCategory.isPending}
           />
         </div>
@@ -364,6 +376,9 @@ function CategoryCard({ category, onRetire }: { category: AssessmentCategory; on
       <div className="flex items-center justify-between gap-3">
         <p className="font-semibold text-slate-900 dark:text-slate-100">{category.name}</p>
         <div className="flex shrink-0 items-center gap-2">
+          <Badge tone={category.cadence === 'DAILY' ? 'slate' : 'amber'}>
+            {assessmentCategoryCadenceLabel[category.cadence]}
+          </Badge>
           <Badge tone="brand">{scaleLabel}</Badge>
           <button
             onClick={onRetire}
@@ -397,24 +412,28 @@ const MAX_SCORE_PRESETS = [
 /** Captures the category's grading scale (§18/§43/§51.1) and its Rating weight -- both fixed
  once here so a teacher never has to re-type them while grading, and a 100% result auto-awards
  pointsWorth points to the Reyting ledger (0 = doesn't feed Reyting). */
+const CADENCE_OPTIONS: AssessmentCategoryCadence[] = ['DAILY', 'WEEKLY', 'MONTHLY']
+
 function CategoryAddForm({
   onSubmit,
   pending,
 }: {
-  onSubmit: (name: string, maxScore: number, pointsWorth: number) => void
+  onSubmit: (name: string, maxScore: number, pointsWorth: number, cadence: AssessmentCategoryCadence) => void
   pending: boolean
 }) {
   const [name, setName] = useState('')
   const [maxScore, setMaxScore] = useState(100)
   const [pointsWorth, setPointsWorth] = useState(0)
+  const [cadence, setCadence] = useState<AssessmentCategoryCadence>('DAILY')
 
   function handleSubmit(e: FormEvent) {
     e.preventDefault()
     if (!name.trim() || maxScore < 1 || pointsWorth < 0) return
-    onSubmit(name.trim(), maxScore, pointsWorth)
+    onSubmit(name.trim(), maxScore, pointsWorth, cadence)
     setName('')
     setMaxScore(100)
     setPointsWorth(0)
+    setCadence('DAILY')
   }
 
   return (
@@ -427,6 +446,18 @@ function CategoryAddForm({
           placeholder="Masalan: Gapirish"
           className="min-w-40 flex-1 text-sm"
         />
+        <Select
+          value={cadence}
+          onChange={(e) => setCadence(e.target.value as AssessmentCategoryCadence)}
+          className="w-32 text-sm"
+          title="Necha marta baholanadi"
+        >
+          {CADENCE_OPTIONS.map((c) => (
+            <option key={c} value={c}>
+              {assessmentCategoryCadenceLabel[c]}
+            </option>
+          ))}
+        </Select>
         <Input
           type="number"
           min={1}
@@ -464,6 +495,10 @@ function CategoryAddForm({
           </button>
         ))}
       </div>
+      <p className="text-[11px] text-slate-400 dark:text-slate-500">
+        Kunlik toifalar har bir dars kunida ustun sifatida ochiq turadi. Haftalik/oylik toifalar esa faqat
+        oʻqituvchi "Belgilash qoʻshish" orqali oʻsha davrni ochganda baholanadi.
+      </p>
       <p className="text-[11px] text-slate-400 dark:text-slate-500">
         Reyting ball — 100% natija (yoki maksimal baho) uchun beriladigan ball. Oraliq natijalar shunga mutanosib
         hisoblanadi (masalan, 50% → yarim ball).

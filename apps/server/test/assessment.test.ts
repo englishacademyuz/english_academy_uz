@@ -184,6 +184,37 @@ describe('assessments', () => {
     expect(transactions).toHaveLength(0)
   })
 
+  it('defaults a new category to DAILY cadence, and persists an explicit WEEKLY/MONTHLY cadence', async () => {
+    const { level } = await seedAcademicStructure()
+    await createAdmin()
+    const adminCookie = await loginAs(app, 'admin', 'admin12345')
+
+    const daily = await app.inject({
+      method: 'POST',
+      url: `/levels/${level.id}/assessment-categories`,
+      headers: { cookie: adminCookie },
+      payload: { name: 'Grammar' },
+    })
+    expect(daily.json().cadence).toBe('DAILY')
+
+    const weekly = await app.inject({
+      method: 'POST',
+      url: `/levels/${level.id}/assessment-categories`,
+      headers: { cookie: adminCookie },
+      payload: { name: 'Weekly Test', cadence: 'WEEKLY' },
+    })
+    expect(weekly.json().cadence).toBe('WEEKLY')
+
+    const listed = await app.inject({
+      method: 'GET',
+      url: `/levels/${level.id}/assessment-categories`,
+      headers: { cookie: adminCookie },
+    })
+    const cadences = listed.json().map((c: { name: string; cadence: string }) => [c.name, c.cadence])
+    expect(cadences).toContainEqual(['Grammar', 'DAILY'])
+    expect(cadences).toContainEqual(['Weekly Test', 'WEEKLY'])
+  })
+
   it('forbids a teacher from managing assessment categories', async () => {
     const { level } = await seedAcademicStructure()
     const teacherCookie = await loginAs(app, 'teacher1', 'teacher12345')

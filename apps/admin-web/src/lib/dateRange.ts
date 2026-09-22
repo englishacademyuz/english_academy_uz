@@ -6,7 +6,7 @@ export const TIMEFRAME_LABEL: Record<TimeframeKind, string> = {
   all: 'Barcha vaqt',
 }
 
-function startOfWeek(date: Date): Date {
+export function startOfWeek(date: Date): Date {
   const d = new Date(date)
   d.setHours(0, 0, 0, 0)
   const daysSinceMonday = (d.getDay() + 6) % 7
@@ -32,4 +32,10 @@ export function isWithinRange(date: Date, range: { start: Date; end: Date } | nu
 
 export function isSameDay(a: Date, b: Date): boolean {
   return a.getFullYear() === b.getFullYear() && a.getMonth() === b.getMonth() && a.getDate() === b.getDate()
+}
+
+/** A lesson can't be recorded before it happens -- attendance/marks stay editable for today and
+ * any past day, but never for a date still ahead of "now". */
+export function isFutureDay(date: Date, now: Date = new Date()): boolean {
+  return !isSameDay(date, now) && date.getTime() > now.getTime()
 }

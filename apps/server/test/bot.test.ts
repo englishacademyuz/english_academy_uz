@@ -1,7 +1,7 @@
 import { afterAll, beforeEach, describe, expect, it } from 'vitest'
 import { prisma } from '@tashkurgan/db'
 import { createBot } from '../src/bot/client'
-import { resetDb } from './helpers'
+import { resetDb, seedAcademicStructure } from './helpers'
 
 // A fake botInfo skips grammY's real getMe network call entirely -- this
 // suite never talks to Telegram; see buildBot()'s API transformer below.
@@ -74,6 +74,9 @@ describe('telegram bot', () => {
   })
 
   afterAll(async () => {
+    // Leaving dirty rows behind would trip the next test file's seedAcademicStructure()
+    // (Subject.name is unique) -- clean up after the last test too, not just before the first.
+    await resetDb()
     await prisma.$disconnect()
   })
 
@@ -164,5 +167,69 @@ describe('telegram bot', () => {
     calls.length = 0
     await bot.handleUpdate(callbackUpdate(333, `child:${ownChild.id}`))
     expect(calls.some((c) => c.method === 'sendMessage' && String(c.payload.text).includes('Own'))).toBe(true)
+  })
+
+  it('lets a student browse past lessons and reopen a specific one\'s resources', async () => {
+    const { group, student } = await seedAcademicStructure()
+    const user = await prisma.user.create({ data: { role: 'STUDENT', telegramChatId: '444' } })
+    await prisma.student.update({ where: { id: student.id }, data: { userId: user.id } })
+
+    const session = await prisma.lessonSession.create({
+      data: {
+        groupId: group.id,
+        teacherId: group.teacherId,
+        date: new Date('2026-09-10'),
+        topic: 'Present Perfect',
+        materials: { create: [{ type: 'LINK', content: 'https://example.com/unit5' }] },
+      },
+    })
+
+    const { bot, calls } = buildBot()
+    await bot.init()
+
+    await bot.handleUpdate(textUpdate(444, '📚 Mening oʻqishim'))
+    const studiesMessage = calls.find((c) => c.method === 'sendMessage' && String(c.payload.text).includes('Mening'))
+    expect(studiesMessage).toBeDefined()
+
+    calls.length = 0
+    await bot.handleUpdate(callbackUpdate(444, 'lessons:0'))
+    const listCall = calls.find((c) => c.method === 'editMessageText' || c.method === 'sendMessage')
+    expect(listCall).toBeDefined()
+    expect(String(listCall?.payload.text)).toContain('Darslar tarixi')
+
+    calls.length = 0
+    await bot.handleUpdate(callbackUpdate(444, `lesson:${session.id}`))
+    const detail = calls.find((c) => c.method === 'sendMessage')
+    expect(String(detail?.payload.text)).toContain('Present Perfect')
+    expect(String(detail?.payload.text)).toContain('example.com/unit5')
+  })
+
+  it('refuses to show a lesson from a group the student was never enrolled in', async () => {
+    const { level, teacher, student } = await seedAcademicStructure()
+    const user = await prisma.user.create({ data: { role: 'STUDENT', telegramChatId: '555' } })
+    await prisma.student.update({ where: { id: student.id }, data: { userId: user.id } })
+
+    // A second group under the same teacher/level that the student was never enrolled in.
+    const otherGroup = await prisma.group.create({
+      data: {
+        name: 'B',
+        levelId: level.id,
+        teacherId: teacher.id,
+        scheduleDays: ['TUE'],
+        scheduleTime: '19:00',
+        startDate: new Date(),
+      },
+    })
+    const foreignSession = await prisma.lessonSession.create({
+      data: { groupId: otherGroup.id, teacherId: otherGroup.teacherId, date: new Date('2026-09-11'), topic: 'Secret' },
+    })
+
+    const { bot, calls } = buildBot()
+    await bot.init()
+    await bot.handleUpdate(callbackUpdate(555, `lesson:${foreignSession.id}`))
+
+    const reply = calls.find((c) => c.method === 'sendMessage')
+    expect(String(reply?.payload.text)).toContain('huquqingiz yoʻq')
+    expect(String(reply?.payload.text)).not.toContain('Secret')
   })
 })

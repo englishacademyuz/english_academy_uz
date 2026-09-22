@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { CheckCircle2, Plus, Trash2 } from 'lucide-react'
 import { sessions as sessionsApi } from '../../lib/api'
-import { materialTypeLabel, todayInputValue } from '../../lib/format'
+import { materialTypeLabel, toDateInputValue, todayInputValue } from '../../lib/format'
 import { notifyError, notifySuccess } from '../../lib/toast'
 import type { Group, LessonMaterialType } from '../../lib/types'
 import { Button, Card, Field, Input, Select } from '../ui'
@@ -11,9 +11,9 @@ const MATERIAL_TYPES: LessonMaterialType[] = ['LINK', 'TEXT', 'PDF', 'DOCUMENT',
 
 type MaterialDraft = { type: LessonMaterialType; content: string }
 
-export function TodayLessonCard({ group }: { group: Group }) {
+export function TodayLessonCard({ group, initialDate }: { group: Group; initialDate?: Date }) {
   const queryClient = useQueryClient()
-  const [date, setDate] = useState(todayInputValue())
+  const [date, setDate] = useState(initialDate ? toDateInputValue(initialDate) : todayInputValue())
   const [topic, setTopic] = useState('')
   const [notes, setNotes] = useState('')
   const [homeworkInstructions, setHomeworkInstructions] = useState('')
@@ -68,7 +68,9 @@ export function TodayLessonCard({ group }: { group: Group }) {
   return (
     <Card className="p-5">
       <div className="mb-4 flex items-center justify-between gap-4">
-        <h2 className="text-sm font-semibold text-slate-900 dark:text-slate-100">Bugungi dars</h2>
+        <h2 className="text-sm font-semibold text-slate-900 dark:text-slate-100">
+          {date === todayInputValue() ? 'Bugungi dars' : 'Dars'}
+        </h2>
         <Input
           type="date"
           value={date}

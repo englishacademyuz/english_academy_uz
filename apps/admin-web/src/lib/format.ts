@@ -145,6 +145,12 @@ export const assessmentTypeLabel: Record<string, string> = {
   CUSTOM: 'Maxsus',
 }
 
+export const assessmentCategoryCadenceLabel: Record<string, string> = {
+  DAILY: 'Kunlik',
+  WEEKLY: 'Haftalik',
+  MONTHLY: 'Oylik',
+}
+
 export const enrollmentEndReasonLabel: Record<string, string> = {
   GROUP_CHANGE: "Guruh oʻzgardi",
   STUDENT_LEFT: "Oʻquvchi ketdi",

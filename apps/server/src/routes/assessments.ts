@@ -14,6 +14,8 @@ const createCategorySchema = z.object({
   maxScore: z.number().int().positive().default(100),
   // How many Rating points a 100% result is worth; 0 (default) keeps this category out of the Rating ledger.
   pointsWorth: z.number().int().min(0).default(0),
+  // DAILY auto-shows as a column every lesson day; WEEKLY/MONTHLY only appear when a teacher opens that period's round.
+  cadence: z.enum(['DAILY', 'WEEKLY', 'MONTHLY']).default('DAILY'),
 })
 
 const resultInputSchema = z.object({ studentId: z.string(), score: z.number().min(0) })
@@ -51,7 +53,13 @@ export const assessmentRoutes: FastifyPluginAsync = async (app) => {
       const { levelId } = levelIdParams.parse(request.params)
       const body = createCategorySchema.parse(request.body)
       return prisma.assessmentCategory.create({
-        data: { levelId, name: body.name, maxScore: body.maxScore, pointsWorth: body.pointsWorth },
+        data: {
+          levelId,
+          name: body.name,
+          maxScore: body.maxScore,
+          pointsWorth: body.pointsWorth,
+          cadence: body.cadence,
+        },
       })
     },
   )

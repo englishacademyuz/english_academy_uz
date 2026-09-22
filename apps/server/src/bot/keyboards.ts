@@ -1,4 +1,5 @@
 import { InlineKeyboard, Keyboard } from 'grammy'
+import { formatDate } from './format'
 
 export const studentMenu = {
   studies: "📚 Mening oʻqishim",
@@ -48,5 +49,26 @@ export function childSelectionKeyboard(children: Array<{ studentId: string; labe
   for (const child of children) {
     keyboard.text(child.label, `child:${child.studentId}`).row()
   }
+  return keyboard
+}
+
+export function studiesActionsKeyboard() {
+  return new InlineKeyboard().text('📚 Barcha darslar', 'lessons:0')
+}
+
+/** One button per past lesson (newest first), plus prev/next paging when the group has more
+ * lessons than fit on one screen -- tapping a lesson reopens its own materials/homework. */
+export function lessonListKeyboard(
+  sessions: Array<{ id: string; date: Date; topic: string | null }>,
+  page: number,
+  hasMore: boolean,
+) {
+  const keyboard = new InlineKeyboard()
+  for (const session of sessions) {
+    const label = `${formatDate(session.date)} — ${session.topic ?? 'Mavzu kiritilmagan'}`
+    keyboard.text(label.length > 64 ? `${label.slice(0, 63)}…` : label, `lesson:${session.id}`).row()
+  }
+  if (page > 0) keyboard.text('◀ Oldingi', `lessons:${page - 1}`)
+  if (hasMore) keyboard.text('Keyingi ▶', `lessons:${page + 1}`)
   return keyboard
 }

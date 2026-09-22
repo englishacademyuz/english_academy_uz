@@ -28,7 +28,7 @@ const BAND_VARS: CSSProperties = {
 }
 
 /** The group's student-centric workspace: one frozen roster on the left, viewed through whichever lens (attendance, marks, points, accounting) the teacher needs on the right. */
-export function StudentsTab({ group }: { group: Group }) {
+export function StudentsTab({ group, initialDate }: { group: Group; initialDate?: Date }) {
   const [mode, setMode] = useState<StudentViewMode>('journal')
   const [showAddStudent, setShowAddStudent] = useState(false)
   const roster = group.enrollments ?? []
@@ -50,8 +50,8 @@ export function StudentsTab({ group }: { group: Group }) {
             </div>
           </div>
 
-          {mode === 'journal' && <JournalView group={group} />}
-          {mode === 'marks' && <MarksMatrixView group={group} />}
+          {mode === 'journal' && <JournalView group={group} initialDate={initialDate} />}
+          {mode === 'marks' && <MarksMatrixView group={group} initialDate={initialDate} />}
           {mode === 'points' && <LeaderboardView group={group} />}
           {mode === 'payments' && <PaymentsMatrixView group={group} />}
         </div>

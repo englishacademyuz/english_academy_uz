@@ -4,11 +4,22 @@ import type {
   Homework,
   HomeworkResult,
   Level,
+  LessonMaterial,
   LessonSession,
   Student,
   Teacher,
 } from '@tashkurgan/db'
 import type { ProgressSnapshot, Timeframe } from '@tashkurgan/domain'
+
+const MATERIAL_TYPE_LABEL: Record<string, string> = {
+  PDF: 'PDF',
+  DOCUMENT: 'Hujjat',
+  IMAGE: 'Rasm',
+  VIDEO: 'Video',
+  AUDIO: 'Audio',
+  LINK: 'Havola',
+  TEXT: 'Matn',
+}
 
 const STUDENT_STATUS_LABEL: Record<string, string> = {
   ACTIVE: 'Faol',
@@ -34,7 +45,7 @@ const TIMEFRAME_LABEL: Record<Timeframe['kind'], string> = {
   custom: 'Tanlangan davr',
 }
 
-function formatDate(date: Date): string {
+export function formatDate(date: Date): string {
   const day = String(date.getDate()).padStart(2, '0')
   const month = String(date.getMonth() + 1).padStart(2, '0')
   return `${day}.${month}.${date.getFullYear()}`
@@ -111,6 +122,43 @@ export function formatAttendance(
       lines.push(`${formatDate(record.lessonSession.date)} — ${ATTENDANCE_LABEL[record.status] ?? record.status}`)
     }
   }
+  return lines.join('\n')
+}
+
+export function formatLessonListHeader(hasAny: boolean): string {
+  return hasAny
+    ? '📚 <b>Darslar tarixi</b>\n\nOʻtilgan darsni tanlab, uning materiallari va uy vazifasini qayta koʻrishingiz mumkin:'
+    : '📚 <b>Darslar tarixi</b>\n\nHali oʻtilgan dars qayd etilmagan.'
+}
+
+export function formatLessonNotFound(): string {
+  return "Bu dars topilmadi yoki unga kirish huquqingiz yoʻq."
+}
+
+export function formatLessonDetail(
+  session: LessonSession & { materials: LessonMaterial[] },
+  homework: (Homework & { results: HomeworkResult[] }) | null,
+): string {
+  const lines = [`📖 <b>${formatDate(session.date)}</b>`, '']
+  lines.push(session.topic ? `Mavzu: <b>${session.topic}</b>` : 'Mavzu kiritilmagan')
+  if (session.notes) lines.push('', session.notes)
+
+  if (homework) {
+    lines.push('', '📝 <b>Uy vazifasi:</b>', homework.instructions)
+    const result = homework.results[0]
+    if (result) {
+      lines.push(`Holat: ${result.status === 'COMPLETED' ? '✅ Bajarilgan' : '❌ Bajarilmagan'}`)
+      if (result.score !== null) lines.push(`Ball: <b>${result.score}</b>`)
+    }
+  }
+
+  if (session.materials.length > 0) {
+    lines.push('', '📎 <b>Materiallar:</b>')
+    for (const material of session.materials) {
+      lines.push(`• ${MATERIAL_TYPE_LABEL[material.type] ?? material.type}: ${material.content}`)
+    }
+  }
+
   return lines.join('\n')
 }
 

@@ -15,11 +15,16 @@ import { isSameDay, startOfMonth } from '../../lib/dateRange'
  * daily for a year would otherwise ship its entire history just to show
  * today. Each month is its own react-query cache entry, so revisiting a
  * month already browsed this session doesn't re-fetch it.
+ *
+ * `initialDate` seeds the starting month/day instead of "today" -- used when
+ * arriving from a calendar deep link (e.g. clicking a past lesson in the
+ * weekly timetable) so the view opens already scoped to that lesson's date.
  */
-export function useLessonDayNav(groupId: string) {
+export function useLessonDayNav(groupId: string, initialDate?: Date) {
   const now = useMemo(() => new Date(), [])
-  const [monthAnchor, setMonthAnchor] = useState(() => startOfMonth(now))
-  const [selectedDate, setSelectedDate] = useState(now)
+  const startDate = initialDate ?? now
+  const [monthAnchor, setMonthAnchor] = useState(() => startOfMonth(startDate))
+  const [selectedDate, setSelectedDate] = useState(startDate)
   // Set right before stepping to a month whose data isn't loaded yet -- once
   // that month's query resolves, an effect jumps to its first/last lesson day.
   const [pendingEdge, setPendingEdge] = useState<'start' | 'end' | null>(null)

@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { ChevronLeft, ChevronRight, Clock, Users } from 'lucide-react'
-import { dayLabel, formatDayMonth } from '../../lib/format'
+import { dayLabel, formatDayMonth, toDateInputValue } from '../../lib/format'
 import { isSameDay } from '../../lib/dateRange'
 import type { Group } from '../../lib/types'
 import { Button, Card } from '../ui'
@@ -84,8 +84,8 @@ export function WeeklyTimetable({ groups }: { groups: Group[] }) {
                   day.lessons.map((group) => (
                     <div
                       key={group.id}
-                      onDoubleClick={() => navigate(`/groups/${group.id}`)}
-                      title="Guruh sahifasiga oʻtish uchun ikki marta bosing"
+                      onDoubleClick={() => navigate(`/groups/${group.id}?date=${toDateInputValue(day.date)}`)}
+                      title="Ushbu kungi darsga oʻtish uchun ikki marta bosing"
                       className="cursor-pointer rounded-md bg-white p-2 text-xs shadow-sm ring-1 ring-inset ring-slate-200 transition-colors hover:ring-brand-300 dark:bg-slate-900 dark:ring-slate-700 dark:hover:ring-brand-500/50"
                     >
                       <p className="flex items-center gap-1 font-semibold text-slate-900 dark:text-slate-100">

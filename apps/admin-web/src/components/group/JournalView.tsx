@@ -2,8 +2,8 @@ import { useEffect, useState } from 'react'
 import { useMutation, useQueryClient } from '@tanstack/react-query'
 import { CheckCircle2, Clock, MinusCircle, XCircle } from 'lucide-react'
 import { sessions as sessionsApi } from '../../lib/api'
-import { attendanceStatusLabel, todayInputValue } from '../../lib/format'
-import { isSameDay } from '../../lib/dateRange'
+import { attendanceStatusLabel, toDateInputValue } from '../../lib/format'
+import { isFutureDay, isSameDay } from '../../lib/dateRange'
 import { notifyError, notifySuccess } from '../../lib/toast'
 import type { AttendanceStatus, Group } from '../../lib/types'
 import { Button, ColumnLabel } from '../ui'
@@ -29,9 +29,13 @@ const STATUS_SELECTED_CLASS: Record<AttendanceStatus, string> = {
 }
 
 /** Attendance tab: date/day header with prev/next navigation over recorded lesson days, then 4 status columns. */
-export function JournalView({ group }: { group: Group }) {
-  const nav = useLessonDayNav(group.id)
+export function JournalView({ group, initialDate }: { group: Group; initialDate?: Date }) {
+  const nav = useLessonDayNav(group.id, initialDate)
   const { selectedDate, isSelectedToday } = nav
+  // Corrections are allowed on any day that's already happened (§51.5: edits
+  // overwrite in place, no audit trail) -- only a lesson that hasn't
+  // happened yet is locked, since there's nothing to record.
+  const isEditable = !isFutureDay(selectedDate, nav.now)
   const queryClient = useQueryClient()
   const roster = group.enrollments ?? []
 
@@ -47,7 +51,7 @@ export function JournalView({ group }: { group: Group }) {
   const saveMutation = useMutation({
     mutationFn: () =>
       sessionsApi.record(group.id, {
-        date: todayInputValue(),
+        date: toDateInputValue(selectedDate),
         attendance: Object.entries(pending).map(([studentId, status]) => ({ studentId, status })),
       }),
     onSuccess: () => {
@@ -64,14 +68,14 @@ export function JournalView({ group }: { group: Group }) {
     render: (studentId) => {
       const Icon = STATUS_ICONS[status]
       const recordedStatus = selectedSession?.attendances.find((a) => a.studentId === studentId)?.status
-      const selected = isSelectedToday ? pending[studentId] === status : recordedStatus === status
+      const selected = isEditable ? pending[studentId] === status : recordedStatus === status
       const fillClass = selected
         ? STATUS_SELECTED_CLASS[status]
         : 'bg-slate-100 text-slate-300 dark:bg-slate-800/60 dark:text-slate-600'
 
-      if (!isSelectedToday) {
-        // Same square look as today's controls, but a plain span -- past days
-        // are locked to what was actually recorded, not editable.
+      if (!isEditable) {
+        // Same square look as an editable day's controls, but a plain span --
+        // a future lesson that hasn't happened yet has nothing to edit.
         return (
           <span className={`inline-flex h-9 w-9 items-center justify-center rounded-lg ${fillClass}`}>
             <Icon className="h-4 w-4" />
@@ -114,10 +118,10 @@ export function JournalView({ group }: { group: Group }) {
         }
       />
 
-      {isSelectedToday && roster.length > 0 && (
+      {isEditable && roster.length > 0 && (
         <div className="flex justify-end px-5 py-2.5">
           <Button size="sm" onClick={() => saveMutation.mutate()} loading={saveMutation.isPending}>
-            Davomatni saqlash
+            {isSelectedToday ? 'Davomatni saqlash' : 'Tuzatishni saqlash'}
           </Button>
         </div>
       )}

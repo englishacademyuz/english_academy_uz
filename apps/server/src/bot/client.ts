@@ -5,13 +5,19 @@ import { calculateAttendanceRate, getProgress, redeemLinkingCode, type Timeframe
 import type { BotContext, SessionData } from './types'
 import {
   childSelectionKeyboard,
+  lessonListKeyboard,
   parentKeyboard,
   parentMenu,
   progressTimeframeKeyboard,
   studentKeyboard,
   studentMenu,
+  studiesActionsKeyboard,
 } from './keyboards'
 import * as fmt from './format'
+
+// A student browses one screen of past lessons at a time (newest first) rather than a single
+// unbounded list -- a group running for a year could otherwise have hundreds of rows.
+const LESSONS_PAGE_SIZE = 8
 
 async function resolveUser(chatId: string) {
   return prisma.user.findUnique({
@@ -66,7 +72,69 @@ async function sendStudies(ctx: BotContext, studentId: string) {
     where: { groupId: enrollment.groupId },
     orderBy: { date: 'desc' },
   })
-  await ctx.reply(fmt.formatStudies(enrollment.group, lastSession), { parse_mode: 'HTML' })
+  await ctx.reply(fmt.formatStudies(enrollment.group, lastSession), {
+    parse_mode: 'HTML',
+    reply_markup: studiesActionsKeyboard(),
+  })
+}
+
+/**
+ * The "📚 Barcha darslar" browsing flow: every past lesson of the student's currently active
+ * group, newest first, each reopening its own materials/homework (not just the latest one) --
+ * this is the "relearn a specific past lesson" path §14/§15 describe but the rest of the bot
+ * doesn't otherwise expose.
+ */
+async function sendLessonList(ctx: BotContext, studentId: string, page: number, edit = false) {
+  const enrollment = await prisma.enrollment.findFirst({ where: { studentId, status: 'ACTIVE' } })
+  if (!enrollment) {
+    await ctx.reply(fmt.formatNoActiveGroup())
+    return
+  }
+
+  const where = { groupId: enrollment.groupId, date: { lte: new Date() } }
+  const [sessions, total] = await Promise.all([
+    prisma.lessonSession.findMany({
+      where,
+      orderBy: { date: 'desc' },
+      skip: page * LESSONS_PAGE_SIZE,
+      take: LESSONS_PAGE_SIZE,
+    }),
+    prisma.lessonSession.count({ where }),
+  ])
+
+  const text = fmt.formatLessonListHeader(total > 0)
+  const reply_markup = lessonListKeyboard(sessions, page, (page + 1) * LESSONS_PAGE_SIZE < total)
+
+  if (edit) {
+    try {
+      await ctx.editMessageText(text, { parse_mode: 'HTML', reply_markup })
+      return
+    } catch {
+      // Falls through to a fresh message if there was nothing to edit.
+    }
+  }
+  await ctx.reply(text, { parse_mode: 'HTML', reply_markup })
+}
+
+/** Re-verifies the session's group is one the student is (or was) actually enrolled in --
+ * `sessionId` comes from user-controlled callback data, so this can't just trust the caller. */
+async function sendLessonDetail(ctx: BotContext, studentId: string, sessionId: string) {
+  const session = await prisma.lessonSession.findUnique({
+    where: { id: sessionId },
+    include: { materials: true, homework: { include: { results: { where: { studentId } } } } },
+  })
+  if (!session) {
+    await ctx.reply(fmt.formatLessonNotFound())
+    return
+  }
+
+  const everEnrolled = await prisma.enrollment.findFirst({ where: { studentId, groupId: session.groupId } })
+  if (!everEnrolled) {
+    await ctx.reply(fmt.formatLessonNotFound())
+    return
+  }
+
+  await ctx.reply(fmt.formatLessonDetail(session, session.homework), { parse_mode: 'HTML' })
 }
 
 async function sendProgress(ctx: BotContext, studentId: string, kind: 'today' | 'week' | 'month', edit = false) {
@@ -277,6 +345,32 @@ export function createBot(token: string, botInfo?: UserFromGetMe) {
       await ctx.answerCallbackQuery()
       if (!studentId) return
       await sendProgress(ctx, studentId, kind, true)
+      return
+    }
+
+    if (data.startsWith('lessons:')) {
+      const page = Number(data.slice('lessons:'.length)) || 0
+      let studentId: string | undefined
+      if (user.role === 'STUDENT') studentId = user.student?.id
+      else if (user.role === 'PARENT') studentId = ctx.session.selectedStudentId
+
+      await ctx.answerCallbackQuery()
+      if (!studentId) return
+      // Always triggered by tapping a button on an existing message (the "Barcha darslar"
+      // action or a previous page) -- edit it in place, same as sendProgress's callback path.
+      await sendLessonList(ctx, studentId, page, true)
+      return
+    }
+
+    if (data.startsWith('lesson:')) {
+      const sessionId = data.slice('lesson:'.length)
+      let studentId: string | undefined
+      if (user.role === 'STUDENT') studentId = user.student?.id
+      else if (user.role === 'PARENT') studentId = ctx.session.selectedStudentId
+
+      await ctx.answerCallbackQuery()
+      if (!studentId) return
+      await sendLessonDetail(ctx, studentId, sessionId)
       return
     }
 

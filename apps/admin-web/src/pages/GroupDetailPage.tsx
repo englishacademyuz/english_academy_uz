@@ -1,6 +1,6 @@
-import { useState } from 'react'
+import { useMemo, useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
-import { useParams } from 'react-router-dom'
+import { useParams, useSearchParams } from 'react-router-dom'
 import { BookOpen, Users } from 'lucide-react'
 import { groups as groupsApi } from '../lib/api'
 import { formatScheduleDays } from '../lib/format'
@@ -14,7 +14,19 @@ type GroupViewTab = 'lesson' | 'students'
 
 export function GroupDetailPage() {
   const { id } = useParams<{ id: string }>()
-  const [tab, setTab] = useState<GroupViewTab>('lesson')
+  const [searchParams] = useSearchParams()
+  // Set when arriving from a calendar deep link (e.g. double-clicking a past
+  // lesson in the weekly timetable) -- every date-aware view below opens
+  // already scoped to this date instead of defaulting to today.
+  const deepLinkDate = useMemo(() => {
+    const raw = searchParams.get('date')
+    if (!raw) return undefined
+    const parsed = new Date(`${raw}T00:00:00`)
+    return Number.isNaN(parsed.getTime()) ? undefined : parsed
+  }, [searchParams])
+  // A calendar deep link is asking about a specific lesson's attendance/marks
+  // first and foremost -- topic/resources are still one tab away.
+  const [tab, setTab] = useState<GroupViewTab>(deepLinkDate ? 'students' : 'lesson')
   const groupQuery = useQuery({
     queryKey: ['group', id],
     queryFn: () => groupsApi.get(id!),
@@ -47,11 +59,11 @@ export function GroupDetailPage() {
 
       {tab === 'lesson' ? (
         <div className="space-y-6">
-          <TodayLessonCard group={group} />
+          <TodayLessonCard group={group} initialDate={deepLinkDate} />
           <RecentSessionsCard group={group} />
         </div>
       ) : (
-        <StudentsTab group={group} />
+        <StudentsTab group={group} initialDate={deepLinkDate} />
       )}
     </div>
   )

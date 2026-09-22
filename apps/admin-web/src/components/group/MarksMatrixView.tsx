@@ -1,9 +1,9 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { Plus } from 'lucide-react'
 import { assessmentCategories as categoriesApi, assessments as assessmentsApi } from '../../lib/api'
-import { assessmentTypeLabel, toDateInputValue, todayInputValue } from '../../lib/format'
-import { isSameDay } from '../../lib/dateRange'
+import { assessmentCategoryCadenceLabel, assessmentTypeLabel, formatDayMonth, formatMonthYear, toDateInputValue } from '../../lib/format'
+import { isFutureDay, isSameDay, startOfWeek } from '../../lib/dateRange'
 import { notifyError, notifySuccess } from '../../lib/toast'
 import type { Assessment, AssessmentCategory, AssessmentType, Group } from '../../lib/types'
 import { Button, ColumnLabel, Field, Input, Modal, Select, Spinner } from '../ui'
@@ -20,16 +20,20 @@ function isRoutineEntry(assessment: Assessment, category: AssessmentCategory | u
 }
 
 /**
- * Grading tab: every configured category for the group's Level shows up as a column each
- * lesson day (§18/§43), today editable and past days locked to what was recorded -- the same
- * day-by-day pattern as JournalView (attendance), sharing its navigation via useLessonDayNav.
- * A teacher can additionally "add marking" for today -- a one-off titled entry (a control work,
- * say) that everyone gets graded on, appearing as an extra column alongside the routine ones.
+ * Grading tab: DAILY-cadence categories for the group's Level show up as an always-open column
+ * every lesson day (§18/§43); WEEKLY/MONTHLY-cadence categories don't clutter every day -- they
+ * only appear once a teacher opens that period's round via "Belgilash qoʻshish". Any already-
+ * recorded day (today or past) stays editable for corrections (§51.5: edits overwrite in place),
+ * sharing its day-by-day navigation with JournalView (attendance) via useLessonDayNav.
  */
-export function MarksMatrixView({ group }: { group: Group }) {
-  const nav = useLessonDayNav(group.id)
-  const { selectedDate, isSelectedToday, monthAnchor, monthEnd } = nav
+export function MarksMatrixView({ group, initialDate }: { group: Group; initialDate?: Date }) {
+  const nav = useLessonDayNav(group.id, initialDate)
+  const { selectedDate, monthAnchor, monthEnd } = nav
+  // Corrections are allowed on any day that's already happened -- only a lesson that hasn't
+  // happened yet has nothing to grade.
+  const isEditable = !isFutureDay(selectedDate, nav.now)
   const [showAddMarking, setShowAddMarking] = useState(false)
+  const [addMarkingCategoryId, setAddMarkingCategoryId] = useState<string | undefined>(undefined)
   const queryClient = useQueryClient()
   const roster = group.enrollments ?? []
 
@@ -38,6 +42,8 @@ export function MarksMatrixView({ group }: { group: Group }) {
     queryFn: () => categoriesApi.list(group.levelId),
   })
   const categories = categoriesQuery.data ?? []
+  const dailyCategories = categories.filter((c) => c.cadence === 'DAILY')
+  const periodicCategories = categories.filter((c) => c.cadence !== 'DAILY')
 
   const assessmentsQuery = useQuery({
     queryKey: ['group-assessments', group.id, monthAnchor.getFullYear(), monthAnchor.getMonth()],
@@ -56,7 +62,7 @@ export function MarksMatrixView({ group }: { group: Group }) {
         categoryId: input.categoryId,
         title: input.title,
         type: input.type,
-        date: todayInputValue(),
+        date: toDateInputValue(selectedDate),
         maxScore: input.maxScore,
         results: [{ studentId: input.studentId, score: input.score }],
       }),
@@ -67,9 +73,18 @@ export function MarksMatrixView({ group }: { group: Group }) {
     onError: (err) => notifyError(err, 'Bahoni saqlab boʻlmadi'),
   })
 
-  const extraEntries = assessmentsForDay.filter((a) => !isRoutineEntry(a, categories.find((c) => c.id === a.categoryId)))
+  // A periodic (weekly/monthly) category never gets an automatic routine column -- any
+  // assessment recorded for one only ever shows up here, opened via "Belgilash qoʻshish".
+  const extraEntries = assessmentsForDay.filter(
+    (a) => !isRoutineEntry(a, dailyCategories.find((c) => c.id === a.categoryId)),
+  )
 
-  const routineColumns: MatrixColumn[] = categories.map((category) => {
+  // Weekly/Monthly categories not yet opened for the selected day -- offered as one-click
+  // "open this round" chips instead of making the teacher fill out the whole modal by hand.
+  const openedCategoryIds = new Set(extraEntries.map((a) => a.categoryId))
+  const unopenedPeriodic = periodicCategories.filter((c) => !openedCategoryIds.has(c.id))
+
+  const routineColumns: MatrixColumn[] = dailyCategories.map((category) => {
     const assessment = assessmentsForDay.find((a) => isRoutineEntry(a, category) && a.categoryId === category.id)
     return {
       key: `cat-${category.id}`,
@@ -79,7 +94,7 @@ export function MarksMatrixView({ group }: { group: Group }) {
         <ScoreCell
           maxScore={assessment?.maxScore ?? category.maxScore}
           score={assessment?.results.find((r) => r.studentId === studentId)?.score ?? null}
-          editable={isSelectedToday}
+          editable={isEditable}
           onSave={(score) =>
             gradeMutation.mutate({ categoryId: category.id, title: category.name, type: 'GENERAL', studentId, score })
           }
@@ -99,7 +114,7 @@ export function MarksMatrixView({ group }: { group: Group }) {
       <ScoreCell
         maxScore={assessment.maxScore}
         score={assessment.results.find((r) => r.studentId === studentId)?.score ?? null}
-        editable={isSelectedToday}
+        editable={isEditable}
         onSave={(score) =>
           gradeMutation.mutate({
             categoryId: assessment.categoryId,
@@ -164,9 +179,30 @@ export function MarksMatrixView({ group }: { group: Group }) {
         />
       )}
 
-      {isSelectedToday && (
-        <div className="flex justify-end px-5 py-2.5">
-          <Button size="sm" variant="secondary" onClick={() => setShowAddMarking(true)} disabled={categories.length === 0}>
+      {isEditable && (
+        <div className="flex flex-wrap items-center justify-end gap-1.5 px-5 py-2.5">
+          {unopenedPeriodic.map((category) => (
+            <button
+              key={category.id}
+              type="button"
+              onClick={() => {
+                setAddMarkingCategoryId(category.id)
+                setShowAddMarking(true)
+              }}
+              className="rounded-full border border-dashed border-brand-300 px-2.5 py-1 text-[11px] font-medium text-brand-700 hover:bg-brand-50 dark:border-brand-500/40 dark:text-brand-300 dark:hover:bg-brand-500/10"
+            >
+              + {assessmentCategoryCadenceLabel[category.cadence]}: {category.name}
+            </button>
+          ))}
+          <Button
+            size="sm"
+            variant="secondary"
+            onClick={() => {
+              setAddMarkingCategoryId(undefined)
+              setShowAddMarking(true)
+            }}
+            disabled={categories.length === 0}
+          >
             <Plus className="h-3.5 w-3.5" /> Belgilash qoʻshish
           </Button>
         </div>
@@ -176,6 +212,8 @@ export function MarksMatrixView({ group }: { group: Group }) {
         <AddMarkingModal
           group={group}
           categories={categories}
+          date={selectedDate}
+          initialCategoryId={addMarkingCategoryId}
           onClose={() => setShowAddMarking(false)}
           onCreated={() => {
             invalidate()
@@ -199,6 +237,12 @@ function ScoreCell({
   onSave: (score: number) => void
 }) {
   const [value, setValue] = useState(score !== null ? String(score) : '')
+  // Cells aren't remounted when the teacher navigates to a different lesson day (same
+  // student/category key throughout) -- now that more than one day can be editable at a
+  // time, the local draft must re-sync to whichever day's actual score is showing.
+  useEffect(() => {
+    setValue(score !== null ? String(score) : '')
+  }, [score])
 
   if (!editable) {
     if (score === null) return <span className="text-xs text-slate-300 dark:text-slate-600">—</span>
@@ -227,32 +271,54 @@ function ScoreCell({
   )
 }
 
+/** The category's own cadence maps to a sensible default Assessment `type` and title, so
+ * opening a weekly/monthly round rarely needs the teacher to type anything but the score. */
+function defaultTypeForCadence(cadence: AssessmentCategory['cadence']): AssessmentType {
+  if (cadence === 'WEEKLY') return 'WEEKLY'
+  if (cadence === 'MONTHLY') return 'MONTHLY'
+  return 'GENERAL'
+}
+
+function defaultTitleForCadence(category: AssessmentCategory, date: Date): string {
+  if (category.cadence === 'WEEKLY') return `${category.name} — ${formatDayMonth(startOfWeek(date))} haftasi`
+  if (category.cadence === 'MONTHLY') return `${category.name} — ${formatMonthYear(date.getMonth() + 1, date.getFullYear())}`
+  return ''
+}
+
 function AddMarkingModal({
   group,
   categories,
+  date,
+  initialCategoryId,
   onClose,
   onCreated,
 }: {
   group: Group
   categories: AssessmentCategory[]
+  date: Date
+  initialCategoryId?: string
   onClose: () => void
   onCreated: () => void
 }) {
-  const [categoryId, setCategoryId] = useState(categories[0]?.id ?? '')
-  const [title, setTitle] = useState('')
-  const [type, setType] = useState<AssessmentType>('CUSTOM')
+  const initialCategory = categories.find((c) => c.id === initialCategoryId) ?? categories[0]
+  const [categoryId, setCategoryId] = useState(initialCategory?.id ?? '')
+  const [title, setTitle] = useState(initialCategory ? defaultTitleForCadence(initialCategory, date) : '')
+  const [type, setType] = useState<AssessmentType>(initialCategory ? defaultTypeForCadence(initialCategory.cadence) : 'CUSTOM')
   const selectedCategory = categories.find((c) => c.id === categoryId)
   const [maxScore, setMaxScore] = useState(selectedCategory?.maxScore ?? 100)
 
   function handleCategoryChange(id: string) {
     setCategoryId(id)
     const category = categories.find((c) => c.id === id)
-    if (category) setMaxScore(category.maxScore)
+    if (!category) return
+    setMaxScore(category.maxScore)
+    setType(defaultTypeForCadence(category.cadence))
+    setTitle(defaultTitleForCadence(category, date))
   }
 
   const createMutation = useMutation({
     mutationFn: () =>
-      assessmentsApi.create(group.id, { categoryId, title, type, date: todayInputValue(), maxScore }),
+      assessmentsApi.create(group.id, { categoryId, title, type, date: toDateInputValue(date), maxScore }),
     onSuccess: () => {
       notifySuccess('Belgilash qoʻshildi')
       onCreated()
@@ -261,7 +327,7 @@ function AddMarkingModal({
   })
 
   return (
-    <Modal title="Bugungi belgilash qoʻshish" onClose={onClose}>
+    <Modal title={`${formatDayMonth(date)} kuni uchun belgilash qoʻshish`} onClose={onClose}>
       <form
         onSubmit={(e) => {
           e.preventDefault()
@@ -273,7 +339,7 @@ function AddMarkingModal({
           <Select value={categoryId} onChange={(e) => handleCategoryChange(e.target.value)} required>
             {categories.map((c) => (
               <option key={c.id} value={c.id}>
-                {c.name}
+                {c.name} · {assessmentCategoryCadenceLabel[c.cadence]}
               </option>
             ))}
           </Select>
@@ -299,7 +365,8 @@ function AddMarkingModal({
         </div>
 
         <p className="text-xs text-slate-400 dark:text-slate-500">
-          Bugungi sana bilan qoʻshiladi. Natijalarni jadval katakchalarini toʻgʻridan-toʻgʻri tahrirlab kiritasiz.
+          {formatDayMonth(date)} sanasi bilan qoʻshiladi. Natijalarni jadval katakchalarini toʻgʻridan-toʻgʻri
+          tahrirlab kiritasiz.
         </p>
 
         <div className="flex justify-end gap-2 pt-2">

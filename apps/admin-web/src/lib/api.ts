@@ -2,6 +2,7 @@ import type {
   Actor,
   Assessment,
   AssessmentCategory,
+  AssessmentCategoryCadence,
   AssessmentType,
   AttendanceStatus,
   Course,
@@ -170,8 +171,8 @@ export const sessions = {
 
 export const assessmentCategories = {
   list: (levelId: string) => get<AssessmentCategory[]>(`/levels/${levelId}/assessment-categories`),
-  create: (levelId: string, name: string, maxScore: number, pointsWorth: number) =>
-    post<AssessmentCategory>(`/levels/${levelId}/assessment-categories`, { name, maxScore, pointsWorth }),
+  create: (levelId: string, name: string, maxScore: number, pointsWorth: number, cadence: AssessmentCategoryCadence) =>
+    post<AssessmentCategory>(`/levels/${levelId}/assessment-categories`, { name, maxScore, pointsWorth, cadence }),
   retire: (id: string) => patch<AssessmentCategory>(`/assessment-categories/${id}/retire`),
 }
 
