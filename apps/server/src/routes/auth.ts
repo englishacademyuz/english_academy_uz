@@ -3,6 +3,7 @@ import { z } from 'zod'
 import { prisma } from '@tashkurgan/db'
 import { redeemLinkingCode } from '@tashkurgan/domain'
 import { UnauthorizedError, verifyPassword } from '@tashkurgan/shared'
+import { config } from '../config'
 
 const loginSchema = z.object({
   username: z.string().min(1),
@@ -13,6 +14,17 @@ const redeemSchema = z.object({
   code: z.string().min(1),
   telegramChatId: z.string().min(1),
 })
+
+// In production admin-web and the server live on different *.up.railway.app
+// subdomains, which browsers treat as cross-site (up.railway.app is a public
+// suffix), so the cookie must be SameSite=None + Secure to be sent at all.
+const isProd = config.nodeEnv === 'production'
+const cookieOptions = {
+  httpOnly: true,
+  path: '/',
+  sameSite: isProd ? ('none' as const) : ('lax' as const),
+  secure: isProd,
+}
 
 export const authRoutes: FastifyPluginAsync = async (app) => {
   app.post('/login', async (request, reply) => {
@@ -25,18 +37,13 @@ export const authRoutes: FastifyPluginAsync = async (app) => {
     if (!valid) throw new UnauthorizedError('Invalid credentials')
 
     const token = app.jwt.sign({ userId: user.id }, { expiresIn: '12h' })
-    reply.setCookie('token', token, {
-      httpOnly: true,
-      path: '/',
-      sameSite: 'lax',
-      maxAge: 60 * 60 * 12,
-    })
+    reply.setCookie('token', token, { ...cookieOptions, maxAge: 60 * 60 * 12 })
 
     return { id: user.id, role: user.role }
   })
 
   app.post('/logout', async (_request, reply) => {
-    reply.clearCookie('token', { path: '/' })
+    reply.clearCookie('token', cookieOptions)
     return { ok: true }
   })
 
