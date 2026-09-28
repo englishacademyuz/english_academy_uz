@@ -9,6 +9,5 @@ export type Actor = {
   userId: string
   role: Role
   studentId?: string
-  parentId?: string
   teacherId?: string
 }

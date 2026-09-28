@@ -1,5 +1,5 @@
 import { randomInt } from 'node:crypto'
-import { prisma, type LinkingTargetType } from '@tashkurgan/db'
+import { prisma } from '@tashkurgan/db'
 import { ConflictError, NotFoundError } from '@tashkurgan/shared'
 
 const CODE_LENGTH = 8
@@ -15,61 +15,43 @@ function generateCode(): string {
   return code
 }
 
-export async function issueLinkingCode(targetType: LinkingTargetType, targetId: string) {
-  if (targetType === 'STUDENT') {
-    const student = await prisma.student.findUnique({ where: { id: targetId } })
-    if (!student) throw new NotFoundError('Student not found')
-  } else {
-    const parent = await prisma.parent.findUnique({ where: { id: targetId } })
-    if (!parent) throw new NotFoundError('Parent not found')
-  }
+/** Tolerates what copy/paste tends to add: surrounding/inner spaces, dashes, lowercase. */
+export function normalizeLinkingCode(input: string): string {
+  return input.replace(/[\s-]/g, '').toUpperCase()
+}
+
+export function looksLikeLinkingCode(input: string): boolean {
+  const code = normalizeLinkingCode(input)
+  return code.length === CODE_LENGTH && [...code].every((c) => ALPHABET.includes(c))
+}
+
+export async function issueLinkingCode(studentId: string) {
+  const student = await prisma.student.findUnique({ where: { id: studentId } })
+  if (!student) throw new NotFoundError('Student not found')
 
   const code = generateCode()
   const expiresAt = new Date(Date.now() + EXPIRY_HOURS * 60 * 60 * 1000)
 
-  return prisma.linkingCode.create({ data: { code, targetType, targetId, expiresAt } })
+  return prisma.linkingCode.create({ data: { code, studentId, expiresAt } })
 }
 
 /**
- * Binds a Telegram chat id to the Student/Parent the code was issued for.
- * Creates the underlying User row lazily on first redemption if the target
- * doesn't have one yet.
+ * Binds a Telegram chat to the Student the code was issued for. The code is
+ * reusable until it expires, so the student and each parent can redeem the
+ * same code from their own Telegram accounts. A chat that was already linked
+ * is re-pointed at the new student.
  */
-export async function redeemLinkingCode(code: string, telegramChatId: string) {
-  const linkingCode = await prisma.linkingCode.findUnique({ where: { code } })
+export async function redeemLinkingCode(input: string, telegramChatId: string) {
+  const code = normalizeLinkingCode(input)
+  const linkingCode = await prisma.linkingCode.findUnique({ where: { code }, include: { student: true } })
   if (!linkingCode) throw new NotFoundError('Invalid code')
-  if (linkingCode.consumedAt) throw new ConflictError('Code already used')
   if (linkingCode.expiresAt < new Date()) throw new ConflictError('Code expired')
 
-  const alreadyLinked = await prisma.user.findUnique({ where: { telegramChatId } })
-  if (alreadyLinked) throw new ConflictError('This Telegram account is already linked')
-
-  return prisma.$transaction(async (tx) => {
-    let userId: string
-
-    if (linkingCode.targetType === 'STUDENT') {
-      const student = await tx.student.findUniqueOrThrow({ where: { id: linkingCode.targetId } })
-      if (student.userId) {
-        userId = student.userId
-      } else {
-        const user = await tx.user.create({ data: { role: 'STUDENT' } })
-        await tx.student.update({ where: { id: student.id }, data: { userId: user.id } })
-        userId = user.id
-      }
-    } else {
-      const parent = await tx.parent.findUniqueOrThrow({ where: { id: linkingCode.targetId } })
-      if (parent.userId) {
-        userId = parent.userId
-      } else {
-        const user = await tx.user.create({ data: { role: 'PARENT' } })
-        await tx.parent.update({ where: { id: parent.id }, data: { userId: user.id } })
-        userId = user.id
-      }
-    }
-
-    await tx.user.update({ where: { id: userId }, data: { telegramChatId } })
-    await tx.linkingCode.update({ where: { code }, data: { consumedAt: new Date() } })
-
-    return tx.user.findUniqueOrThrow({ where: { id: userId } })
+  await prisma.telegramLink.upsert({
+    where: { chatId: telegramChatId },
+    create: { chatId: telegramChatId, studentId: linkingCode.studentId },
+    update: { studentId: linkingCode.studentId, linkedAt: new Date() },
   })
+
+  return linkingCode.student
 }

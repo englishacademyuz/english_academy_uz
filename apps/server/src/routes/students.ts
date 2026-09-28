@@ -42,7 +42,7 @@ export const studentRoutes: FastifyPluginAsync = async (app) => {
     const { id } = paramsSchema.parse(request.params)
     const student = await prisma.student.findUnique({
       where: { id },
-      include: { enrollments: true, parentLinks: { where: { unlinkedAt: null } } },
+      include: { enrollments: true },
     })
     if (!student) throw new NotFoundError('Student not found')
     return student
@@ -56,7 +56,7 @@ export const studentRoutes: FastifyPluginAsync = async (app) => {
   })
 
   // The single deep read model backing the student detail screen -- groups,
-  // parents, attendance, marks, payments, and points in one call (§28).
+  // Telegram links, attendance, marks, payments, and points in one call (§28).
   app.get('/:id/overview', { preHandler: app.authenticate }, async (request) => {
     assertCan(request.actor!, { resource: 'student', action: 'view' })
     const { id } = paramsSchema.parse(request.params)
@@ -66,6 +66,6 @@ export const studentRoutes: FastifyPluginAsync = async (app) => {
   app.post('/:id/linking-code', { preHandler: app.authenticate }, async (request) => {
     assertCan(request.actor!, { resource: 'linkingCode', action: 'issue' })
     const { id } = paramsSchema.parse(request.params)
-    return issueLinkingCode('STUDENT', id)
+    return issueLinkingCode(id)
   })
 }

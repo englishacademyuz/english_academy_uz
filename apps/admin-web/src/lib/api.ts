@@ -12,15 +12,15 @@ import type {
   GroupLeaderboardEntry,
   GroupPaymentEntry,
   GroupPaymentHistory,
-  HomeworkResultStatus,
   Level,
   LessonMaterialType,
   LessonSession,
-  Parent,
-  ParentStudentLink,
   Payment,
   PointActivityType,
   PointTransaction,
+  QuizDetail,
+  QuizInput,
+  QuizSummary,
   Student,
   StudentOverview,
   StudentStatus,
@@ -71,6 +71,8 @@ const post = <T>(path: string, body?: unknown) =>
   apiFetch<T>(path, { method: 'POST', body: body ? JSON.stringify(body) : undefined })
 const patch = <T>(path: string, body?: unknown) =>
   apiFetch<T>(path, { method: 'PATCH', body: body ? JSON.stringify(body) : undefined })
+const put = <T>(path: string, body: unknown) => apiFetch<T>(path, { method: 'PUT', body: JSON.stringify(body) })
+const del = <T>(path: string) => apiFetch<T>(path, { method: 'DELETE' })
 
 export const auth = {
   login: (username: string, password: string) => post<{ id: string; role: string }>('/auth/login', { username, password }),
@@ -107,15 +109,6 @@ export const students = {
   update: (id: string, data: Partial<{ firstName: string; lastName: string; phone: string; status: StudentStatus }>) =>
     patch<Student>(`/students/${id}`, data),
   issueLinkingCode: (id: string) => post<{ code: string }>(`/students/${id}/linking-code`),
-}
-
-export const parents = {
-  list: () => get<Parent[]>('/parents'),
-  create: (data: { fullName: string; phone?: string }) => post<Parent>('/parents', data),
-  issueLinkingCode: (id: string) => post<{ code: string }>(`/parents/${id}/linking-code`),
-  link: (parentId: string, studentId: string) =>
-    post<ParentStudentLink>(`/parents/${parentId}/links`, { studentId }),
-  revokeLink: (linkId: string) => patch<ParentStudentLink>(`/parents/links/${linkId}/revoke`),
 }
 
 export const groups = {
@@ -163,10 +156,6 @@ export const sessions = {
       attendance?: Array<{ studentId: string; status: AttendanceStatus }>
     },
   ) => post<LessonSession>(`/groups/${groupId}/sessions`, data),
-  recordHomeworkResults: (
-    sessionId: string,
-    results: Array<{ studentId: string; status: HomeworkResultStatus; score?: number | null }>,
-  ) => post<unknown>(`/sessions/${sessionId}/homework-results`, { results }),
 }
 
 export const assessmentCategories = {
@@ -229,4 +218,22 @@ export const points = {
     const query = range ? `?start=${range.start.toISOString()}&end=${range.end.toISOString()}` : ''
     return get<GroupLeaderboardEntry[]>(`/groups/${groupId}/leaderboard${query}`)
   },
+}
+
+export const quizzes = {
+  listForGroup: (groupId: string, params?: { from?: string; to?: string }) => {
+    const query = new URLSearchParams()
+    if (params?.from) query.set('from', params.from)
+    if (params?.to) query.set('to', params.to)
+    const qs = query.toString()
+    return get<QuizSummary[]>(`/groups/${groupId}/quizzes${qs ? `?${qs}` : ''}`)
+  },
+  get: (id: string) => get<QuizDetail>(`/quizzes/${id}`),
+  create: (groupId: string, date: string, input: QuizInput) =>
+    post<QuizDetail>(`/groups/${groupId}/quizzes`, { date, ...input }),
+  update: (id: string, input: QuizInput) => put<QuizDetail>(`/quizzes/${id}`, input),
+  remove: (id: string) => del<{ ok: true }>(`/quizzes/${id}`),
+  send: (id: string, deadline: string) =>
+    post<{ id: string; notifiedChats: number }>(`/quizzes/${id}/send`, { deadline }),
+  close: (id: string) => post<QuizDetail>(`/quizzes/${id}/close`),
 }

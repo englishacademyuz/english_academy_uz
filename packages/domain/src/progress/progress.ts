@@ -20,7 +20,7 @@ export type ProgressSnapshot = {
   timeframe: Timeframe
   attendanceRate: number | null
   homeworkRate: number | null
-  /** Not yet populated -- there is no quiz module yet (docs/DOMAIN-MODEL.md §10). */
+  /** Average share of correct answers across the student's scored quiz attempts, by lesson date. */
   quizAverage: number | null
   academicByCategory: Record<string, number>
   /** Sum of PointTransaction entries earned in this timeframe (and group, when scoped) -- §51.3. */
@@ -85,7 +85,7 @@ async function resolveDateRange(
  * The one deep module that composes attendance/homework/assessment history
  * into a single snapshot for a student over a timeframe -- never persisted
  * (docs/ARCHITECTURE.md §9). The same function serves the student's own
- * profile, a parent's view of their child, and a teacher's group-scoped
+ * and parent's Telegram view (both see the same student), and a teacher's group-scoped
  * statistics; `groupId` narrows the underlying queries when provided.
  */
 export async function getProgress(
@@ -132,6 +132,19 @@ export async function getProgress(
     academicByCategory[name] = total / count
   }
 
+  const quizAttempts = await prisma.quizAttempt.findMany({
+    where: {
+      studentId,
+      completedAt: { not: null },
+      quiz: { lessonSession: { date: dateFilter, ...(groupId ? { groupId } : {}) } },
+    },
+    select: { correctCount: true, quiz: { select: { _count: { select: { questions: true } } } } },
+  })
+  const quizScores = quizAttempts
+    .filter((a) => a.quiz._count.questions > 0)
+    .map((a) => toPercentage(a.correctCount ?? 0, a.quiz._count.questions))
+  const quizAverage = quizScores.length ? quizScores.reduce((sum, v) => sum + v, 0) / quizScores.length : null
+
   const pointTransactions = await prisma.pointTransaction.findMany({
     where: { studentId, createdAt: dateFilter, ...(groupId ? { groupId } : {}) },
     select: { points: true },
@@ -141,7 +154,7 @@ export async function getProgress(
     timeframe,
     attendanceRate,
     homeworkRate,
-    quizAverage: null,
+    quizAverage,
     academicByCategory,
     points: sumPoints(pointTransactions),
   }

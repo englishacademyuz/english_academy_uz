@@ -162,7 +162,6 @@ export const roleLabel: Record<string, string> = {
   ADMIN: 'Administrator',
   TEACHER: "Oʻqituvchi",
   STUDENT: "Oʻquvchi",
-  PARENT: 'Ota-ona',
 }
 
 export const paymentStatusLabel: Record<string, string> = {
@@ -368,4 +367,19 @@ export function buildAccentMap(keysInOrder: string[]): Map<string, Accent> {
     if (!map.has(key)) map.set(key, ACCENTS[map.size % ACCENTS.length])
   }
   return map
+}
+
+/** "Sentabr 2026" -- full month name, spelled out by hand for the same ICU reasons as formatDate. */
+export function formatMonthLong(value: Date): string {
+  const name = UZ_MONTHS[value.getMonth()]
+  return `${name[0].toUpperCase()}${name.slice(1)} ${value.getFullYear()}`
+}
+
+/** "15–21-sentabr" (or "29-sentabr – 5-oktabr" across a month boundary) for a Monday-start week. */
+export function formatWeekRange(weekStart: Date): string {
+  const end = new Date(weekStart.getFullYear(), weekStart.getMonth(), weekStart.getDate() + 6)
+  if (end.getMonth() === weekStart.getMonth()) {
+    return `${weekStart.getDate()}–${end.getDate()}-${UZ_MONTHS[end.getMonth()]}`
+  }
+  return `${weekStart.getDate()}-${UZ_MONTHS[weekStart.getMonth()]} – ${end.getDate()}-${UZ_MONTHS[end.getMonth()]}`
 }

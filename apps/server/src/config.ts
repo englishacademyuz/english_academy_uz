@@ -20,4 +20,8 @@ export const config = {
   // Optional: the server runs fine without a bot (e.g. under the test
   // suite's .env.test), it just doesn't start one.
   telegramBotToken: process.env.TELEGRAM_BOT_TOKEN,
+  // HTTPS base URL of the student Telegram Mini App (served by admin-web under /student).
+  miniAppUrl: (
+    process.env.MINI_APP_URL ?? 'https://tashkurganadmin-web-production.up.railway.app/student'
+  ).replace(/\/+$/, ''),
 }

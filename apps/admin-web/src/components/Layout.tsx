@@ -8,7 +8,6 @@ import {
   School,
   Sun,
   Users,
-  UsersRound,
 } from 'lucide-react'
 import { useAuth } from '../lib/auth'
 import { useTheme } from '../lib/theme'
@@ -18,7 +17,6 @@ const navItems = [
   { to: '/', label: 'Bosh sahifa', icon: LayoutDashboard, end: true },
   { to: '/groups', label: 'Guruhlar', icon: School, end: false },
   { to: '/students', label: "Oʻquvchilar", icon: GraduationCap, end: false },
-  { to: '/parents', label: 'Ota-onalar', icon: UsersRound, end: false, adminOnly: true },
   { to: '/teachers', label: "Oʻqituvchilar", icon: Users, end: false, adminOnly: true },
   { to: '/subjects', label: "Oʻquv dasturi", icon: BookOpen, end: false, adminOnly: true },
 ]

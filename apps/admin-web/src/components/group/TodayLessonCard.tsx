@@ -1,15 +1,12 @@
 import { useEffect, useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { CheckCircle2, Plus, Trash2 } from 'lucide-react'
+import { CheckCircle2 } from 'lucide-react'
 import { sessions as sessionsApi } from '../../lib/api'
-import { materialTypeLabel, toDateInputValue, todayInputValue } from '../../lib/format'
+import { toDateInputValue, todayInputValue } from '../../lib/format'
 import { notifyError, notifySuccess } from '../../lib/toast'
-import type { Group, LessonMaterialType } from '../../lib/types'
-import { Button, Card, Field, Input, Select } from '../ui'
-
-const MATERIAL_TYPES: LessonMaterialType[] = ['LINK', 'TEXT', 'PDF', 'DOCUMENT', 'IMAGE', 'VIDEO', 'AUDIO']
-
-type MaterialDraft = { type: LessonMaterialType; content: string }
+import type { Group } from '../../lib/types'
+import { MaterialsEditor, type MaterialDraft } from '../shared/MaterialsEditor'
+import { Button, Card, Field, Input } from '../ui'
 
 export function TodayLessonCard({ group, initialDate }: { group: Group; initialDate?: Date }) {
   const queryClient = useQueryClient()
@@ -18,7 +15,6 @@ export function TodayLessonCard({ group, initialDate }: { group: Group; initialD
   const [notes, setNotes] = useState('')
   const [homeworkInstructions, setHomeworkInstructions] = useState('')
   const [materials, setMaterials] = useState<MaterialDraft[]>([])
-  const [materialDraft, setMaterialDraft] = useState<MaterialDraft>({ type: 'LINK', content: '' })
   const [savedAt, setSavedAt] = useState<number | null>(null)
 
   const sessionQuery = useQuery({
@@ -48,7 +44,8 @@ export function TodayLessonCard({ group, initialDate }: { group: Group; initialD
         date,
         topic: topic || undefined,
         notes: notes || undefined,
-        materials: materials.length ? materials : undefined,
+        // Always sent, so removing every source actually clears them.
+        materials,
         homework: homeworkInstructions ? { instructions: homeworkInstructions } : undefined,
       }),
     onSuccess: () => {
@@ -58,12 +55,6 @@ export function TodayLessonCard({ group, initialDate }: { group: Group; initialD
     },
     onError: (err) => notifyError(err, 'Darsni saqlab boʻlmadi'),
   })
-
-  function addMaterial() {
-    if (!materialDraft.content.trim()) return
-    setMaterials((prev) => [...prev, materialDraft])
-    setMaterialDraft({ type: 'LINK', content: '' })
-  }
 
   return (
     <Card className="p-5">
@@ -108,46 +99,7 @@ export function TodayLessonCard({ group, initialDate }: { group: Group; initialD
 
         <div>
           <span className="mb-1 block text-sm font-medium text-slate-700 dark:text-slate-300">Materiallar</span>
-          <div className="mb-2 flex gap-2">
-            <Select
-              value={materialDraft.type}
-              onChange={(e) => setMaterialDraft((d) => ({ ...d, type: e.target.value as LessonMaterialType }))}
-              className="w-32"
-            >
-              {MATERIAL_TYPES.map((type) => (
-                <option key={type} value={type}>
-                  {materialTypeLabel[type]}
-                </option>
-              ))}
-            </Select>
-            <Input
-              value={materialDraft.content}
-              onChange={(e) => setMaterialDraft((d) => ({ ...d, content: e.target.value }))}
-              placeholder="URL, matn yoki fayl havolasi"
-            />
-            <Button type="button" variant="secondary" onClick={addMaterial}>
-              <Plus className="h-4 w-4" />
-            </Button>
-          </div>
-          {materials.length > 0 && (
-            <ul className="space-y-1">
-              {materials.map((m, i) => (
-                <li key={i} className="flex items-center justify-between rounded-lg bg-slate-50 dark:bg-slate-800/60 px-3 py-1.5 text-sm">
-                  <span className="truncate">
-                    <span className="mr-2 font-medium text-slate-500 dark:text-slate-400">{materialTypeLabel[m.type]}</span>
-                    {m.content}
-                  </span>
-                  <button
-                    type="button"
-                    onClick={() => setMaterials((prev) => prev.filter((_, idx) => idx !== i))}
-                    className="text-slate-400 dark:text-slate-500 hover:text-red-600 dark:hover:text-red-400"
-                  >
-                    <Trash2 className="h-4 w-4" />
-                  </button>
-                </li>
-              ))}
-            </ul>
-          )}
+          <MaterialsEditor value={materials} onChange={setMaterials} />
         </div>
 
         <div className="flex items-center justify-between pt-2">

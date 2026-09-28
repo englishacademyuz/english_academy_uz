@@ -14,8 +14,6 @@ export type Permission =
   | { resource: 'subject' | 'course' | 'level'; action: 'manage' | 'view' }
   | { resource: 'teacher'; action: 'manage' | 'view' }
   | { resource: 'student'; action: 'manage' | 'view' }
-  | { resource: 'parent'; action: 'manage' | 'view' }
-  | { resource: 'parentStudentLink'; action: 'manage' }
   | { resource: 'linkingCode'; action: 'issue' }
   | { resource: 'group'; action: 'manage' }
   | { resource: 'group'; action: 'view'; ownerTeacherId: string }
@@ -23,6 +21,7 @@ export type Permission =
   | { resource: 'lessonSession'; action: 'manage' | 'view'; ownerTeacherId: string }
   | { resource: 'homeworkResult'; action: 'manage'; ownerTeacherId: string }
   | { resource: 'assessment'; action: 'manage' | 'view'; ownerTeacherId: string }
+  | { resource: 'quiz'; action: 'manage' | 'view'; ownerTeacherId: string }
   | { resource: 'assessmentCategory'; action: 'manage' | 'view' }
   | { resource: 'progress'; action: 'view'; ownerTeacherId?: string }
   // Both Admin and Teacher may record/edit payments -- a small center's
@@ -42,6 +41,7 @@ export function can(actor: Actor, permission: Permission): boolean {
       case 'lessonSession':
       case 'homeworkResult':
       case 'assessment':
+      case 'quiz':
         return permission.ownerTeacherId === actor.teacherId
       case 'assessmentCategory':
         return permission.action === 'view'
@@ -54,7 +54,6 @@ export function can(actor: Actor, permission: Permission): boolean {
       case 'pointTransaction':
         return permission.action === 'view' || permission.ownerTeacherId === actor.teacherId
       case 'student':
-      case 'parent':
       case 'teacher':
       case 'subject':
       case 'course':

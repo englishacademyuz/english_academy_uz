@@ -1,18 +1,12 @@
 import type { FastifyPluginAsync } from 'fastify'
 import { z } from 'zod'
 import { prisma } from '@tashkurgan/db'
-import { redeemLinkingCode } from '@tashkurgan/domain'
 import { UnauthorizedError, verifyPassword } from '@tashkurgan/shared'
 import { config } from '../config'
 
 const loginSchema = z.object({
   username: z.string().min(1),
   password: z.string().min(1),
-})
-
-const redeemSchema = z.object({
-  code: z.string().min(1),
-  telegramChatId: z.string().min(1),
 })
 
 // In production admin-web and the server live on different *.up.railway.app
@@ -51,12 +45,4 @@ export const authRoutes: FastifyPluginAsync = async (app) => {
     return request.actor
   })
 
-  // Placeholder for the Telegram bot's identity-linking flow (§6 of the
-  // architecture doc) -- callable directly over HTTP for now since the bot
-  // itself isn't built yet.
-  app.post('/telegram/redeem', async (request) => {
-    const body = redeemSchema.parse(request.body)
-    const user = await redeemLinkingCode(body.code, body.telegramChatId)
-    return { id: user.id, role: user.role }
-  })
 }

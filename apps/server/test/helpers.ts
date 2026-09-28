@@ -1,12 +1,16 @@
 import { prisma } from '@tashkurgan/db'
 import { hashPassword } from '@tashkurgan/shared'
 import { buildApp } from '../src/app'
+import { signTelegramInitData } from '../src/telegram/initData'
 
 type App = Awaited<ReturnType<typeof buildApp>>
 
 export async function resetDb() {
   await prisma.payment.deleteMany()
   await prisma.pointTransaction.deleteMany()
+  await prisma.quizAnswer.deleteMany()
+  await prisma.quizAttempt.deleteMany()
+  await prisma.quiz.deleteMany()
   await prisma.assessmentResult.deleteMany()
   await prisma.assessment.deleteMany()
   await prisma.assessmentCategory.deleteMany()
@@ -16,14 +20,13 @@ export async function resetDb() {
   await prisma.lessonMaterial.deleteMany()
   await prisma.lessonSession.deleteMany()
   await prisma.linkingCode.deleteMany()
-  await prisma.parentStudentLink.deleteMany()
+  await prisma.telegramLink.deleteMany()
   await prisma.enrollment.deleteMany()
   await prisma.group.deleteMany()
   await prisma.level.deleteMany()
   await prisma.course.deleteMany()
   await prisma.subject.deleteMany()
   await prisma.student.deleteMany()
-  await prisma.parent.deleteMany()
   await prisma.teacher.deleteMany()
   await prisma.user.deleteMany()
 }
@@ -79,4 +82,20 @@ export async function loginAs(app: App, username: string, password: string): Pro
   const cookie = res.cookies.find((c) => c.name === 'token')
   if (!cookie) throw new Error(`Login failed for ${username}: ${res.body}`)
   return `${cookie.name}=${cookie.value}`
+}
+
+export const TEST_BOT_TOKEN = '123456:test-bot-token'
+
+/** An `Authorization` header a real Telegram client would send for this Telegram user (chat) id. */
+export function miniAppAuth(telegramUserId: string | number, options: { authDate?: Date; botToken?: string } = {}) {
+  const authDate = Math.floor((options.authDate ?? new Date()).getTime() / 1000)
+  const initData = signTelegramInitData(
+    {
+      auth_date: String(authDate),
+      query_id: 'AAE-test',
+      user: JSON.stringify({ id: Number(telegramUserId), first_name: 'Test' }),
+    },
+    options.botToken ?? TEST_BOT_TOKEN,
+  )
+  return { authorization: `tma ${initData}` }
 }

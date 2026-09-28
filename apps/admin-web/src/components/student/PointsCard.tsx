@@ -1,6 +1,8 @@
-import { useState } from 'react'
-import { useQueryClient } from '@tanstack/react-query'
-import { Plus } from 'lucide-react'
+import { useMemo, useState } from 'react'
+import { useQuery, useQueryClient } from '@tanstack/react-query'
+import { Plus, Trophy } from 'lucide-react'
+import { points as pointsApi } from '../../lib/api'
+import { startOfMonth } from '../../lib/dateRange'
 import { formatDate, pointActivityTypeLabel } from '../../lib/format'
 import type { Actor, Enrollment, PointTransaction } from '../../lib/types'
 import { Badge, Button, Card, EmptyState } from '../ui'
@@ -26,6 +28,21 @@ export function PointsCard({
     .filter((g): g is NonNullable<typeof g> => !!g)
     .filter((g) => actor?.role === 'ADMIN' || g.teacherId === actor?.teacherId)
 
+  const monthTotal = useMemo(() => {
+    const monthStart = startOfMonth(new Date())
+    return recent.filter((t) => new Date(t.createdAt) >= monthStart).reduce((sum, t) => sum + t.points, 0)
+  }, [recent])
+
+  // Place in the student's (first) active group, from that group's own ledger only.
+  const rankGroup = activeEnrollments[0]?.group
+  const leaderboardQuery = useQuery({
+    queryKey: ['group-leaderboard', rankGroup?.id, 'all'],
+    queryFn: () => pointsApi.leaderboardForGroup(rankGroup!.id),
+    enabled: !!rankGroup,
+  })
+  const board = leaderboardQuery.data ?? []
+  const rankIndex = board.findIndex((entry) => entry.student.id === studentId)
+
   return (
     <Card className="p-5">
       <div className="mb-3 flex items-center justify-between">
@@ -35,16 +52,30 @@ export function PointsCard({
         </Button>
       </div>
 
-      <div className="mb-4 rounded-lg bg-brand-50 p-4 text-center dark:bg-brand-500/10">
-        <p className="text-2xl font-semibold text-brand-700 dark:text-brand-300">{total}</p>
-        <p className="text-xs text-brand-600 dark:text-brand-400">Jami ball (barcha guruhlar boʻyicha)</p>
+      <div className="mb-4 rounded-xl bg-gradient-to-br from-brand-50 to-yellow-50 px-4 py-6 text-center ring-1 ring-inset ring-brand-100 dark:from-brand-500/10 dark:to-yellow-500/5 dark:ring-brand-500/20">
+        <Trophy className="mx-auto mb-2 h-7 w-7 text-yellow-500" />
+        <p className="text-6xl font-extrabold leading-none tracking-tight text-brand-700 tabular-nums dark:text-brand-300">
+          {total}
+        </p>
+        <p className="mt-2 text-sm font-medium text-brand-600 dark:text-brand-400">Reyting bali</p>
+        <div className="mt-4 flex flex-wrap justify-center gap-2 text-xs">
+          <span className="rounded-full bg-white/80 px-3 py-1 font-medium text-slate-700 ring-1 ring-inset ring-slate-200 dark:bg-slate-900/60 dark:text-slate-300 dark:ring-slate-700">
+            Shu oy: {monthTotal >= 0 ? '+' : ''}
+            {monthTotal}
+          </span>
+          {rankGroup && rankIndex >= 0 && (
+            <span className="rounded-full bg-white/80 px-3 py-1 font-medium text-slate-700 ring-1 ring-inset ring-slate-200 dark:bg-slate-900/60 dark:text-slate-300 dark:ring-slate-700">
+              {rankGroup.name}: {rankIndex + 1}-oʻrin / {board.length}
+            </span>
+          )}
+        </div>
       </div>
 
       {recent.length === 0 ? (
         <EmptyState title="Hali ball berilmagan" />
       ) : (
         <ul className="max-h-56 divide-y divide-slate-100 overflow-y-auto dark:divide-slate-800">
-          {recent.map((t) => (
+          {recent.slice(0, 50).map((t) => (
             <li key={t.id} className="flex items-center justify-between py-2">
               <div>
                 <p className="text-sm text-slate-700 dark:text-slate-300">

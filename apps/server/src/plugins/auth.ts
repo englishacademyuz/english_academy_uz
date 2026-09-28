@@ -38,7 +38,7 @@ export default fp(async (app: FastifyInstance) => {
     const payload = request.user as { userId: string }
     const user = await prisma.user.findUnique({
       where: { id: payload.userId },
-      include: { student: true, parent: true, teacher: true },
+      include: { student: true, teacher: true },
     })
     if (!user) throw new UnauthorizedError('Not authenticated')
 
@@ -46,7 +46,6 @@ export default fp(async (app: FastifyInstance) => {
       userId: user.id,
       role: user.role,
       studentId: user.student?.id,
-      parentId: user.parent?.id,
       teacherId: user.teacher?.id,
     }
   })

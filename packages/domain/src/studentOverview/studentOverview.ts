@@ -4,8 +4,6 @@ import { calculateAttendanceRate } from '../attendance/attendance'
 import { computeOutstanding } from '../payment/payment'
 import { sumPoints } from '../points/points'
 
-const RECENT_ATTENDANCE_LIMIT = 60
-const RECENT_POINTS_LIMIT = 50
 
 /**
  * One deep read model for the student detail screen -- composes everything
@@ -18,7 +16,7 @@ export async function getStudentOverview(studentId: string) {
   const student = await prisma.student.findUnique({ where: { id: studentId } })
   if (!student) throw new NotFoundError('Student not found')
 
-  const [enrollments, parentLinks, attendances, assessmentResults, homeworkResults, payments, pointTransactions] =
+  const [enrollments, telegramLinkCount, attendances, assessmentResults, quizAttempts, payments, pointTransactions] =
     await Promise.all([
       prisma.enrollment.findMany({
         where: { studentId },
@@ -27,10 +25,7 @@ export async function getStudentOverview(studentId: string) {
         },
         orderBy: { startDate: 'desc' },
       }),
-      prisma.parentStudentLink.findMany({
-        where: { studentId, unlinkedAt: null },
-        include: { parent: true },
-      }),
+      prisma.telegramLink.count({ where: { studentId } }),
       prisma.attendance.findMany({
         where: { studentId },
         include: { lessonSession: { include: { group: true } } },
@@ -41,10 +36,11 @@ export async function getStudentOverview(studentId: string) {
         include: { assessment: { include: { category: true, group: true } } },
         orderBy: { assessment: { date: 'desc' } },
       }),
-      prisma.homeworkResult.findMany({
-        where: { studentId },
-        include: { homework: { include: { lessonSession: { include: { group: true } } } } },
-        orderBy: { createdAt: 'desc' },
+      prisma.quizAttempt.findMany({
+        where: { studentId, completedAt: { not: null } },
+        include: {
+          quiz: { include: { lessonSession: { include: { group: true } }, _count: { select: { questions: true } } } },
+        },
       }),
       prisma.payment.findMany({
         where: { studentId },
@@ -57,27 +53,52 @@ export async function getStudentOverview(studentId: string) {
       }),
     ])
 
+  // Every lesson the student's groups held while they were enrolled -- the attendance
+  // calendar shows a lesson day even when no attendance was marked for it.
+  const lessonDays = enrollments.length
+    ? await prisma.lessonSession.findMany({
+        where: {
+          OR: enrollments.map((e) => ({
+            groupId: e.groupId,
+            date: { gte: e.startDate, ...(e.endDate ? { lte: e.endDate } : {}) },
+          })),
+        },
+        select: { id: true, date: true, group: { select: { id: true, name: true } } },
+        orderBy: { date: 'desc' },
+      })
+    : []
+
   const attendanceTotals = { PRESENT: 0, ABSENT: 0, LATE: 0, EXCUSED: 0 }
   for (const a of attendances) attendanceTotals[a.status] += 1
 
   return {
     student,
     enrollments,
-    parents: parentLinks,
+    telegramLinkCount,
     attendance: {
       totals: attendanceTotals,
       rate: calculateAttendanceRate(attendances.map((a) => a.status)),
-      recent: attendances.slice(0, RECENT_ATTENDANCE_LIMIT),
+      records: attendances,
     },
+    lessonDays,
     assessmentResults,
-    homeworkResults,
+    quizResults: quizAttempts.map((a) => ({
+      id: a.id,
+      quizTitle: a.quiz.title,
+      date: a.quiz.lessonSession.date,
+      group: a.quiz.lessonSession.group,
+      correctCount: a.correctCount ?? 0,
+      totalQuestions: a.quiz._count.questions,
+      points: a.points ?? 0,
+    })),
     payments: {
       list: payments,
       outstanding: computeOutstanding(payments),
     },
     points: {
       total: sumPoints(pointTransactions),
-      recent: pointTransactions.slice(0, RECENT_POINTS_LIMIT),
+      // The whole ledger (newest first) -- small per student, and the screen sums it by period.
+      recent: pointTransactions,
     },
   }
 }

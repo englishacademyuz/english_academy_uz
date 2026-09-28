@@ -1,34 +1,34 @@
 # Study Center Management System
 
-Single bounded context: one backend serving the Admin/Teacher web panel and the Telegram bot for students and parents (requirements §38, §50). The system is not split into sub-contexts for V1 — there is no `CONTEXT-MAP.md` because there is only one context.
+Single bounded context: one backend serving the Admin/Teacher web panel and the Telegram bot for students — which parents use too, viewing the same student (requirements §38, §50; see docs/adr/0002). The system is not split into sub-contexts for V1 — there is no `CONTEXT-MAP.md` because there is only one context.
 
 ## Language
 
 ### People & Identity
 
 **User**:
-An authenticated identity (a linked Telegram account, or an admin-panel login) that one or more profile records — Student, Parent, Teacher — can reference. One User may be linked from more than one profile (e.g., a Teacher who is also a Parent).
+An admin-panel login (Admin or Teacher). Telegram access is not a User — it is a TelegramLink.
 _Avoid_: Account
 
 **Student**:
 A person enrolled to study at the center. Tracked from enrollment onward regardless of current activity status — a Student record is never deleted.
 _Avoid_: Learner, pupil
 
-**Parent**:
-A guardian linked to one or more Students, with read-only visibility into each linked child's academic and payment data.
-_Avoid_: Guardian (the domain term is Parent; "guardian" may still appear in UI copy)
-
 **Teacher**:
 The staff member who owns a Group's academic record-keeping: attendance, marks, homework, lesson content. V1 models exactly one Teacher per Group.
 _Avoid_: Instructor, tutor
 
-**ParentStudentLink**:
-The many-to-many relationship connecting a Parent to a Student. Created via a redeemed LinkingCode; revocable only by an explicit admin action, never automatically.
-_Avoid_: Guardianship, family link
-
 **LinkingCode**:
-A one-time code issued by an admin that a Telegram user redeems to bind their account to a specific Student or Parent record.
+A code an admin issues for one Student. Reusable until it expires (24h), so the student and each parent redeem the same code from their own Telegram accounts.
 _Avoid_: Invite code, activation code
+
+**Mini App**:
+The student-facing app inside Telegram, where a Student (or a parent, seeing the same Student) views lessons, homework, progress, attendance and takes quizzes. The bot itself only links accounts and sends notifications — see [ADR-0004](./docs/adr/0004-telegram-mini-app-for-students.md).
+_Avoid_: Student bot (for the browsing interface), web app
+
+**TelegramLink**:
+One Telegram chat bound to the Student it may view — created by redeeming that Student's LinkingCode. A Student has any number (their own chat, each parent's); a chat views one Student at a time and is re-pointed by sending another Student's code. The bot never distinguishes a student's chat from a parent's.
+_Avoid_: Parent account, bot user
 
 ### Academic Structure
 
@@ -80,17 +80,17 @@ A single-category, Teacher-created grading event for a Group on a date (e.g., "W
 One Student's score against one Assessment.
 
 **Quiz**:
-A set of questions a Teacher authors once and can assign to any number of Groups; each assignment is tracked independently.
-_Avoid_: Test — Quiz specifically means the Telegram-interactive kind; a physical monthly exam is recorded as an Assessment, not a Quiz.
+A set of single-choice questions a Teacher writes inside one LessonSession — about that day's topic or anything else — and sends to that Group's Students through Telegram. It stays attached to its LessonSession for later review. It has a maximum point value, and the points a Student earns are proportional to the share of questions they answer correctly.
+_Avoid_: Test — Quiz specifically means the Telegram-interactive kind; a physical exam is recorded as an Assessment, not a Quiz. Quiz results are never copied into AssessmentResults.
 
-**QuizAssignment**:
-The link between a Quiz and a Group that makes the quiz available to that group's Students.
+**Draft / Sent / Closed** (Quiz lifecycle):
+A Draft is still being written and can be changed or deleted. Sending freezes its questions, sets a deadline, and notifies the Group. It is Closed once the deadline passes (a Teacher may close it early); no answers are accepted after that.
 
 **QuizAttempt**:
-One Student's single, non-retakeable attempt at a Quiz, taken through Telegram.
+One Student's single, non-retakeable attempt at a Quiz. Anyone linked to the Student in Telegram (the Student or a parent) may take it; whoever starts first uses it. An attempt unfinished at the deadline is scored on what was answered; a Student who never started has no attempt, not a zero.
 
 **QuizAnswer**:
-One Student's selected option for one question within a QuizAttempt.
+The one option chosen for one question within a QuizAttempt. It cannot be changed once given.
 
 ### Points, Rewards & Payments
 

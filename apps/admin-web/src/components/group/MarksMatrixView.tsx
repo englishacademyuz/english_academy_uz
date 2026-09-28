@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { Plus } from 'lucide-react'
-import { assessmentCategories as categoriesApi, assessments as assessmentsApi } from '../../lib/api'
+import { assessmentCategories as categoriesApi, assessments as assessmentsApi, quizzes as quizzesApi } from '../../lib/api'
 import { assessmentCategoryCadenceLabel, assessmentTypeLabel, formatDayMonth, formatMonthYear, toDateInputValue } from '../../lib/format'
 import { isFutureDay, isSameDay, startOfWeek } from '../../lib/dateRange'
 import { notifyError, notifySuccess } from '../../lib/toast'
@@ -51,6 +51,17 @@ export function MarksMatrixView({ group, initialDate }: { group: Group; initialD
       assessmentsApi.listForGroup(group.id, { from: toDateInputValue(monthAnchor), to: toDateInputValue(monthEnd) }),
   })
   const assessmentsForDay = (assessmentsQuery.data ?? []).filter((a) => isSameDay(new Date(a.date), selectedDate))
+
+  // Quiz results are shown here next to the day's marks, read-only -- they come from the
+  // students' own Telegram attempts and are never copied into assessment results.
+  const quizzesQuery = useQuery({
+    queryKey: ['group-quizzes', group.id, monthAnchor.getFullYear(), monthAnchor.getMonth()],
+    queryFn: () =>
+      quizzesApi.listForGroup(group.id, { from: toDateInputValue(monthAnchor), to: toDateInputValue(monthEnd) }),
+  })
+  const quizzesForDay = (quizzesQuery.data ?? []).filter(
+    (q) => q.status === 'SENT' && isSameDay(new Date(q.date), selectedDate),
+  )
 
   function invalidate() {
     queryClient.invalidateQueries({ queryKey: ['group-assessments', group.id] })
@@ -129,25 +140,25 @@ export function MarksMatrixView({ group, initialDate }: { group: Group; initialD
     ),
   }))
 
-  const columns: MatrixColumn[] = [...routineColumns, ...extraColumns]
-  if (columns.length > 0) {
-    columns.push({
-      key: 'average',
-      width: 92,
-      header: <ColumnLabel>Oʻrtacha %</ColumnLabel>,
-      render: (studentId) => {
-        const scores = assessmentsForDay
-          .map((a) => {
-            const result = a.results.find((r) => r.studentId === studentId)
-            return result ? (result.score / a.maxScore) * 100 : null
-          })
-          .filter((v): v is number => v !== null)
-        if (scores.length === 0) return <span className="text-slate-300 dark:text-slate-600">—</span>
-        const avg = scores.reduce((sum, v) => sum + v, 0) / scores.length
-        return <span className="text-xs font-semibold text-slate-600 dark:text-slate-400">{avg.toFixed(0)}%</span>
-      },
-    })
-  }
+  // No average column: the percentage is still computed server-side (getProgress) for feedback,
+  // it just isn't shown to the teacher while marking.
+  const quizColumns: MatrixColumn[] = quizzesForDay.map((quiz) => ({
+    key: `quiz-${quiz.id}`,
+    width: 110,
+    header: <ColumnLabel>🧠 {quiz.title}</ColumnLabel>,
+    render: (studentId) => {
+      const attempt = quiz.attempts.find((a) => a.studentId === studentId)
+      if (!attempt) return <span className="text-slate-300 dark:text-slate-600">—</span>
+      if (!attempt.completedAt) return <span className="text-xs text-slate-400 dark:text-slate-500">ishlamoqda</span>
+      return (
+        <span className="text-sm font-semibold text-slate-700 dark:text-slate-300" title={`+${attempt.points} ball`}>
+          {attempt.correctCount}/{quiz.questionCount}
+        </span>
+      )
+    },
+  }))
+
+  const columns: MatrixColumn[] = [...routineColumns, ...extraColumns, ...quizColumns]
 
   const isLoading = categoriesQuery.isLoading || assessmentsQuery.isLoading
 

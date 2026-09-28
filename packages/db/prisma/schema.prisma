@@ -11,7 +11,6 @@ enum Role {
   ADMIN
   TEACHER
   STUDENT
-  PARENT
 }
 
 enum StudentStatus {
@@ -38,11 +37,6 @@ enum EnrollmentEndReason {
   STUDENT_LEFT
   COMPLETED
   OTHER
-}
-
-enum LinkingTargetType {
-  STUDENT
-  PARENT
 }
 
 enum LessonMaterialType {
@@ -84,6 +78,13 @@ enum AssessmentCategoryCadence {
   MONTHLY
 }
 
+// Closed is not stored: a SENT quiz is closed once its deadline has passed
+// (closing early just moves the deadline to now).
+enum QuizStatus {
+  DRAFT
+  SENT
+}
+
 enum PaymentStatus {
   DEBT
   PARTIAL
@@ -100,18 +101,16 @@ enum PointActivityType {
 }
 
 // One authenticated identity. Admin/Teacher log in with username+password;
-// Student/Parent are identified by a linked Telegram chat id (see LinkingCode).
+// students reach the Telegram bot through TelegramLink, not through a User.
 model User {
-  id             String   @id @default(cuid())
-  role           Role
-  username       String?  @unique
-  passwordHash   String?
-  telegramChatId String?  @unique
-  createdAt      DateTime @default(now())
-  updatedAt      DateTime @updatedAt
+  id           String   @id @default(cuid())
+  role         Role
+  username     String?  @unique
+  passwordHash String?
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
 
   student Student?
-  parent  Parent?
   teacher Teacher?
 
   @@map("users")
@@ -129,29 +128,17 @@ model Student {
   createdAt DateTime      @default(now())
   updatedAt DateTime      @updatedAt
 
-  enrollments        Enrollment[]
-  parentLinks        ParentStudentLink[]
-  attendances        Attendance[]
-  homeworkResults    HomeworkResult[]
-  assessmentResults  AssessmentResult[]
-  payments           Payment[]
-  pointTransactions  PointTransaction[]
+  enrollments       Enrollment[]
+  telegramLinks     TelegramLink[]
+  linkingCodes      LinkingCode[]
+  quizAttempts      QuizAttempt[]
+  attendances       Attendance[]
+  homeworkResults   HomeworkResult[]
+  assessmentResults AssessmentResult[]
+  payments          Payment[]
+  pointTransactions PointTransaction[]
 
   @@map("students")
-}
-
-model Parent {
-  id        String   @id @default(cuid())
-  fullName  String
-  phone     String?
-  userId    String?  @unique
-  user      User?    @relation(fields: [userId], references: [id])
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-
-  studentLinks ParentStudentLink[]
-
-  @@map("parents")
 }
 
 model Teacher {
@@ -168,34 +155,31 @@ model Teacher {
   @@map("teachers")
 }
 
-// The family relationship: which guardians can see which children.
-// Created directly by an admin (independent of Telegram linking).
-// Never hard-deleted -- unlinkedAt records when access was revoked.
-model ParentStudentLink {
-  id         String    @id @default(cuid())
-  parentId   String
-  parent     Parent    @relation(fields: [parentId], references: [id])
-  studentId  String
-  student    Student   @relation(fields: [studentId], references: [id])
-  linkedAt   DateTime  @default(now())
-  unlinkedAt DateTime?
+// A code an admin issues for one Student. Anyone holding it -- the student or
+// a parent -- can redeem it from their own Telegram account until it expires,
+// so it is deliberately reusable rather than one-time.
+model LinkingCode {
+  code      String   @id
+  studentId String
+  student   Student  @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  issuedAt  DateTime @default(now())
+  expiresAt DateTime
 
   @@index([studentId])
-  @@index([parentId])
-  @@map("parent_student_links")
+  @@map("linking_codes")
 }
 
-// A one-time code an admin issues so a Telegram user can bind their account
-// to a specific Student or Parent record.
-model LinkingCode {
-  code       String            @id
-  targetType LinkingTargetType
-  targetId   String
-  issuedAt   DateTime          @default(now())
-  expiresAt  DateTime
-  consumedAt DateTime?
+// One Telegram chat bound to the Student it may view. A student and their
+// parents each link their own chat to the same Student; a chat views exactly
+// one Student at a time (redeeming another code re-points it).
+model TelegramLink {
+  chatId    String   @id
+  studentId String
+  student   Student  @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  linkedAt  DateTime @default(now())
 
-  @@map("linking_codes")
+  @@index([studentId])
+  @@map("telegram_links")
 }
 
 model Subject {
@@ -237,25 +221,25 @@ model Level {
 // deleted, so historical reports keep the category set active at the time
 // they were produced (ADR: see docs/DOMAIN-MODEL.md §51.2).
 model AssessmentCategory {
-  id        String    @id @default(cuid())
-  levelId   String
-  level     Level     @relation(fields: [levelId], references: [id])
-  name      String
+  id          String                    @id @default(cuid())
+  levelId     String
+  level       Level                     @relation(fields: [levelId], references: [id])
+  name        String
   // The category's grading scale, set once at curriculum-creation time (e.g.
   // 100 for a percentage skill like Speaking, 5 for a 0-5 scale like
   // Homework) -- an Assessment normally inherits this rather than the
   // teacher re-typing it every time (§18/§43/§51.1).
-  maxScore  Int       @default(100)
+  maxScore    Int                       @default(100)
   // How many Rating points a 100% result in this category is worth, set once
   // alongside maxScore at curriculum-creation time. 0 (the default) means this
   // category doesn't feed the Rating ledger at all -- an admin opts a category
   // in by giving it a positive value.
-  pointsWorth Int     @default(0)
+  pointsWorth Int                       @default(0)
   // DAILY categories auto-show as a gradeable column every lesson day.
   // WEEKLY/MONTHLY ones only appear when a teacher opens that period's round.
-  cadence   AssessmentCategoryCadence @default(DAILY)
-  retiredAt DateTime?
-  createdAt DateTime  @default(now())
+  cadence     AssessmentCategoryCadence @default(DAILY)
+  retiredAt   DateTime?
+  createdAt   DateTime                  @default(now())
 
   assessments Assessment[]
 
@@ -326,6 +310,7 @@ model LessonSession {
   materials   LessonMaterial[]
   homework    Homework?
   attendances Attendance[]
+  quizzes     Quiz[]
 
   @@unique([groupId, date])
   @@map("lesson_sessions")
@@ -346,12 +331,12 @@ model LessonMaterial {
 // never submits it through the platform (§16) -- HomeworkResult is entered
 // later, by the Teacher, typically during a subsequent session.
 model Homework {
-  id              String    @id @default(cuid())
-  lessonSessionId String    @unique
+  id              String        @id @default(cuid())
+  lessonSessionId String        @unique
   lessonSession   LessonSession @relation(fields: [lessonSessionId], references: [id])
   instructions    String
   dueDate         DateTime?
-  createdAt       DateTime  @default(now())
+  createdAt       DateTime      @default(now())
 
   results HomeworkResult[]
 
@@ -437,19 +422,19 @@ model AssessmentResult {
 // month). `status` is always re-derived from amountDue/amountPaid rather than
 // set independently, so it can never drift out of sync with the amounts.
 model Payment {
-  id             String        @id @default(cuid())
-  studentId      String
-  student        Student       @relation(fields: [studentId], references: [id])
-  year           Int
-  month          Int
-  amountDue      Int
-  amountPaid     Int           @default(0)
-  status         PaymentStatus @default(DEBT)
-  paidAt         DateTime?
+  id               String        @id @default(cuid())
+  studentId        String
+  student          Student       @relation(fields: [studentId], references: [id])
+  year             Int
+  month            Int
+  amountDue        Int
+  amountPaid       Int           @default(0)
+  status           PaymentStatus @default(DEBT)
+  paidAt           DateTime?
   recordedByUserId String
-  note           String?
-  createdAt      DateTime      @default(now())
-  updatedAt      DateTime      @updatedAt
+  note             String?
+  createdAt        DateTime      @default(now())
+  updatedAt        DateTime      @updatedAt
 
   @@unique([studentId, year, month])
   @@index([studentId])
@@ -478,7 +463,96 @@ model PointTransaction {
   assessmentResultId String?           @unique
   assessmentResult   AssessmentResult? @relation(fields: [assessmentResultId], references: [id])
 
+  // Set only when this row is the points a completed QuizAttempt earned.
+  quizAttemptId String?      @unique
+  quizAttempt   QuizAttempt? @relation(fields: [quizAttemptId], references: [id])
+
   @@index([studentId])
   @@index([groupId])
   @@map("point_transactions")
+}
+
+// A quiz a teacher writes inside one lesson and sends to that lesson's group
+// through Telegram -- see docs/adr/0003-quiz-belongs-to-lesson-session.md.
+model Quiz {
+  id              String        @id @default(cuid())
+  lessonSessionId String
+  lessonSession   LessonSession @relation(fields: [lessonSessionId], references: [id])
+  title           String
+  // Points for a fully correct attempt; a partial one earns the same share.
+  maxPoints       Int
+  status          QuizStatus    @default(DRAFT)
+  sentAt          DateTime?
+  deadline        DateTime?
+  createdAt       DateTime      @default(now())
+  updatedAt       DateTime      @updatedAt
+
+  questions QuizQuestion[]
+  attempts  QuizAttempt[]
+
+  @@index([lessonSessionId])
+  @@map("quizzes")
+}
+
+model QuizQuestion {
+  id       String @id @default(cuid())
+  quizId   String
+  quiz     Quiz   @relation(fields: [quizId], references: [id], onDelete: Cascade)
+  position Int
+  text     String
+
+  options QuizOption[]
+  answers QuizAnswer[]
+
+  @@unique([quizId, position])
+  @@map("quiz_questions")
+}
+
+model QuizOption {
+  id         String       @id @default(cuid())
+  questionId String
+  question   QuizQuestion @relation(fields: [questionId], references: [id], onDelete: Cascade)
+  position   Int
+  text       String
+  isCorrect  Boolean
+
+  answers QuizAnswer[]
+
+  @@unique([questionId, position])
+  @@map("quiz_options")
+}
+
+// One per (quiz, student) -- the single, non-retakeable attempt.
+model QuizAttempt {
+  id           String    @id @default(cuid())
+  quizId       String
+  quiz         Quiz      @relation(fields: [quizId], references: [id])
+  studentId    String
+  student      Student   @relation(fields: [studentId], references: [id])
+  startedAt    DateTime  @default(now())
+  // Set together when the attempt is scored (all answered, or the deadline passed).
+  completedAt  DateTime?
+  correctCount Int?
+  points       Int?
+
+  answers          QuizAnswer[]
+  pointTransaction PointTransaction?
+
+  @@unique([quizId, studentId])
+  @@map("quiz_attempts")
+}
+
+model QuizAnswer {
+  id         String       @id @default(cuid())
+  attemptId  String
+  attempt    QuizAttempt  @relation(fields: [attemptId], references: [id], onDelete: Cascade)
+  questionId String
+  question   QuizQuestion @relation(fields: [questionId], references: [id])
+  optionId   String
+  option     QuizOption   @relation(fields: [optionId], references: [id])
+  isCorrect  Boolean
+  answeredAt DateTime     @default(now())
+
+  @@unique([attemptId, questionId])
+  @@map("quiz_answers")
 }

@@ -1,7 +1,7 @@
 import { useMemo, useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { useParams, useSearchParams } from 'react-router-dom'
-import { BookOpen, Users } from 'lucide-react'
+import { BookOpen, Brain, Users } from 'lucide-react'
 import { groups as groupsApi } from '../lib/api'
 import { formatScheduleDays } from '../lib/format'
 import { PageHeader, Spinner, ErrorBanner, PageTabs } from '../components/ui'
@@ -9,8 +9,9 @@ import { LiveClock } from '../components/dashboard/LiveClock'
 import { TodayLessonCard } from '../components/group/TodayLessonCard'
 import { RecentSessionsCard } from '../components/group/RecentSessionsCard'
 import { StudentsTab } from '../components/group/StudentsTab'
+import { QuizTab } from '../components/group/QuizTab'
 
-type GroupViewTab = 'lesson' | 'students'
+type GroupViewTab = 'lesson' | 'students' | 'quizzes'
 
 export function GroupDetailPage() {
   const { id } = useParams<{ id: string }>()
@@ -51,6 +52,7 @@ export function GroupDetailPage() {
           tabs={[
             { key: 'lesson' as const, label: 'Dars', icon: BookOpen },
             { key: 'students' as const, label: "Oʻquvchilar", icon: Users },
+            { key: 'quizzes' as const, label: 'Testlar', icon: Brain },
           ]}
           active={tab}
           onChange={setTab}
@@ -62,8 +64,10 @@ export function GroupDetailPage() {
           <TodayLessonCard group={group} initialDate={deepLinkDate} />
           <RecentSessionsCard group={group} />
         </div>
-      ) : (
+      ) : tab === 'students' ? (
         <StudentsTab group={group} initialDate={deepLinkDate} />
+      ) : (
+        <QuizTab group={group} initialDate={deepLinkDate} />
       )}
     </div>
   )

@@ -1,4 +1,4 @@
-export type Role = 'ADMIN' | 'TEACHER' | 'STUDENT' | 'PARENT'
+export type Role = 'ADMIN' | 'TEACHER' | 'STUDENT'
 export type StudentStatus = 'ACTIVE' | 'PAUSED' | 'INACTIVE' | 'COMPLETED' | 'LEFT'
 export type AttendanceStatus = 'PRESENT' | 'ABSENT' | 'LATE' | 'EXCUSED'
 export type HomeworkResultStatus = 'COMPLETED' | 'NOT_COMPLETED'
@@ -13,7 +13,6 @@ export type Actor = {
   userId: string
   role: Role
   studentId?: string
-  parentId?: string
   teacherId?: string
 }
 
@@ -31,18 +30,8 @@ export type Student = {
   phone?: string | null
   status: StudentStatus
   enrollments?: Enrollment[]
-  parentLinks?: ParentStudentLink[]
 }
 
-export type Parent = { id: string; fullName: string; phone?: string | null }
-
-export type ParentStudentLink = {
-  id: string
-  parentId: string
-  studentId: string
-  linkedAt: string
-  unlinkedAt: string | null
-}
 
 export type Group = {
   id: string
@@ -146,25 +135,28 @@ export type StudentOverviewAssessmentResult = AssessmentResult & {
   assessment: Assessment & { category: AssessmentCategory; group: Group }
 }
 
-export type StudentOverviewHomeworkResult = {
+export type StudentOverviewQuizResult = {
   id: string
-  status: HomeworkResultStatus
-  score: number | null
-  teacherComment: string | null
-  homework: { id: string; instructions: string; dueDate: string | null; lessonSession: { date: string; group: Group } }
+  quizTitle: string
+  date: string
+  group: Group
+  correctCount: number
+  totalQuestions: number
+  points: number
 }
 
 export type StudentOverview = {
   student: Student
   enrollments: Enrollment[]
-  parents: Array<ParentStudentLink & { parent: Parent }>
+  telegramLinkCount: number
   attendance: {
     totals: Record<AttendanceStatus, number>
     rate: number | null
-    recent: StudentOverviewAttendanceEntry[]
+    records: StudentOverviewAttendanceEntry[]
   }
+  lessonDays: Array<{ id: string; date: string; group: { id: string; name: string } }>
   assessmentResults: StudentOverviewAssessmentResult[]
-  homeworkResults: StudentOverviewHomeworkResult[]
+  quizResults: StudentOverviewQuizResult[]
   payments: { list: Payment[]; outstanding: number }
   points: { total: number; recent: PointTransaction[] }
 }
@@ -172,3 +164,50 @@ export type StudentOverview = {
 export type GroupLeaderboardEntry = { student: Student; points: number }
 export type GroupPaymentEntry = { student: Student; payment: Payment | null }
 export type GroupPaymentHistory = { students: Student[]; payments: Payment[] }
+
+export type QuizStatus = 'DRAFT' | 'SENT'
+
+export type QuizOptionInput = { text: string; isCorrect: boolean }
+export type QuizQuestionInput = { text: string; options: QuizOptionInput[] }
+export type QuizInput = { title: string; maxPoints: number; questions: QuizQuestionInput[] }
+
+/** One row of a group's quiz list -- with a light per-student summary for the marks table. */
+export type QuizSummary = {
+  id: string
+  date: string
+  title: string
+  maxPoints: number
+  status: QuizStatus
+  sentAt: string | null
+  deadline: string | null
+  isOpen: boolean
+  questionCount: number
+  attempts: Array<{ studentId: string; completedAt: string | null; correctCount: number | null; points: number | null }>
+}
+
+export type QuizResultRow = {
+  student: { id: string; firstName: string; lastName: string }
+  status: 'NOT_STARTED' | 'IN_PROGRESS' | 'COMPLETED'
+  answeredCount: number
+  correctCount: number | null
+  points: number | null
+}
+
+export type QuizDetail = {
+  id: string
+  lessonSessionId: string
+  date: string
+  title: string
+  maxPoints: number
+  status: QuizStatus
+  sentAt: string | null
+  deadline: string | null
+  isOpen: boolean
+  questions: Array<{
+    id: string
+    position: number
+    text: string
+    options: Array<{ id: string; position: number; text: string; isCorrect: boolean }>
+  }>
+  results: QuizResultRow[]
+}

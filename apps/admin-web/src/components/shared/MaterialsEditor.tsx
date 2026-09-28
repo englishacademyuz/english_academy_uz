@@ -1,0 +1,105 @@
+import { useState } from 'react'
+import { Plus, Trash2 } from 'lucide-react'
+import { materialTypeLabel } from '../../lib/format'
+import { isYoutubeUrl, parseHttpUrl } from '../../lib/materials'
+import type { LessonMaterialType } from '../../lib/types'
+import { Button, Input, Select } from '../ui'
+
+export type MaterialDraft = { type: LessonMaterialType; content: string }
+
+// Teachers add only these two kinds for now -- as many of each as they like.
+const MATERIAL_OPTIONS: Array<{ type: LessonMaterialType; label: string; placeholder: string }> = [
+  { type: 'VIDEO', label: 'YouTube', placeholder: 'https://www.youtube.com/watch?v=…' },
+  { type: 'DOCUMENT', label: 'Hujjat', placeholder: 'https://docs.google.com/document/d/…' },
+]
+
+function materialError(draft: MaterialDraft): string | null {
+  if (draft.type === 'VIDEO' && !isYoutubeUrl(draft.content)) return 'YouTube video havolasini kiriting'
+  if (draft.type === 'DOCUMENT' && !parseHttpUrl(draft.content)) return 'Hujjat havolasini kiriting (https://…)'
+  return null
+}
+
+/** Add/remove a lesson's sources -- shared by the lesson form and the past-lessons list. */
+export function MaterialsEditor({
+  value,
+  onChange,
+}: {
+  value: MaterialDraft[]
+  onChange: (materials: MaterialDraft[]) => void
+}) {
+  const [draft, setDraft] = useState<MaterialDraft>({ type: 'VIDEO', content: '' })
+  const [error, setError] = useState<string | null>(null)
+
+  function add() {
+    if (!draft.content.trim()) return
+    const problem = materialError(draft)
+    setError(problem)
+    if (problem) return
+    onChange([...value, { ...draft, content: draft.content.trim() }])
+    setDraft((d) => ({ ...d, content: '' }))
+  }
+
+  return (
+    <div>
+      <div className="mb-2 flex gap-2">
+        <Select
+          value={draft.type}
+          onChange={(e) => {
+            setDraft((d) => ({ ...d, type: e.target.value as LessonMaterialType }))
+            setError(null)
+          }}
+          className="w-32"
+        >
+          {MATERIAL_OPTIONS.map((option) => (
+            <option key={option.type} value={option.type}>
+              {option.label}
+            </option>
+          ))}
+        </Select>
+        <Input
+          value={draft.content}
+          onChange={(e) => {
+            setDraft((d) => ({ ...d, content: e.target.value }))
+            setError(null)
+          }}
+          onKeyDown={(e) => {
+            if (e.key === 'Enter') {
+              e.preventDefault()
+              add()
+            }
+          }}
+          placeholder={MATERIAL_OPTIONS.find((o) => o.type === draft.type)?.placeholder}
+        />
+        <Button type="button" variant="secondary" onClick={add}>
+          <Plus className="h-4 w-4" />
+        </Button>
+      </div>
+      {error && <p className="mb-2 text-xs text-red-600 dark:text-red-400">{error}</p>}
+      {value.length > 0 && (
+        <ul className="space-y-1">
+          {value.map((m, i) => (
+            <li
+              key={i}
+              className="flex items-center justify-between rounded-lg bg-slate-50 px-3 py-1.5 text-sm dark:bg-slate-800/60"
+            >
+              <span className="truncate">
+                <span className="mr-2 font-medium text-slate-500 dark:text-slate-400">
+                  {m.type === 'VIDEO' && isYoutubeUrl(m.content) ? 'YouTube' : materialTypeLabel[m.type]}
+                </span>
+                {m.content}
+              </span>
+              <button
+                type="button"
+                title="Oʻchirish"
+                onClick={() => onChange(value.filter((_, idx) => idx !== i))}
+                className="text-slate-400 hover:text-red-600 dark:text-slate-500 dark:hover:text-red-400"
+              >
+                <Trash2 className="h-4 w-4" />
+              </button>
+            </li>
+          ))}
+        </ul>
+      )}
+    </div>
+  )
+}

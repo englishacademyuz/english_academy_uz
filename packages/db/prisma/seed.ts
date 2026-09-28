@@ -84,13 +84,6 @@ async function main() {
         status: 'ACTIVE',
       },
     })
-
-    const parent = await prisma.parent.create({
-      data: { fullName: `${data.firstName}'s Parent`, phone: '+998900000000' },
-    })
-    await prisma.parentStudentLink.create({
-      data: { parentId: parent.id, studentId: student.id },
-    })
   }
 
   console.log('Seed complete:', {

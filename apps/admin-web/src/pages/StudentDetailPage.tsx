@@ -9,7 +9,6 @@ import type { StudentStatus } from '../lib/types'
 import { useAuth } from '../lib/auth'
 import { Button, Card, ErrorBanner, PageHeader, Select, Spinner } from '../components/ui'
 import { GroupsCard } from '../components/student/GroupsCard'
-import { ParentsCard } from '../components/student/ParentsCard'
 import { AttendanceCard } from '../components/student/AttendanceCard'
 import { MarksCard } from '../components/student/MarksCard'
 import { PointsCard } from '../components/student/PointsCard'
@@ -78,13 +77,8 @@ export function StudentDetailPage() {
 
       <div className="grid gap-6 lg:grid-cols-2">
         <GroupsCard enrollments={overview.enrollments} />
-        <ParentsCard studentId={student.id} links={overview.parents} />
 
-        <AttendanceCard
-          totals={overview.attendance.totals}
-          rate={overview.attendance.rate}
-          recent={overview.attendance.recent}
-        />
+        <AttendanceCard attendance={overview.attendance} lessonDays={overview.lessonDays} />
         <PointsCard
           studentId={student.id}
           total={overview.points.total}
@@ -93,13 +87,13 @@ export function StudentDetailPage() {
           actor={actor}
         />
 
-        <MarksCard assessmentResults={overview.assessmentResults} homeworkResults={overview.homeworkResults} />
+        <MarksCard assessmentResults={overview.assessmentResults} quizResults={overview.quizResults} />
         <PaymentsCard studentId={student.id} payments={overview.payments.list} outstanding={overview.payments.outstanding} />
 
         <Card className="p-5">
           <h2 className="mb-3 text-sm font-semibold text-slate-900 dark:text-slate-100">Telegram kirish huquqi</h2>
           <p className="mb-3 text-sm text-slate-500 dark:text-slate-400">
-            Oʻquvchi Telegram hisobini ulashi uchun bir martalik kod bering.
+            Oʻquvchi Telegram botga shu kod bilan kiradi. Kod 24 soat amal qiladi. Ulangan hisoblar: <span className="font-medium text-slate-700 dark:text-slate-300">{overview.telegramLinkCount}</span>
           </p>
           <Button variant="secondary" onClick={() => linkingCodeMutation.mutate()} loading={linkingCodeMutation.isPending}>
             <KeyRound className="h-4 w-4" /> Kod berish

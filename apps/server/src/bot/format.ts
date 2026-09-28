@@ -1,176 +1,65 @@
-import type {
-  Attendance,
-  Group,
-  Homework,
-  HomeworkResult,
-  Level,
-  LessonMaterial,
-  LessonSession,
-  Student,
-  Teacher,
-} from '@tashkurgan/db'
-import type { ProgressSnapshot, Timeframe } from '@tashkurgan/domain'
-
-const MATERIAL_TYPE_LABEL: Record<string, string> = {
-  PDF: 'PDF',
-  DOCUMENT: 'Hujjat',
-  IMAGE: 'Rasm',
-  VIDEO: 'Video',
-  AUDIO: 'Audio',
-  LINK: 'Havola',
-  TEXT: 'Matn',
+// Text for the notifications-only bot. Everything a student browses lives in the Mini App.
+export function formatWelcome(): string {
+  return "Assalomu alaykum! 👋\nTashkurgan Academy botiga xush kelibsiz.\n\nDavom etish uchun administrator bergan oʻquvchi kodini yuboring. Oʻquvchi ham, ota-onasi ham bir xil koddan foydalanadi."
 }
 
-const STUDENT_STATUS_LABEL: Record<string, string> = {
-  ACTIVE: 'Faol',
-  PAUSED: "Toʻxtatilgan",
-  INACTIVE: 'Nofaol',
-  COMPLETED: 'Tugallagan',
-  LEFT: 'Ketgan',
+export function formatCodeNotFound(): string {
+  return "❌ Bunday kod topilmadi. Kodni tekshirib, qaytadan yuboring yoki administratordan yangi kod soʻrang."
 }
 
-const ATTENDANCE_LABEL: Record<string, string> = {
-  PRESENT: '✅ Bor',
-  LATE: '🟡 Kechikdi',
-  ABSENT: '❌ Yoʻq',
-  EXCUSED: '⚪ Sababli',
+export function formatCodeExpired(): string {
+  return "⌛ Bu kodning muddati tugagan (kod 24 soat amal qiladi). Administratordan yangi kod soʻrang."
 }
 
-const TIMEFRAME_LABEL: Record<Timeframe['kind'], string> = {
-  today: 'Bugun',
-  week: 'Shu hafta',
-  month: 'Shu oy',
-  sinceEnrollment: 'Guruhga qoʻshilgandan beri',
-  course: 'Kurs davomida',
-  custom: 'Tanlangan davr',
+export function formatCodeFailed(): string {
+  return "⚠️ Kodni tekshirishda xatolik yuz berdi. Birozdan soʻng qayta urinib koʻring."
 }
 
-export function formatDate(date: Date): string {
-  const day = String(date.getDate()).padStart(2, '0')
-  const month = String(date.getMonth() + 1).padStart(2, '0')
-  return `${day}.${month}.${date.getFullYear()}`
+/** Teacher-typed text goes into HTML-mode messages, so it must not be able to break the markup. */
+export function escapeHtml(text: string): string {
+  return text.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
 }
 
-function pct(value: number | null): string {
-  return value === null ? "Maʼlumot yoʻq" : `${value.toFixed(0)}%`
+// The center is in Uzbekistan, but the server may run in UTC -- deadlines are
+// always shown in the center's local time.
+const DEADLINE_FORMAT = new Intl.DateTimeFormat('en-GB', {
+  timeZone: 'Asia/Tashkent',
+  day: '2-digit',
+  month: '2-digit',
+  year: 'numeric',
+  hour: '2-digit',
+  minute: '2-digit',
+  hour12: false,
+})
+
+export function formatDeadline(date: Date): string {
+  const parts = Object.fromEntries(DEADLINE_FORMAT.formatToParts(date).map((p) => [p.type, p.value]))
+  return `${parts.day}.${parts.month}.${parts.year} ${parts.hour}:${parts.minute}`
 }
 
-type GroupWithLevelAndTeacher = Group & { level: Level; teacher: Teacher }
-
-export function formatStudies(group: GroupWithLevelAndTeacher, lastSession: LessonSession | null): string {
-  const lines = [
-    `📚 <b>Mening oʻqishim</b>`,
+export function formatQuizAnnouncement(quiz: {
+  title: string
+  questionCount: number
+  maxPoints: number
+  deadline: Date
+}): string {
+  return [
+    `🧠 <b>Yangi test: ${escapeHtml(quiz.title)}</b>`,
     '',
-    `Guruh: <b>${group.name}</b>`,
-    `Daraja: ${group.level.name}`,
-    `Oʻqituvchi: ${group.teacher.fullName}`,
-    `Dars kunlari: ${group.scheduleDays.join('/')}, soat ${group.scheduleTime}`,
-  ]
-  if (lastSession) {
-    lines.push('', `📖 Oxirgi mavzu (${formatDate(lastSession.date)}):`, lastSession.topic ?? '—')
-  }
-  return lines.join('\n')
-}
-
-export function formatNoActiveGroup(): string {
-  return "Hozircha faol guruhga yozilmagansiz. Administrator bilan bogʻlaning."
-}
-
-export function formatProgress(snapshot: ProgressSnapshot): string {
-  const lines = [
-    `📊 <b>Progress</b> — ${TIMEFRAME_LABEL[snapshot.timeframe.kind]}`,
+    `Savollar: ${quiz.questionCount} · Maksimal ball: ${quiz.maxPoints}`,
+    `Muddat: ${formatDeadline(quiz.deadline)} gacha`,
     '',
-    `✅ Davomat: ${pct(snapshot.attendanceRate)}`,
-    `📝 Uy vazifasi: ${pct(snapshot.homeworkRate)}`,
-  ]
-  const categories = Object.entries(snapshot.academicByCategory)
-  if (categories.length > 0) {
-    lines.push('', '📈 Fanlar boʻyicha oʻrtacha baho:')
-    for (const [name, value] of categories) {
-      lines.push(`  • ${name}: ${value.toFixed(0)}%`)
-    }
-  }
-  return lines.join('\n')
+    'Faqat bitta urinish beriladi. Tayyor boʻlsangiz, boshlang.',
+  ].join('\n')
 }
 
-export function formatNoHomework(): string {
-  return "Hozircha uy vazifasi topilmadi."
+export function formatMenu(studentName: string): string {
+  return `👋 Xush kelibsiz!
+Siz <b>${escapeHtml(studentName)}</b> maʼlumotlarini koʻryapsiz.
+
+Kerakli boʻlimni oching:`
 }
 
-export function formatHomework(homework: Homework, result: HomeworkResult | undefined): string {
-  const lines = [`📝 <b>Uy vazifasi</b>`, '', homework.instructions]
-  if (homework.dueDate) lines.push('', `Muddat: ${formatDate(homework.dueDate)}`)
-  lines.push('')
-  if (!result) {
-    lines.push('Holat: <i>Hali tekshirilmagan</i>')
-  } else {
-    lines.push(`Holat: ${result.status === 'COMPLETED' ? '✅ Bajarilgan' : '❌ Bajarilmagan'}`)
-    if (result.score !== null) lines.push(`Ball: <b>${result.score}</b>`)
-  }
-  return lines.join('\n')
-}
-
-export function formatAttendance(
-  records: Array<Attendance & { lessonSession: LessonSession }>,
-  rate: number | null,
-): string {
-  const lines = [`✅ <b>Davomat</b> — shu oy`, '', `Umumiy koʻrsatkich: ${pct(rate)}`, '']
-  if (records.length === 0) {
-    lines.push('Hali davomat qayd etilmagan.')
-  } else {
-    for (const record of records.slice(0, 10)) {
-      lines.push(`${formatDate(record.lessonSession.date)} — ${ATTENDANCE_LABEL[record.status] ?? record.status}`)
-    }
-  }
-  return lines.join('\n')
-}
-
-export function formatLessonListHeader(hasAny: boolean): string {
-  return hasAny
-    ? '📚 <b>Darslar tarixi</b>\n\nOʻtilgan darsni tanlab, uning materiallari va uy vazifasini qayta koʻrishingiz mumkin:'
-    : '📚 <b>Darslar tarixi</b>\n\nHali oʻtilgan dars qayd etilmagan.'
-}
-
-export function formatLessonNotFound(): string {
-  return "Bu dars topilmadi yoki unga kirish huquqingiz yoʻq."
-}
-
-export function formatLessonDetail(
-  session: LessonSession & { materials: LessonMaterial[] },
-  homework: (Homework & { results: HomeworkResult[] }) | null,
-): string {
-  const lines = [`📖 <b>${formatDate(session.date)}</b>`, '']
-  lines.push(session.topic ? `Mavzu: <b>${session.topic}</b>` : 'Mavzu kiritilmagan')
-  if (session.notes) lines.push('', session.notes)
-
-  if (homework) {
-    lines.push('', '📝 <b>Uy vazifasi:</b>', homework.instructions)
-    const result = homework.results[0]
-    if (result) {
-      lines.push(`Holat: ${result.status === 'COMPLETED' ? '✅ Bajarilgan' : '❌ Bajarilmagan'}`)
-      if (result.score !== null) lines.push(`Ball: <b>${result.score}</b>`)
-    }
-  }
-
-  if (session.materials.length > 0) {
-    lines.push('', '📎 <b>Materiallar:</b>')
-    for (const material of session.materials) {
-      lines.push(`• ${MATERIAL_TYPE_LABEL[material.type] ?? material.type}: ${material.content}`)
-    }
-  }
-
-  return lines.join('\n')
-}
-
-export function formatProfile(student: Student, group: GroupWithLevelAndTeacher | null): string {
-  const lines = [
-    `👤 <b>Profilim</b>`,
-    '',
-    `Ism: <b>${student.firstName} ${student.lastName}</b>`,
-    `Holat: ${STUDENT_STATUS_LABEL[student.status] ?? student.status}`,
-  ]
-  if (group) {
-    lines.push(`Guruh: ${group.name}`, `Daraja: ${group.level.name}`, `Oʻqituvchi: ${group.teacher.fullName}`)
-  }
-  return lines.join('\n')
+export function formatMiniAppUnavailable(): string {
+  return "Ilova hozircha sozlanmagan. Birozdan soʻng qayta urinib koʻring."
 }

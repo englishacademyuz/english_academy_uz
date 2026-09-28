@@ -1,7 +1,7 @@
 import { afterAll, beforeEach, describe, expect, it } from 'vitest'
 import { prisma } from '@tashkurgan/db'
 import { createBot } from '../src/bot/client'
-import { resetDb, seedAcademicStructure } from './helpers'
+import { resetDb } from './helpers'
 
 // A fake botInfo skips grammY's real getMe network call entirely -- this
 // suite never talks to Telegram; see buildBot()'s API transformer below.
@@ -21,10 +21,12 @@ const FAKE_BOT_INFO = {
   supports_join_request_queries: false,
 }
 
+const MINI_APP_URL = 'https://example.test/student'
+
 type CapturedCall = { method: string; payload: Record<string, unknown> }
 
 function buildBot() {
-  const bot = createBot('test-token', FAKE_BOT_INFO)
+  const bot = createBot('test-token', { botInfo: FAKE_BOT_INFO, miniAppUrl: MINI_APP_URL })
   const calls: CapturedCall[] = []
   // The one true external dependency (the real Telegram API) is intercepted
   // here instead of mocked deeper in the handler code -- everything else
@@ -47,6 +49,10 @@ function textUpdate(chatId: number, text: string) {
       chat: { id: chatId, type: 'private' as const, first_name: 'Test' },
       from: { id: chatId, is_bot: false, first_name: 'Test' },
       text,
+      // A leading "/word" is a command only when Telegram marks it with a bot_command entity.
+      ...(text.startsWith('/')
+        ? { entities: [{ type: 'bot_command' as const, offset: 0, length: text.split(' ')[0].length }] }
+        : {}),
     },
   }
 }
@@ -80,156 +86,108 @@ describe('telegram bot', () => {
     await prisma.$disconnect()
   })
 
-  it('links an unrecognized chat that sends a valid linking code', async () => {
+  async function issueCode(studentId: string, code: string, expiresInMs = 3_600_000) {
+    return prisma.linkingCode.create({ data: { code, studentId, expiresAt: new Date(Date.now() + expiresInMs) } })
+  }
+
+  const sentText = (calls: CapturedCall[], fragment: string) =>
+    calls.some((c) => c.method === 'sendMessage' && String(c.payload.text).includes(fragment))
+
+  it('lets the student and a parent link their own chats with the same code', async () => {
     const student = await prisma.student.create({
       data: { firstName: 'Ali', lastName: 'K', dob: new Date('2012-01-01') },
     })
-    const linkingCode = await prisma.linkingCode.create({
-      data: {
-        code: 'ABCD1234',
-        targetType: 'STUDENT',
-        targetId: student.id,
-        expiresAt: new Date(Date.now() + 3_600_000),
-      },
-    })
+    await issueCode(student.id, 'ABCD2345')
 
     const { bot, calls } = buildBot()
     await bot.init()
-    await bot.handleUpdate(textUpdate(111, linkingCode.code))
+    await bot.handleUpdate(textUpdate(111, 'ABCD2345'))
+    // A parent pastes it with stray spaces/lowercase -- still the same code.
+    await bot.handleUpdate(textUpdate(112, ' abcd 2345 '))
 
-    const user = await prisma.user.findUnique({ where: { telegramChatId: '111' } })
-    expect(user?.role).toBe('STUDENT')
-
-    const linkedStudent = await prisma.student.findUnique({ where: { userId: user!.id } })
-    expect(linkedStudent?.id).toBe(student.id)
-
-    const consumed = await prisma.linkingCode.findUnique({ where: { code: linkingCode.code } })
-    expect(consumed?.consumedAt).not.toBeNull()
-
-    const confirmed = calls.some((c) => c.method === 'sendMessage' && String(c.payload.text).includes('ulandi'))
-    expect(confirmed).toBe(true)
+    const links = await prisma.telegramLink.findMany({ where: { studentId: student.id }, orderBy: { chatId: 'asc' } })
+    expect(links.map((l) => l.chatId)).toEqual(['111', '112'])
+    expect(calls.filter((c) => c.method === 'sendMessage' && String(c.payload.text).includes('ulandi'))).toHaveLength(2)
   })
 
-  it('rejects an invalid linking code with a clear message', async () => {
-    const { bot, calls } = buildBot()
-    await bot.init()
-    await bot.handleUpdate(textUpdate(112, 'NOTREAL1'))
-
-    const user = await prisma.user.findUnique({ where: { telegramChatId: '112' } })
-    expect(user).toBeNull()
-
-    const rejected = calls.some((c) => c.method === 'sendMessage' && String(c.payload.text).includes('notoʻgʻri'))
-    expect(rejected).toBe(true)
-  })
-
-  it('shows a linked student their own progress', async () => {
+  it('tells an unknown code apart from an expired one', async () => {
     const student = await prisma.student.create({
       data: { firstName: 'Ali', lastName: 'K', dob: new Date('2012-01-01') },
     })
-    const user = await prisma.user.create({ data: { role: 'STUDENT', telegramChatId: '222' } })
-    await prisma.student.update({ where: { id: student.id }, data: { userId: user.id } })
+    await issueCode(student.id, 'EXPD2345', -1000)
 
     const { bot, calls } = buildBot()
     await bot.init()
+    await bot.handleUpdate(textUpdate(113, 'NOTREAL2'))
+    expect(sentText(calls, 'topilmadi')).toBe(true)
+
+    calls.length = 0
+    await bot.handleUpdate(textUpdate(113, 'EXPD2345'))
+    expect(sentText(calls, 'muddati tugagan')).toBe(true)
+
+    expect(await prisma.telegramLink.count()).toBe(0)
+  })
+
+  it("re-points a linked chat when it sends another student's code", async () => {
+    const first = await prisma.student.create({ data: { firstName: 'Ali', lastName: 'K', dob: new Date('2012-01-01') } })
+    const second = await prisma.student.create({ data: { firstName: 'Vali', lastName: 'K', dob: new Date('2014-01-01') } })
+    await prisma.telegramLink.create({ data: { chatId: '114', studentId: first.id } })
+    await issueCode(second.id, 'SWAP2345')
+
+    const { bot, calls } = buildBot()
+    await bot.init()
+    await bot.handleUpdate(textUpdate(114, 'SWAP2345'))
+
+    const link = await prisma.telegramLink.findUnique({ where: { chatId: '114' } })
+    expect(link?.studentId).toBe(second.id)
+    expect(sentText(calls, 'Vali')).toBe(true)
+  })
+
+  /** Every web_app button URL in the inline keyboards the bot sent. */
+  const webAppUrls = (calls: CapturedCall[]) =>
+    calls.flatMap((c) => {
+      const markup = c.payload.reply_markup as { inline_keyboard?: Array<Array<{ web_app?: { url: string } }>> }
+      return (markup?.inline_keyboard ?? []).flat().flatMap((b) => (b.web_app ? [b.web_app.url] : []))
+    })
+
+  it('answers a linked chat with Mini App buttons and clears the old reply keyboard', async () => {
+    const student = await prisma.student.create({
+      data: { firstName: 'Ali', lastName: 'K', dob: new Date('2012-01-01') },
+    })
+    await prisma.telegramLink.create({ data: { chatId: '222', studentId: student.id } })
+
+    const { bot, calls } = buildBot()
+    await bot.init()
+    // A tap on the old text keyboard now just brings up the Mini App menu.
     await bot.handleUpdate(textUpdate(222, '📊 Progressim'))
 
-    const sent = calls.find((c) => c.method === 'sendMessage' && String(c.payload.text).includes('Progress'))
-    expect(sent).toBeDefined()
-    expect(sent?.payload.parse_mode).toBe('HTML')
+    expect(calls.some((c) => (c.payload.reply_markup as { remove_keyboard?: boolean })?.remove_keyboard)).toBe(true)
+    expect(sentText(calls, 'Ali K')).toBe(true)
+    const urls = webAppUrls(calls)
+    expect(urls).toContain(MINI_APP_URL)
+    expect(urls).toContain(`${MINI_APP_URL}/progress`)
+    expect(urls).toContain(`${MINI_APP_URL}/quizzes`)
   })
 
-  it('requires a parent to select a child, and refuses a child that is not theirs', async () => {
-    const parentUser = await prisma.user.create({ data: { role: 'PARENT', telegramChatId: '333' } })
-    const parent = await prisma.parent.create({ data: { fullName: 'Test Parent', userId: parentUser.id } })
-    const ownChild = await prisma.student.create({
-      data: { firstName: 'Own', lastName: 'Child', dob: new Date('2012-01-01') },
+  it('points buttons left on old chat messages to the Mini App instead of acting on them', async () => {
+    const student = await prisma.student.create({
+      data: { firstName: 'Ali', lastName: 'K', dob: new Date('2012-01-01') },
     })
-    const otherChild = await prisma.student.create({
-      data: { firstName: 'Other', lastName: 'Child', dob: new Date('2012-01-01') },
-    })
-    await prisma.parentStudentLink.create({ data: { parentId: parent.id, studentId: ownChild.id } })
-    // otherChild is deliberately left unlinked to this parent.
+    await prisma.telegramLink.create({ data: { chatId: '444', studentId: student.id } })
 
     const { bot, calls } = buildBot()
     await bot.init()
-
-    await bot.handleUpdate(textUpdate(333, '📊 Progressi'))
-    expect(calls.some((c) => c.method === 'sendMessage' && String(c.payload.text).includes('Farzandlarim'))).toBe(
-      true,
-    )
-
-    calls.length = 0
-    await bot.handleUpdate(callbackUpdate(333, `child:${otherChild.id}`))
-    expect(
-      calls.some((c) => c.method === 'answerCallbackQuery' && String(c.payload.text).includes('Ruxsat')),
-    ).toBe(true)
-
-    calls.length = 0
-    await bot.handleUpdate(callbackUpdate(333, `child:${ownChild.id}`))
-    expect(calls.some((c) => c.method === 'sendMessage' && String(c.payload.text).includes('Own'))).toBe(true)
-  })
-
-  it('lets a student browse past lessons and reopen a specific one\'s resources', async () => {
-    const { group, student } = await seedAcademicStructure()
-    const user = await prisma.user.create({ data: { role: 'STUDENT', telegramChatId: '444' } })
-    await prisma.student.update({ where: { id: student.id }, data: { userId: user.id } })
-
-    const session = await prisma.lessonSession.create({
-      data: {
-        groupId: group.id,
-        teacherId: group.teacherId,
-        date: new Date('2026-09-10'),
-        topic: 'Present Perfect',
-        materials: { create: [{ type: 'LINK', content: 'https://example.com/unit5' }] },
-      },
-    })
-
-    const { bot, calls } = buildBot()
-    await bot.init()
-
-    await bot.handleUpdate(textUpdate(444, '📚 Mening oʻqishim'))
-    const studiesMessage = calls.find((c) => c.method === 'sendMessage' && String(c.payload.text).includes('Mening'))
-    expect(studiesMessage).toBeDefined()
-
-    calls.length = 0
     await bot.handleUpdate(callbackUpdate(444, 'lessons:0'))
-    const listCall = calls.find((c) => c.method === 'editMessageText' || c.method === 'sendMessage')
-    expect(listCall).toBeDefined()
-    expect(String(listCall?.payload.text)).toContain('Darslar tarixi')
 
-    calls.length = 0
-    await bot.handleUpdate(callbackUpdate(444, `lesson:${session.id}`))
-    const detail = calls.find((c) => c.method === 'sendMessage')
-    expect(String(detail?.payload.text)).toContain('Present Perfect')
-    expect(String(detail?.payload.text)).toContain('example.com/unit5')
+    expect(calls.some((c) => c.method === 'answerCallbackQuery')).toBe(true)
+    expect(webAppUrls(calls)).toContain(`${MINI_APP_URL}/lessons`)
   })
 
-  it('refuses to show a lesson from a group the student was never enrolled in', async () => {
-    const { level, teacher, student } = await seedAcademicStructure()
-    const user = await prisma.user.create({ data: { role: 'STUDENT', telegramChatId: '555' } })
-    await prisma.student.update({ where: { id: student.id }, data: { userId: user.id } })
-
-    // A second group under the same teacher/level that the student was never enrolled in.
-    const otherGroup = await prisma.group.create({
-      data: {
-        name: 'B',
-        levelId: level.id,
-        teacherId: teacher.id,
-        scheduleDays: ['TUE'],
-        scheduleTime: '19:00',
-        startDate: new Date(),
-      },
-    })
-    const foreignSession = await prisma.lessonSession.create({
-      data: { groupId: otherGroup.id, teacherId: otherGroup.teacherId, date: new Date('2026-09-11'), topic: 'Secret' },
-    })
-
+  it('tells an unlinked chat to send its code on /start', async () => {
     const { bot, calls } = buildBot()
     await bot.init()
-    await bot.handleUpdate(callbackUpdate(555, `lesson:${foreignSession.id}`))
-
-    const reply = calls.find((c) => c.method === 'sendMessage')
-    expect(String(reply?.payload.text)).toContain('huquqingiz yoʻq')
-    expect(String(reply?.payload.text)).not.toContain('Secret')
+    await bot.handleUpdate(textUpdate(555, '/start'))
+    expect(sentText(calls, 'kodini yuboring')).toBe(true)
+    expect(webAppUrls(calls)).toHaveLength(0)
   })
 })

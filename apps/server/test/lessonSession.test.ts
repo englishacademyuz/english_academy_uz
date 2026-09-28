@@ -107,4 +107,41 @@ describe('lesson sessions', () => {
     expect(result?.status).toBe('COMPLETED')
     expect(result?.score).toBe(90)
   })
+
+  it('adding sources to a past lesson later keeps its topic, homework, and attendance', async () => {
+    const { group, student } = await seedAcademicStructure()
+    const cookie = await loginAs(app, 'teacher1', 'teacher12345')
+
+    await app.inject({
+      method: 'POST',
+      url: `/groups/${group.id}/sessions`,
+      headers: { cookie },
+      payload: {
+        date: '2026-09-17',
+        topic: 'Present Perfect',
+        materials: [{ type: 'VIDEO', content: 'https://youtu.be/abc' }],
+        homework: { instructions: 'Unit 5' },
+        attendance: [{ studentId: student.id, status: 'PRESENT' }],
+      },
+    })
+
+    const res = await app.inject({
+      method: 'POST',
+      url: `/groups/${group.id}/sessions`,
+      headers: { cookie },
+      payload: {
+        date: '2026-09-17',
+        materials: [
+          { type: 'VIDEO', content: 'https://youtu.be/abc' },
+          { type: 'DOCUMENT', content: 'https://docs.google.com/document/d/x/edit' },
+        ],
+      },
+    })
+
+    const body = res.json()
+    expect(body.materials).toHaveLength(2)
+    expect(body.topic).toBe('Present Perfect')
+    expect(body.homework.instructions).toBe('Unit 5')
+    expect(body.attendances).toHaveLength(1)
+  })
 })
