@@ -27,3 +27,7 @@ export function miniAppMenuKeyboard(miniAppUrl: string) {
 export function quizStartKeyboard(miniAppUrl: string, quizId: string) {
   return new InlineKeyboard().webApp('▶️ Boshlash', `${miniAppUrl}/quizzes/${quizId}`)
 }
+
+export function openMiniAppKeyboard(miniAppUrl: string) {
+  return new InlineKeyboard().webApp('📚 Ilovani ochish', `${miniAppUrl}/lessons`)
+}

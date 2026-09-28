@@ -42,8 +42,12 @@ A named curriculum within a Subject (e.g., General English).
 A proficiency tier within a Course (e.g., Elementary, Intermediate). Owns the set of AssessmentCategories used to grade Students at that tier — different Levels can use entirely different category sets.
 
 **Group**:
-A specific cohort of Students studying one Level, taught by exactly one Teacher, on a recurring schedule.
+A specific cohort of Students studying one Level, taught by exactly one Teacher, on a recurring schedule. Each Level has its own color, and its Groups are painted in it everywhere. A Group is never hard-deleted: "deleting" archives it. It disappears from lists and the timetable, its active Enrollments end, and future Reschedules and empty future LessonSessions are cleared. Everything already recorded stays as history.
 _Avoid_: Class, cohort
+
+**Reschedule**:
+One regular lesson of a Group moved to another day and/or time (a holiday, an event): the Group does not meet on the original day and meets on the new one instead. The Group's Telegram chats can be told about it when it is saved, or later.
+_Avoid_: Cancellation (the lesson still happens, just elsewhere), exception
 
 **Enrollment**:
 The time-bounded membership of one Student in one Group. A Student holds at most one *Active* Enrollment per Subject at a time. Ending an Enrollment never deletes it — it is dated closed, and a new Enrollment is opened when the Student moves groups.

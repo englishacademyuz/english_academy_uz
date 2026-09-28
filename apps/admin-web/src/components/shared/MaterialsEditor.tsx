@@ -1,9 +1,9 @@
 import { useState } from 'react'
 import { Plus, Trash2 } from 'lucide-react'
-import { materialTypeLabel } from '../../lib/format'
 import { isYoutubeUrl, parseHttpUrl } from '../../lib/materials'
 import type { LessonMaterialType } from '../../lib/types'
 import { Button, Input, Select } from '../ui'
+import { MaterialChip } from './MaterialPreview'
 
 export type MaterialDraft = { type: LessonMaterialType; content: string }
 
@@ -76,18 +76,13 @@ export function MaterialsEditor({
       </div>
       {error && <p className="mb-2 text-xs text-red-600 dark:text-red-400">{error}</p>}
       {value.length > 0 && (
-        <ul className="space-y-1">
+        <ul className="grid gap-1.5 sm:grid-cols-2">
           {value.map((m, i) => (
             <li
               key={i}
-              className="flex items-center justify-between rounded-lg bg-slate-50 px-3 py-1.5 text-sm dark:bg-slate-800/60"
+              className="flex items-center justify-between gap-2 rounded-lg bg-slate-50 px-2 py-1.5 text-sm dark:bg-slate-800/60"
             >
-              <span className="truncate">
-                <span className="mr-2 font-medium text-slate-500 dark:text-slate-400">
-                  {m.type === 'VIDEO' && isYoutubeUrl(m.content) ? 'YouTube' : materialTypeLabel[m.type]}
-                </span>
-                {m.content}
-              </span>
+              <MaterialChip material={m} index={i} />
               <button
                 type="button"
                 title="Oʻchirish"

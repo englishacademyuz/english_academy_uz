@@ -8,6 +8,8 @@ import {
   listQuizzesForStudent,
   startQuizAttempt,
   sumPoints,
+  toPercentage,
+  upcomingReschedules,
 } from '@tashkurgan/domain'
 import { NotFoundError } from '@tashkurgan/shared'
 
@@ -42,6 +44,7 @@ function groupSummary(enrollment: Awaited<ReturnType<typeof activeEnrollment>>) 
   return {
     name: group.name,
     level: group.level.name,
+    levelColor: group.level.color,
     teacher: group.teacher.fullName,
     scheduleDays: group.scheduleDays,
     scheduleTime: group.scheduleTime,
@@ -63,7 +66,7 @@ export const miniAppRoutes: FastifyPluginAsync = async (app) => {
     const enrollment = await activeEnrollment(student.id)
     const now = new Date()
 
-    const [lastLesson, latestHomework, quizzes, progress, points] = await Promise.all([
+    const [lastLesson, latestHomework, quizzes, progress, points, changes] = await Promise.all([
       enrollment
         ? prisma.lessonSession.findFirst({
             where: { groupId: enrollment.groupId, date: { lte: now } },
@@ -81,11 +84,13 @@ export const miniAppRoutes: FastifyPluginAsync = async (app) => {
       listQuizzesForStudent(student.id, now),
       getProgress(student.id, { kind: 'month' }),
       prisma.pointTransaction.findMany({ where: { studentId: student.id }, select: { points: true } }),
+      scheduleChanges(enrollment),
     ])
 
     return {
       student: { firstName: student.firstName, lastName: student.lastName },
       group: groupSummary(enrollment),
+      scheduleChanges: changes,
       lastLesson,
       latestHomework: latestHomework?.homework
         ? { lessonId: latestHomework.id, date: latestHomework.date, topic: latestHomework.topic, ...latestHomework.homework }
@@ -100,10 +105,10 @@ export const miniAppRoutes: FastifyPluginAsync = async (app) => {
     const student = me(request)
     const { page } = pageQuery.parse(request.query)
     const enrollment = await activeEnrollment(student.id)
-    if (!enrollment) return { group: null, lessons: [], hasMore: false }
+    if (!enrollment) return { group: null, scheduleChanges: [], lessons: [], hasMore: false }
 
     const where = { groupId: enrollment.groupId, date: { lte: new Date() } }
-    const [lessons, total] = await Promise.all([
+    const [lessons, total, changes] = await Promise.all([
       prisma.lessonSession.findMany({
         where,
         orderBy: { date: 'desc' },
@@ -118,9 +123,11 @@ export const miniAppRoutes: FastifyPluginAsync = async (app) => {
         },
       }),
       prisma.lessonSession.count({ where }),
+      page === 0 ? scheduleChanges(enrollment) : [],
     ])
     return {
       group: groupSummary(enrollment),
+      scheduleChanges: changes,
       lessons: lessons.map((l) => ({
         id: l.id,
         date: l.date,
@@ -170,39 +177,7 @@ export const miniAppRoutes: FastifyPluginAsync = async (app) => {
     const { kind } = progressQuery.parse(request.query)
     const snapshot = await getProgress(student.id, { kind })
     const { start, end } = snapshotRange(kind)
-
-    const [assessmentResults, quizAttempts] = await Promise.all([
-      prisma.assessmentResult.findMany({
-        where: { studentId: student.id, assessment: { date: { gte: start, lte: end } } },
-        include: { assessment: { include: { category: true } } },
-        orderBy: { assessment: { date: 'desc' } },
-      }),
-      prisma.quizAttempt.findMany({
-        where: { studentId: student.id, completedAt: { not: null }, quiz: { lessonSession: { date: { gte: start, lte: end } } } },
-        include: { quiz: { include: { lessonSession: true, _count: { select: { questions: true } } } } },
-      }),
-    ])
-
-    const marks = [
-      ...assessmentResults.map((r) => ({
-        id: r.id,
-        kind: 'assessment' as const,
-        date: r.assessment.date,
-        title: r.assessment.title,
-        category: r.assessment.category.name,
-        score: r.score,
-        maxScore: r.assessment.maxScore,
-      })),
-      ...quizAttempts.map((a) => ({
-        id: a.id,
-        kind: 'quiz' as const,
-        date: a.quiz.lessonSession.date,
-        title: a.quiz.title,
-        category: 'Test',
-        score: a.correctCount ?? 0,
-        maxScore: a.quiz._count.questions,
-      })),
-    ].sort((a, b) => b.date.getTime() - a.date.getTime())
+    const marks = await marksBetween(student.id, start, end)
 
     // Homework is marked through assessments now, so its separate rate isn't reported.
     return {
@@ -222,7 +197,7 @@ export const miniAppRoutes: FastifyPluginAsync = async (app) => {
     const end = new Date(Date.UTC(year, month, 1))
 
     const enrollments = await prisma.enrollment.findMany({ where: { studentId: student.id } })
-    const [lessons, records] = await Promise.all([
+    const [lessons, records, marks] = await Promise.all([
       enrollments.length
         ? prisma.lessonSession.findMany({
             where: {
@@ -240,6 +215,8 @@ export const miniAppRoutes: FastifyPluginAsync = async (app) => {
         where: { studentId: student.id, lessonSession: { date: { gte: start, lt: end } } },
         select: { status: true, lessonSessionId: true },
       }),
+      // The Kundalik calendar puts each mark on its day, next to that day's attendance.
+      marksBetween(student.id, start, new Date(end.getTime() - 1)),
     ])
     const statusByLesson = new Map(records.map((r) => [r.lessonSessionId, r.status]))
     const totals: Record<AttendanceStatus, number> = { PRESENT: 0, LATE: 0, ABSENT: 0, EXCUSED: 0 }
@@ -255,7 +232,43 @@ export const miniAppRoutes: FastifyPluginAsync = async (app) => {
         group: l.group.name,
         status: statusByLesson.get(l.id) ?? null,
       })),
+      marks,
     }
+  })
+
+  // Kundalik "Butun yil": one row per month of the current academic year (from 1 September), up to this month.
+  app.get('/student/attendance/year', async (request) => {
+    const student = me(request)
+    const now = new Date()
+    const firstYear = now.getUTCMonth() >= 8 ? now.getUTCFullYear() : now.getUTCFullYear() - 1
+    const start = new Date(Date.UTC(firstYear, 8, 1))
+
+    const [records, marks] = await Promise.all([
+      prisma.attendance.findMany({
+        where: { studentId: student.id, lessonSession: { date: { gte: start, lte: now } } },
+        select: { status: true, lessonSession: { select: { date: true } } },
+      }),
+      marksBetween(student.id, start, now),
+    ])
+
+    const monthKey = (d: Date) => d.getUTCFullYear() * 12 + d.getUTCMonth()
+    const months = []
+    for (let key = monthKey(start); key <= monthKey(now); key++) {
+      const statuses = records.filter((r) => monthKey(r.lessonSession.date) === key).map((r) => r.status)
+      const scores = marks
+        .filter((m) => monthKey(m.date) === key && m.maxScore > 0)
+        .map((m) => toPercentage(m.score, m.maxScore))
+      const counted = statuses.filter((s) => s !== 'EXCUSED')
+      months.push({
+        year: Math.floor(key / 12),
+        month: (key % 12) + 1,
+        lessons: counted.length,
+        attended: counted.filter((s) => s === 'PRESENT' || s === 'LATE').length,
+        attendanceRate: calculateAttendanceRate(statuses),
+        markAverage: scores.length ? scores.reduce((sum, v) => sum + v, 0) / scores.length : null,
+      })
+    }
+    return { months: months.reverse() }
   })
 
   app.get('/student/profile', async (request) => {
@@ -302,4 +315,53 @@ function snapshotRange(kind: 'today' | 'week' | 'month') {
   if (kind === 'week') start.setDate(start.getDate() - ((start.getDay() + 6) % 7))
   if (kind === 'month') start.setDate(1)
   return { start, end: now }
+}
+
+/** Every assessment result and finished quiz dated in [start, end], newest first. */
+async function marksBetween(studentId: string, start: Date, end: Date) {
+  const [assessmentResults, quizAttempts] = await Promise.all([
+    prisma.assessmentResult.findMany({
+      where: { studentId, assessment: { date: { gte: start, lte: end } } },
+      include: { assessment: { include: { category: true } } },
+    }),
+    prisma.quizAttempt.findMany({
+      where: { studentId, completedAt: { not: null }, quiz: { lessonSession: { date: { gte: start, lte: end } } } },
+      include: { quiz: { include: { lessonSession: true, _count: { select: { questions: true } } } } },
+    }),
+  ])
+
+  return [
+    ...assessmentResults.map((r) => ({
+      id: r.id,
+      kind: 'assessment' as const,
+      date: r.assessment.date,
+      title: r.assessment.title,
+      category: r.assessment.category.name,
+      score: r.score,
+      maxScore: r.assessment.maxScore,
+    })),
+    ...quizAttempts.map((a) => ({
+      id: a.id,
+      kind: 'quiz' as const,
+      date: a.quiz.lessonSession.date,
+      title: a.quiz.title,
+      category: 'Test',
+      score: a.correctCount ?? 0,
+      maxScore: a.quiz._count.questions,
+    })),
+  ].sort((a, b) => b.date.getTime() - a.date.getTime())
+}
+
+/** The active group's upcoming lesson moves, shaped for the Mini App. */
+async function scheduleChanges(enrollment: Awaited<ReturnType<typeof activeEnrollment>>) {
+  if (!enrollment) return []
+  const reschedules = await upcomingReschedules(enrollment.groupId)
+  return reschedules.map((r) => ({
+    id: r.id,
+    originalDate: r.originalDate,
+    regularTime: enrollment.group.scheduleTime,
+    newDate: r.newDate,
+    newTime: r.newTime,
+    reason: r.reason,
+  }))
 }

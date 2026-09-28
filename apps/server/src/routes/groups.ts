@@ -1,8 +1,8 @@
 import type { FastifyPluginAsync } from 'fastify'
 import { z } from 'zod'
 import { prisma } from '@tashkurgan/db'
-import { assertCan, enrollStudent, endEnrollment, changeGroup } from '@tashkurgan/domain'
-import { NotFoundError } from '@tashkurgan/shared'
+import { archiveGroup, assertCan, enrollStudent, endEnrollment, changeGroup } from '@tashkurgan/domain'
+import { ConflictError, NotFoundError } from '@tashkurgan/shared'
 
 const createSchema = z.object({
   levelId: z.string(),
@@ -12,6 +12,7 @@ const createSchema = z.object({
   scheduleTime: z.string().min(1),
   startDate: z.coerce.date(),
 })
+const updateSchema = createSchema.partial()
 
 const idParamsSchema = z.object({ id: z.string() })
 const enrollmentIdParamsSchema = z.object({ enrollmentId: z.string() })
@@ -38,6 +39,12 @@ async function requireEnrollmentWithGroup(enrollmentId: string) {
   return enrollment
 }
 
+async function subjectIdOfLevel(levelId: string) {
+  const level = await prisma.level.findUnique({ where: { id: levelId }, include: { course: true } })
+  if (!level) throw new NotFoundError('Level not found')
+  return level.course.subjectId
+}
+
 export const groupRoutes: FastifyPluginAsync = async (app) => {
   app.post('/groups', { preHandler: app.authenticate }, async (request) => {
     assertCan(request.actor!, { resource: 'group', action: 'manage' })
@@ -45,12 +52,39 @@ export const groupRoutes: FastifyPluginAsync = async (app) => {
     return prisma.group.create({ data: body })
   })
 
+  // Fixes a group created with the wrong details. Enrollments carry their
+  // group's subject, so a group with students can't move to another subject.
+  app.patch('/groups/:id', { preHandler: app.authenticate }, async (request) => {
+    assertCan(request.actor!, { resource: 'group', action: 'manage' })
+    const { id } = idParamsSchema.parse(request.params)
+    const group = await requireGroup(id)
+    if (group.archivedAt) throw new ConflictError('This group has been deleted')
+    const body = updateSchema.parse(request.body)
+
+    if (body.levelId && body.levelId !== group.levelId) {
+      const [from, to] = await Promise.all([subjectIdOfLevel(group.levelId), subjectIdOfLevel(body.levelId)])
+      const hasStudents = await prisma.enrollment.count({ where: { groupId: id, status: 'ACTIVE' } })
+      if (from !== to && hasStudents > 0) {
+        throw new ConflictError('A group with students cannot move to a level of another subject')
+      }
+    }
+    return prisma.group.update({ where: { id }, data: body })
+  })
+
+  // Archives rather than deletes -- see archiveGroup.
+  app.delete('/groups/:id', { preHandler: app.authenticate }, async (request) => {
+    assertCan(request.actor!, { resource: 'group', action: 'manage' })
+    const { id } = idParamsSchema.parse(request.params)
+    await archiveGroup(id)
+    return { ok: true }
+  })
+
   app.get('/groups', { preHandler: app.authenticate }, async (request) => {
     const actor = request.actor!
-    const where = actor.role === 'TEACHER' ? { teacherId: actor.teacherId } : undefined
     return prisma.group.findMany({
-      where,
+      where: { archivedAt: null, ...(actor.role === 'TEACHER' ? { teacherId: actor.teacherId } : {}) },
       include: { level: true, teacher: true, enrollments: { where: { status: 'ACTIVE' } } },
+      orderBy: { createdAt: 'asc' },
     })
   })
 

@@ -38,13 +38,13 @@ async function main() {
   const intermediate = await prisma.level.upsert({
     where: { courseId_name: { courseId: course.id, name: 'Intermediate' } },
     update: {},
-    create: { name: 'Intermediate', courseId: course.id },
+    create: { name: 'Intermediate', courseId: course.id, color: '#6366f1' },
   })
 
   await prisma.level.upsert({
     where: { courseId_name: { courseId: course.id, name: 'Elementary' } },
     update: {},
-    create: { name: 'Elementary', courseId: course.id },
+    create: { name: 'Elementary', courseId: course.id, color: '#10b981' },
   })
 
   let group = await prisma.group.findFirst({ where: { name: 'Intermediate 01' } })

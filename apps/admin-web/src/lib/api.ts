@@ -14,6 +14,7 @@ import type {
   GroupPaymentHistory,
   Level,
   LessonMaterialType,
+  LessonReschedule,
   LessonSession,
   Payment,
   PointActivityType,
@@ -22,6 +23,7 @@ import type {
   QuizInput,
   QuizSummary,
   Student,
+  StudentListItem,
   StudentOverview,
   StudentStatus,
   Subject,
@@ -101,27 +103,48 @@ export const teachers = {
 }
 
 export const students = {
-  list: (status?: StudentStatus) => get<Student[]>(`/students${status ? `?status=${status}` : ''}`),
+  list: (status?: StudentStatus) => get<StudentListItem[]>(`/students${status ? `?status=${status}` : ''}`),
   get: (id: string) => get<Student>(`/students/${id}`),
   overview: (id: string) => get<StudentOverview>(`/students/${id}/overview`),
   create: (data: { firstName: string; lastName: string; dob: string; phone?: string }) =>
     post<Student>('/students', data),
-  update: (id: string, data: Partial<{ firstName: string; lastName: string; phone: string; status: StudentStatus }>) =>
+  update: (
+    id: string,
+    data: Partial<{ firstName: string; lastName: string; dob: string; phone: string; status: StudentStatus }>,
+  ) =>
     patch<Student>(`/students/${id}`, data),
   issueLinkingCode: (id: string) => post<{ code: string }>(`/students/${id}/linking-code`),
+}
+
+export type GroupInput = {
+  levelId: string
+  teacherId: string
+  name: string
+  scheduleDays: string[]
+  scheduleTime: string
+  startDate: string
 }
 
 export const groups = {
   list: () => get<Group[]>('/groups'),
   get: (id: string) => get<Group>(`/groups/${id}`),
-  create: (data: {
-    levelId: string
-    teacherId: string
-    name: string
-    scheduleDays: string[]
-    scheduleTime: string
-    startDate: string
-  }) => post<Group>('/groups', data),
+  create: (data: GroupInput) => post<Group>('/groups', data),
+  update: (id: string, data: Partial<GroupInput>) => patch<Group>(`/groups/${id}`, data),
+  // Archives the group server-side: history stays, the future timetable is cleared.
+  remove: (id: string) => del<{ ok: true }>(`/groups/${id}`),
+}
+
+type NotifyResult = { notifiedChats: number | null }
+
+export const reschedules = {
+  list: (from: string, to: string) => get<LessonReschedule[]>(`/reschedules?from=${from}&to=${to}`),
+  save: (
+    groupId: string,
+    data: { originalDate: string; newDate: string; newTime: string; reason?: string; notify?: boolean },
+  ) => put<LessonReschedule & NotifyResult>(`/groups/${groupId}/reschedules`, data),
+  notify: (id: string) => post<LessonReschedule & NotifyResult>(`/reschedules/${id}/notify`),
+  cancel: (id: string, notify?: boolean) =>
+    del<{ ok: true } & NotifyResult>(`/reschedules/${id}${notify === undefined ? '' : `?notify=${notify}`}`),
 }
 
 export const enrollments = {

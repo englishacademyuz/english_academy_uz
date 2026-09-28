@@ -18,7 +18,7 @@ export type Actor = {
 
 export type Subject = { id: string; name: string; courses?: Course[] }
 export type Course = { id: string; subjectId: string; name: string; levels?: Level[]; subject?: Subject }
-export type Level = { id: string; courseId: string; name: string; course?: Course }
+export type Level = { id: string; courseId: string; name: string; color: string; course?: Course }
 
 export type Teacher = { id: string; fullName: string; userId: string }
 
@@ -42,6 +42,7 @@ export type Group = {
   scheduleTime: string
   startDate: string
   status: string
+  archivedAt?: string | null
   level?: Level
   teacher?: Teacher
   enrollments?: Enrollment[]
@@ -210,4 +211,22 @@ export type QuizDetail = {
     options: Array<{ id: string; position: number; text: string; isCorrect: boolean }>
   }>
   results: QuizResultRow[]
+}
+
+/** One regular lesson moved to another day/time. Dates are calendar days (UTC midnight ISO). */
+export type LessonReschedule = {
+  id: string
+  groupId: string
+  originalDate: string
+  newDate: string
+  newTime: string
+  reason: string | null
+  notifiedAt: string | null
+}
+
+/** A row of the students list -- the student plus their current group(s), rating and attendance. */
+export type StudentListItem = Student & {
+  groups: Array<{ id: string; name: string; level: { name: string; color: string } }>
+  points: number
+  attendance: { totals: Record<AttendanceStatus, number>; rate: number | null }
 }

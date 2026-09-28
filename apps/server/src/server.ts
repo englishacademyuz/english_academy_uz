@@ -1,7 +1,7 @@
 import { finalizeExpiredAttempts } from '@tashkurgan/domain'
 import { buildApp } from './app'
 import { config } from './config'
-import { announceQuiz, createBot } from './bot/client'
+import { announceLessonChange, announceQuiz, createBot } from './bot/client'
 
 // Long polling for now (no public HTTPS URL to receive webhooks in local
 // dev/this environment). Swapping to bot.api.setWebhook() + mounting
@@ -11,6 +11,9 @@ const bot = config.telegramBotToken ? createBot(config.telegramBotToken, { miniA
 
 const app = await buildApp({
   quizNotifier: bot ? (chatIds, quiz) => announceQuiz(bot, config.miniAppUrl, chatIds, quiz) : undefined,
+  lessonChangeNotifier: bot
+    ? (chatIds, change) => announceLessonChange(bot, config.miniAppUrl, chatIds, change)
+    : undefined,
 })
 
 app.listen({ port: config.port, host: '0.0.0.0' }).catch((err) => {

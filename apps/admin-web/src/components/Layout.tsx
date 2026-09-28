@@ -1,4 +1,4 @@
-import { NavLink, Outlet } from 'react-router-dom'
+import { NavLink, Outlet, useLocation } from 'react-router-dom'
 import {
   BookOpen,
   GraduationCap,
@@ -21,7 +21,11 @@ const navItems = [
   { to: '/subjects', label: "Oʻquv dasturi", icon: BookOpen, end: false, adminOnly: true },
 ]
 
+// The dashboard's week timetable needs seven readable columns, so it gets a wider page than the rest.
+const WIDE_PAGES = new Set(['/'])
+
 export function Layout() {
+  const { pathname } = useLocation()
   const { actor, logout } = useAuth()
   const { theme, toggleTheme } = useTheme()
 
@@ -84,7 +88,7 @@ export function Layout() {
       </aside>
 
       <main className="flex-1 overflow-y-auto px-8 py-8">
-        <div className="mx-auto max-w-5xl">
+        <div className={`mx-auto ${WIDE_PAGES.has(pathname) ? 'max-w-7xl' : 'max-w-5xl'}`}>
           <Outlet />
         </div>
       </main>

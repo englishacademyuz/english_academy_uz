@@ -52,7 +52,7 @@ function NavColumn({
   emptyLabel,
 }: {
   title: string
-  items: Array<{ id: string; name: string }>
+  items: Array<{ id: string; name: string; color?: string }>
   selectedId: string | null
   onSelect: (id: string) => void
   getCount?: (id: string) => number | undefined
@@ -90,7 +90,12 @@ function NavColumn({
                         : 'border-transparent text-slate-600 hover:bg-slate-50 dark:text-slate-300 dark:hover:bg-slate-800/60'
                     }`}
                   >
-                    <span className="truncate">{item.name}</span>
+                    <span className="flex min-w-0 items-center gap-2">
+                      {item.color && (
+                        <span className="h-2.5 w-2.5 shrink-0 rounded-full" style={{ backgroundColor: item.color }} />
+                      )}
+                      <span className="truncate">{item.name}</span>
+                    </span>
                     <span className="flex shrink-0 items-center gap-1">
                       {count !== undefined && (
                         <span

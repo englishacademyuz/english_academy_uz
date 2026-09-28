@@ -22,7 +22,7 @@ describe('enrollment', () => {
   async function seedAcademicStructure() {
     const subject = await prisma.subject.create({ data: { name: 'English' } })
     const course = await prisma.course.create({ data: { name: 'General English', subjectId: subject.id } })
-    const level = await prisma.level.create({ data: { name: 'Elementary', courseId: course.id } })
+    const level = await prisma.level.create({ data: { name: 'Elementary', courseId: course.id, color: '#6366f1' } })
     const teacherUser = await prisma.user.create({
       data: { username: 't1', role: 'TEACHER', passwordHash: 'x' },
     })

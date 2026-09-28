@@ -37,6 +37,7 @@ const buttonVariants = {
   secondary:
     'bg-white text-slate-700 border border-slate-300 hover:bg-slate-50 dark:bg-slate-900 dark:text-slate-300 dark:border-slate-700 dark:hover:bg-slate-800',
   ghost: 'text-slate-600 hover:bg-slate-100 dark:text-slate-400 dark:hover:bg-slate-800',
+  destructive: 'bg-red-600 text-white hover:bg-red-700 focus-visible:outline-red-600',
   danger:
     'bg-white text-red-600 border border-red-200 hover:bg-red-50 dark:bg-slate-900 dark:text-red-400 dark:border-red-900/50 dark:hover:bg-red-950/40',
 }
@@ -269,16 +270,20 @@ export function Modal({
   title,
   onClose,
   children,
+  size = 'md',
 }: {
-  title: string
+  title: ReactNode
   onClose: () => void
   children: ReactNode
+  size?: 'md' | 'lg'
 }) {
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/40 px-4 dark:bg-slate-950/60">
-      <div className="w-full max-w-md rounded-xl bg-white p-6 shadow-xl dark:bg-slate-900">
+      <div
+        className={`max-h-[92vh] w-full overflow-y-auto rounded-xl bg-white p-6 shadow-xl dark:bg-slate-900 ${size === 'lg' ? 'max-w-xl' : 'max-w-md'}`}
+      >
         <div className="mb-4 flex items-center justify-between">
-          <h2 className="text-lg font-semibold text-slate-900 dark:text-slate-100">{title}</h2>
+          <h2 className="min-w-0 text-lg font-semibold text-slate-900 dark:text-slate-100">{title}</h2>
           <button
             onClick={onClose}
             className="rounded-lg p-1 text-slate-400 hover:bg-slate-100 hover:text-slate-600 dark:text-slate-500 dark:hover:bg-slate-800 dark:hover:text-slate-300"

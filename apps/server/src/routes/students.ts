@@ -1,7 +1,7 @@
 import type { FastifyPluginAsync } from 'fastify'
 import { z } from 'zod'
 import { prisma } from '@tashkurgan/db'
-import { assertCan, getStudentOverview, issueLinkingCode } from '@tashkurgan/domain'
+import { assertCan, getStudentOverview, issueLinkingCode, listStudentsWithStats } from '@tashkurgan/domain'
 import { NotFoundError } from '@tashkurgan/shared'
 
 const createSchema = z.object({
@@ -14,6 +14,7 @@ const createSchema = z.object({
 const updateSchema = z.object({
   firstName: z.string().min(1).optional(),
   lastName: z.string().min(1).optional(),
+  dob: z.coerce.date().optional(),
   phone: z.string().optional(),
   status: z.enum(['ACTIVE', 'PAUSED', 'INACTIVE', 'COMPLETED', 'LEFT']).optional(),
 })
@@ -34,7 +35,7 @@ export const studentRoutes: FastifyPluginAsync = async (app) => {
   app.get('/', { preHandler: app.authenticate }, async (request) => {
     assertCan(request.actor!, { resource: 'student', action: 'view' })
     const { status } = querySchema.parse(request.query)
-    return prisma.student.findMany({ where: status ? { status } : undefined })
+    return listStudentsWithStats({ status })
   })
 
   app.get('/:id', { preHandler: app.authenticate }, async (request) => {

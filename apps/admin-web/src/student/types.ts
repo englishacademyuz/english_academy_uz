@@ -1,10 +1,10 @@
 import type { AttendanceStatus, LessonMaterialType } from '../lib/types'
 
-export type ProgressKind = 'today' | 'week' | 'month'
-
 export type GroupSummary = {
   name: string
   level: string
+  /** The level's "#rrggbb" -- the Mini App paints the schedule and lesson dates in it. */
+  levelColor: string
   teacher: string
   scheduleDays: string[]
   scheduleTime: string
@@ -31,6 +31,7 @@ export type MiniProgressSnapshot = {
 export type MiniHome = {
   student: { firstName: string; lastName: string }
   group: GroupSummary | null
+  scheduleChanges: MiniScheduleChange[]
   lastLesson: { id: string; date: string; topic: string | null } | null
   latestHomework: { lessonId: string; date: string; topic: string | null; instructions: string; dueDate: string | null } | null
   openQuizzes: MiniQuiz[]
@@ -40,6 +41,7 @@ export type MiniHome = {
 
 export type MiniLessons = {
   group: GroupSummary | null
+  scheduleChanges: MiniScheduleChange[]
   lessons: Array<{ id: string; date: string; topic: string | null; materialCount: number; hasHomework: boolean }>
   hasMore: boolean
 }
@@ -65,12 +67,22 @@ export type MiniMark = {
   maxScore: number
 }
 
-export type MiniProgress = MiniProgressSnapshot & { marks: MiniMark[] }
-
 export type MiniAttendance = {
   rate: number | null
   totals: Record<AttendanceStatus, number>
   days: Array<{ lessonId: string; date: string; topic: string | null; group: string; status: AttendanceStatus | null }>
+  /** Assessment results and finished quizzes dated in the month, newest first. */
+  marks: MiniMark[]
+}
+
+/** One month of the academic year, for the Kundalik year view. `lessons` excludes excused absences. */
+export type MiniYearMonth = {
+  year: number
+  month: number
+  lessons: number
+  attended: number
+  attendanceRate: number | null
+  markAverage: number | null
 }
 
 export type MiniProfile = {
@@ -100,3 +112,13 @@ export type AttemptState =
       question: { id: string; text: string; options: Array<{ id: string; text: string }> }
     }
   | { kind: 'completed'; review: AttemptReview }
+
+/** An upcoming lesson of the student's group moved to another day/time. Dates are UTC-midnight ISO days. */
+export type MiniScheduleChange = {
+  id: string
+  originalDate: string
+  regularTime: string
+  newDate: string
+  newTime: string
+  reason: string | null
+}

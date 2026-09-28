@@ -104,6 +104,34 @@ describe('mini app API', () => {
     expect(probe.statusCode).toBe(404)
   })
 
+  it('summarises the academic year month by month, newest first', async () => {
+    const { group, student } = await seedAcademicStructure()
+    await prisma.telegramLink.create({ data: { chatId: '905', studentId: student.id } })
+    const now = new Date()
+    const thisMonth = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 1))
+    await prisma.lessonSession.create({
+      data: {
+        groupId: group.id,
+        teacherId: group.teacherId,
+        date: thisMonth,
+        attendances: { create: [{ studentId: student.id, status: 'LATE' }] },
+      },
+    })
+
+    const { months } = (await app.inject({ method: 'GET', url: '/student/attendance/year', headers: miniAppAuth(905) })).json()
+    expect(months[0]).toEqual({
+      year: thisMonth.getUTCFullYear(),
+      month: thisMonth.getUTCMonth() + 1,
+      lessons: 1,
+      attended: 1,
+      attendanceRate: 100,
+      markAverage: null,
+    })
+    // Every month back to 1 September is listed, even ones without lessons.
+    expect(months.at(-1).month).toBe(9)
+    expect(months).toHaveLength(((now.getUTCMonth() - 8 + 12) % 12) + 1)
+  })
+
   it('reports missing data as null, not as 0%', async () => {
     const { student } = await seedAcademicStructure()
     await prisma.telegramLink.create({ data: { chatId: '904', studentId: student.id } })

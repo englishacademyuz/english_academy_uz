@@ -21,6 +21,7 @@ export async function resetDb() {
   await prisma.lessonSession.deleteMany()
   await prisma.linkingCode.deleteMany()
   await prisma.telegramLink.deleteMany()
+  await prisma.lessonReschedule.deleteMany()
   await prisma.enrollment.deleteMany()
   await prisma.group.deleteMany()
   await prisma.level.deleteMany()
@@ -34,7 +35,7 @@ export async function resetDb() {
 export async function seedAcademicStructure() {
   const subject = await prisma.subject.create({ data: { name: 'English' } })
   const course = await prisma.course.create({ data: { name: 'General English', subjectId: subject.id } })
-  const level = await prisma.level.create({ data: { name: 'Elementary', courseId: course.id } })
+  const level = await prisma.level.create({ data: { name: 'Elementary', courseId: course.id, color: '#6366f1' } })
   const { teacher } = await createTeacherUser()
   const group = await prisma.group.create({
     data: {

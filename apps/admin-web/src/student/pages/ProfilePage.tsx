@@ -1,66 +1,104 @@
+import type { ReactNode } from 'react'
 import { useQuery } from '@tanstack/react-query'
+import { Link } from 'react-router-dom'
+import { ChevronRight } from 'lucide-react'
 import { studentStatusLabel } from '../../lib/format'
 import { miniApi } from '../api'
-import { Card, CardTitle, ErrorState, InfoRow, Loading, Screen } from '../components/kit'
-import { formatDate, formatSchedule } from '../format'
+import { GroupIcon, LockIcon, TrophyIcon } from '../components/art'
+import { ErrorState, LabeledValue, Loading, Screen, SectionTitle } from '../components/kit'
+import { WeekdayRow } from '../components/schedule'
+import { formatDate, initialsOf } from '../format'
 
+/** Men: who I am, my group -- and the facts a parent looks for. */
 export function ProfilePage() {
   const profile = useQuery({ queryKey: ['mini', 'profile'], queryFn: miniApi.profile })
 
   if (profile.isLoading) return <Loading />
   if (profile.error || !profile.data) {
     return (
-      <Screen title="Profil">
+      <Screen title="Men">
         <ErrorState error={profile.error} onRetry={() => profile.refetch()} />
       </Screen>
     )
   }
 
   const { student, group, memberSince, totalPoints, linkedAccounts } = profile.data
-  const initials = `${student.firstName[0] ?? ''}${student.lastName[0] ?? ''}`
+  const status = student.status === 'ACTIVE' ? 'Faol oʻquvchi' : (studentStatusLabel[student.status] ?? student.status)
 
   return (
-    <Screen title="Profil">
-      <Card className="flex flex-col items-center py-6 text-center">
-        <div className="flex h-20 w-20 items-center justify-center rounded-full bg-gradient-to-br from-brand-500 to-indigo-400 text-2xl font-bold text-white">
-          {initials}
+    <Screen>
+      <section className="flex flex-col items-center gap-2.5 rounded-[30px] bg-tg-grape px-5 py-6 text-center text-white">
+        <div className="flex h-24 w-24 items-center justify-center rounded-full border-4 border-white bg-tg-sun font-tg-display text-4xl font-semibold text-tg-ink">
+          {initialsOf(student.firstName, student.lastName)}
         </div>
-        <p className="mt-3 text-xl font-bold text-slate-900 dark:text-white">
+        <h1 className="font-tg-display text-[28px] font-semibold leading-tight">
           {student.firstName} {student.lastName}
-        </p>
-        <p className="text-sm text-slate-500 dark:text-slate-400">{studentStatusLabel[student.status] ?? student.status}</p>
-        <div className="mt-4 rounded-2xl bg-brand-50 px-6 py-3 dark:bg-brand-500/10">
-          <p className="text-3xl font-extrabold tabular-nums text-brand-700 dark:text-brand-300">🏆 {totalPoints}</p>
-          <p className="text-xs font-medium text-brand-600 dark:text-brand-400">Reyting bali</p>
+        </h1>
+        <span
+          className={`rounded-full px-3 py-1 text-[13px] font-extrabold ${student.status === 'ACTIVE' ? 'bg-tg-leaf' : 'bg-tg-grape-2'}`}
+        >
+          {status}
+        </span>
+        <div className="mt-1.5 flex items-center gap-2.5 rounded-[20px] bg-tg-grape-2 px-[18px] py-2.5">
+          <TrophyIcon size={30} strokeWidth={2} className="text-tg-sun" />
+          <span className="font-tg-display text-[30px] font-bold tabular-nums">{totalPoints}</span>
+          <span className="text-sm font-bold text-tg-grape-soft">ball</span>
         </div>
-      </Card>
+      </section>
 
-      <Card>
-        <CardTitle icon="👤">Shaxsiy maʼlumotlar</CardTitle>
-        <div className="divide-y divide-slate-100 dark:divide-slate-800">
-          <InfoRow label="Tugʻilgan sana">{formatDate(student.dob)}</InfoRow>
-          <InfoRow label="Telefon">{student.phone || 'Kiritilmagan'}</InfoRow>
-        </div>
-      </Card>
-
-      <Card>
-        <CardTitle icon="🏫">Guruh</CardTitle>
+      <section className="flex flex-col gap-3.5 rounded-[26px] border-2 border-tg-line bg-white p-[18px]">
+        <SectionTitle>Mening guruhim</SectionTitle>
         {group ? (
-          <div className="divide-y divide-slate-100 dark:divide-slate-800">
-            <InfoRow label="Guruh">{group.name}</InfoRow>
-            <InfoRow label="Daraja">{group.level}</InfoRow>
-            <InfoRow label="Oʻqituvchi">{group.teacher}</InfoRow>
-            <InfoRow label="Darslar">{formatSchedule(group)}</InfoRow>
-            {memberSince && <InfoRow label="Guruhda">{formatDate(memberSince)} dan beri</InfoRow>}
-          </div>
+          <>
+            <div className="flex items-center gap-3">
+              <span className="flex h-14 w-14 shrink-0 items-center justify-center rounded-[18px] bg-tg-blue font-tg-display text-xl font-semibold text-white">
+                {initialsOf(group.teacher)}
+              </span>
+              <LabeledValue label="Ustozim">{group.teacher}</LabeledValue>
+            </div>
+            <div className="flex items-center gap-3">
+              <span className="flex h-14 w-14 shrink-0 items-center justify-center rounded-[18px] bg-tg-sun text-tg-ink">
+                <GroupIcon size={28} />
+              </span>
+              <LabeledValue label="Guruhim">{group.name}</LabeledValue>
+            </div>
+            <WeekdayRow days={group.scheduleDays} />
+            <span className="text-center text-[15px] font-extrabold">Darslar soat {group.scheduleTime} da boshlanadi</span>
+          </>
         ) : (
-          <p className="text-sm text-slate-500 dark:text-slate-400">Hozircha faol guruhga yozilmagan.</p>
+          <span className="text-[15px] font-bold text-tg-muted">Hozircha faol guruhga yozilmagan.</span>
         )}
-      </Card>
+      </section>
 
-      <p className="px-2 text-center text-xs text-slate-400 dark:text-slate-500">
-        Bu oʻquvchiga {linkedAccounts} ta Telegram hisob ulangan (oʻquvchi va ota-ona).
-      </p>
+      <section className="flex flex-col gap-1 rounded-[26px] bg-tg-sand p-[18px]">
+        <div className="mb-2 flex items-center gap-2">
+          <LockIcon size={22} />
+          <h2 className="font-tg-display text-xl font-semibold">Ota-onalar uchun</h2>
+        </div>
+        {group && <ParentRow label="Daraja">{group.level}</ParentRow>}
+        {memberSince && <ParentRow label="Guruhda">{formatDate(memberSince)} dan beri</ParentRow>}
+        <ParentRow label="Tugʻilgan sana">{formatDate(student.dob)}</ParentRow>
+        <ParentRow label="Telefon">{student.phone || 'Kiritilmagan'}</ParentRow>
+        <ParentRow label="Ulangan hisoblar" last>
+          {linkedAccounts} ta Telegram
+        </ParentRow>
+        <Link
+          to="/student/diary"
+          className="mt-2 flex items-center justify-between rounded-2xl bg-white px-4 py-3.5 text-base font-extrabold text-tg-blue-dark"
+        >
+          Oylik hisobotni koʻrish
+          <ChevronRight className="h-[22px] w-[22px]" strokeWidth={2.5} />
+        </Link>
+      </section>
     </Screen>
+  )
+}
+
+function ParentRow({ label, children, last }: { label: string; children: ReactNode; last?: boolean }) {
+  return (
+    <div className={`flex justify-between gap-3 py-2.5 text-[15px] ${last ? '' : 'border-b border-tg-line-strong'}`}>
+      <span className="font-bold text-tg-body">{label}</span>
+      <span className="text-right font-extrabold">{children}</span>
+    </div>
   )
 }

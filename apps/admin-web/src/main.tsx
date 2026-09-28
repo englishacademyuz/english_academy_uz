@@ -18,7 +18,8 @@ const root = createRoot(document.getElementById('root')!)
 // /student/* is the Telegram Mini App: its own tree, without the admin panel's
 // cookie login (AuthProvider) or saved theme (ThemeProvider), and it loads
 // Telegram's SDK first so the signed init data is available on first render.
-if (window.location.pathname.startsWith('/student')) {
+// Matched as a path segment -- a bare prefix check would also catch the admin's /students page.
+if (/^\/student(\/|$)/.test(window.location.pathname)) {
   // Loaded on demand, so admin users never download the Mini App (and vice versa).
   Promise.all([import('./student/telegram'), import('./student/StudentApp')]).then(
     async ([{ loadTelegramSdk }, { StudentApp }]) => {

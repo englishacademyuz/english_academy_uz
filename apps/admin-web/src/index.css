@@ -14,6 +14,41 @@
   --color-brand-700: #4338ca;
   --color-brand-800: #3730a3;
   --color-brand-900: #312e81;
+
+  /* Telegram Mini App (src/student) -- the warm, kid-friendly palette from the
+     "Toshqo'rg'on Academy — O'quvchi ilovasi" design. Prefixed so the admin
+     panel's own palette stays separate. */
+  --font-tg-display: 'Fredoka', 'Nunito', ui-rounded, sans-serif;
+  --font-tg-body: 'Nunito', 'Trebuchet MS', ui-rounded, sans-serif;
+  --color-tg-cream: #fff8ee;
+  --color-tg-sand: #f3ecdf;
+  --color-tg-line: #efe4d2;
+  --color-tg-line-strong: #e2d6c0;
+  --color-tg-dash: #d6c7ae;
+  --color-tg-faint: #a89c86;
+  --color-tg-ink: #1f2a44;
+  --color-tg-ink-2: #2c3a5c;
+  --color-tg-body: #3d4a63;
+  --color-tg-muted: #5c6680;
+  --color-tg-mist: #c5ccdd;
+  --color-tg-blue: #3b5bdb;
+  --color-tg-blue-dark: #2f4ac0;
+  --color-tg-blue-soft: #e6ecff;
+  --color-tg-grape: #5f3dc4;
+  --color-tg-grape-2: #7048e8;
+  --color-tg-grape-soft: #e5dbff;
+  --color-tg-sun: #ffd43b;
+  --color-tg-sun-soft: #fff3bf;
+  --color-tg-sun-ink: #8a5a00;
+  --color-tg-sun-body: #5c4a12;
+  --color-tg-leaf: #2f9e44;
+  --color-tg-leaf-dark: #1b6b2c;
+  --color-tg-leaf-soft: #e3f7e6;
+  --color-tg-orange: #f08c00;
+  --color-tg-rust: #c2410c;
+  --color-tg-peach: #ffe8cc;
+  --color-tg-cherry: #b42318;
+  --color-tg-cherry-soft: #ffe3e3;
 }
 
 body {

@@ -383,3 +383,14 @@ export function formatWeekRange(weekStart: Date): string {
   }
   return `${weekStart.getDate()}-${UZ_MONTHS[weekStart.getMonth()]} – ${end.getDate()}-${UZ_MONTHS[end.getMonth()]}`
 }
+
+/** Full years since `dob` -- or null for a date that isn't set/valid yet (e.g. a half-typed form field). */
+export function ageFrom(dob: string | Date, now: Date = new Date()): number | null {
+  const date = typeof dob === 'string' ? new Date(dob) : dob
+  if (Number.isNaN(date.getTime()) || date > now) return null
+  let age = now.getFullYear() - date.getFullYear()
+  const hadBirthday =
+    now.getMonth() > date.getMonth() || (now.getMonth() === date.getMonth() && now.getDate() >= date.getDate())
+  if (!hadBirthday) age -= 1
+  return age
+}

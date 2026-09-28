@@ -53,3 +53,28 @@ export function docEmbedUrl(url: URL): string | null {
   }
   return null
 }
+
+/** The video id of a YouTube link -- for its thumbnail. */
+export function youtubeId(value: string): string | null {
+  const url = parseHttpUrl(value)
+  if (!url || !YOUTUBE_HOSTS.includes(hostOf(url))) return null
+  const embed = videoEmbedUrl(url)
+  return embed ? embed.split('/embed/')[1]?.split(/[?&]/)[0] ?? null : null
+}
+
+export type DocKind = 'document' | 'spreadsheet' | 'presentation' | 'drive' | 'other'
+
+/** Which kind of Google file a link points to -- picks the tile's icon and color. */
+export function docKind(value: string): DocKind {
+  const url = parseHttpUrl(value)
+  if (!url) return 'other'
+  const host = hostOf(url)
+  if (host === 'docs.google.com') {
+    const kind = url.pathname.split('/')[1]
+    if (kind === 'document' || kind === 'spreadsheets' || kind === 'presentation') {
+      return kind === 'spreadsheets' ? 'spreadsheet' : kind
+    }
+  }
+  if (host === 'drive.google.com') return 'drive'
+  return 'other'
+}

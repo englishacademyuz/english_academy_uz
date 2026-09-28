@@ -63,3 +63,42 @@ Kerakli boʻlimni oching:`
 export function formatMiniAppUnavailable(): string {
   return "Ilova hozircha sozlanmagan. Birozdan soʻng qayta urinib koʻring."
 }
+
+const UZ_WEEKDAYS = ['Yakshanba', 'Dushanba', 'Seshanba', 'Chorshanba', 'Payshanba', 'Juma', 'Shanba']
+const UZ_MONTHS = [
+  'yanvar', 'fevral', 'mart', 'aprel', 'may', 'iyun',
+  'iyul', 'avgust', 'sentabr', 'oktabr', 'noyabr', 'dekabr',
+]
+
+/** A lesson day (stored as UTC midnight) as "Payshanba, 2-oktabr". */
+export function formatLessonDay(date: Date): string {
+  return `${UZ_WEEKDAYS[date.getUTCDay()]}, ${date.getUTCDate()}-${UZ_MONTHS[date.getUTCMonth()]}`
+}
+
+export function formatLessonChange(change: {
+  groupName: string
+  kind: 'moved' | 'restored'
+  originalDate: Date
+  regularTime: string
+  newDate: Date
+  newTime: string
+  reason: string | null
+}): string {
+  if (change.kind === 'restored') {
+    return [
+      `🔁 <b>Dars joyiga qaytdi</b>`,
+      `Guruh: <b>${escapeHtml(change.groupName)}</b>`,
+      '',
+      `Avval koʻchirilgan dars bekor qilindi. Dars odatdagidek boʻladi:`,
+      `✅ ${formatLessonDay(change.originalDate)}, soat ${change.regularTime}`,
+    ].join('\n')
+  }
+  return [
+    `📅 <b>Dars vaqti oʻzgardi</b>`,
+    `Guruh: <b>${escapeHtml(change.groupName)}</b>`,
+    '',
+    `❌ <s>${formatLessonDay(change.originalDate)}, soat ${change.regularTime}</s>`,
+    `✅ <b>${formatLessonDay(change.newDate)}, soat ${change.newTime}</b>`,
+    ...(change.reason ? ['', `Sabab: ${escapeHtml(change.reason)}`] : []),
+  ].join('\n')
+}

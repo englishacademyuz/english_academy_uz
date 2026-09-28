@@ -18,10 +18,13 @@ import { paymentRoutes } from './routes/payments'
 import { pointRoutes } from './routes/points'
 import { quizRoutes, type QuizNotifier } from './routes/quizzes'
 import { miniAppRoutes } from './routes/miniApp'
+import { scheduleRoutes, type LessonChangeNotifier } from './routes/schedule'
 
 export type BuildAppOptions = {
   /** Announces sent quizzes in Telegram; omitted (no bot) means sending just opens the quiz. */
   quizNotifier?: QuizNotifier
+  /** Tells a group's Telegram chats a lesson moved; omitted (no bot) means changes are saved silently. */
+  lessonChangeNotifier?: LessonChangeNotifier
   /** Verifies Telegram Mini App init data; defaults to the configured bot token. */
   telegramBotToken?: string
 }
@@ -51,6 +54,7 @@ export async function buildApp(options: BuildAppOptions = {}) {
   await app.register(paymentRoutes)
   await app.register(pointRoutes)
   await app.register(quizRoutes, { notifier: options.quizNotifier })
+  await app.register(scheduleRoutes, { notifier: options.lessonChangeNotifier })
   // The Telegram Mini App's API -- its own auth (Telegram init data), not the admin cookie.
   await app.register(miniAppRoutes)
 

@@ -4,8 +4,9 @@ import { prisma } from '@tashkurgan/db'
 import { looksLikeLinkingCode, redeemLinkingCode } from '@tashkurgan/domain'
 import { ConflictError, NotFoundError } from '@tashkurgan/shared'
 import type { QuizAnnouncement } from '../routes/quizzes'
+import type { LessonChangeAnnouncement } from '../routes/schedule'
 import type { BotContext } from './types'
-import { miniAppMenuKeyboard, quizStartKeyboard } from './keyboards'
+import { miniAppMenuKeyboard, openMiniAppKeyboard, quizStartKeyboard } from './keyboards'
 import * as fmt from './format'
 
 /**
@@ -122,6 +123,26 @@ export async function announceQuiz(
       })
     } catch (err) {
       console.error(`Quiz announcement to chat ${chatId} failed:`, err)
+    }
+  }
+}
+
+/** Sends "your lesson moved" to every chat of the group; one failed chat doesn't stop the rest. */
+export async function announceLessonChange(
+  bot: Bot<BotContext>,
+  miniAppUrl: string,
+  chatIds: string[],
+  change: LessonChangeAnnouncement,
+) {
+  const text = fmt.formatLessonChange(change)
+  for (const chatId of chatIds) {
+    try {
+      await bot.api.sendMessage(chatId, text, {
+        parse_mode: 'HTML',
+        ...(miniAppUrl ? { reply_markup: openMiniAppKeyboard(miniAppUrl) } : {}),
+      })
+    } catch (err) {
+      console.error(`Lesson change announcement to chat ${chatId} failed:`, err)
     }
   }
 }

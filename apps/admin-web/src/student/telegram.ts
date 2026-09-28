@@ -11,7 +11,8 @@ type TelegramWebApp = {
   close: () => void
   setHeaderColor?: (color: string) => void
   setBackgroundColor?: (color: string) => void
-  onEvent: (event: 'themeChanged', handler: () => void) => void
+  /** Bot API 7.10+; older Telegram clients don't have it. */
+  setBottomBarColor?: (color: string) => void
   BackButton: { show: () => void; hide: () => void; onClick: (cb: () => void) => void; offClick: (cb: () => void) => void }
   HapticFeedback?: { impactOccurred: (style: 'light' | 'medium') => void; notificationOccurred: (type: 'success' | 'error') => void }
 }

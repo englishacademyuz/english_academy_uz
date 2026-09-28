@@ -22,6 +22,9 @@ export type Permission =
   | { resource: 'homeworkResult'; action: 'manage'; ownerTeacherId: string }
   | { resource: 'assessment'; action: 'manage' | 'view'; ownerTeacherId: string }
   | { resource: 'quiz'; action: 'manage' | 'view'; ownerTeacherId: string }
+  // Moving a lesson to another day/time (holidays, events) -- a Teacher may do
+  // it for their own groups, since they are the one who knows about the change.
+  | { resource: 'lessonSchedule'; action: 'manage'; ownerTeacherId: string }
   | { resource: 'assessmentCategory'; action: 'manage' | 'view' }
   | { resource: 'progress'; action: 'view'; ownerTeacherId?: string }
   // Both Admin and Teacher may record/edit payments -- a small center's
@@ -42,6 +45,7 @@ export function can(actor: Actor, permission: Permission): boolean {
       case 'homeworkResult':
       case 'assessment':
       case 'quiz':
+      case 'lessonSchedule':
         return permission.ownerTeacherId === actor.teacherId
       case 'assessmentCategory':
         return permission.action === 'view'

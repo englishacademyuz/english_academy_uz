@@ -1,21 +1,31 @@
 import { useMemo, useState } from 'react'
-import { useQuery } from '@tanstack/react-query'
-import { useParams, useSearchParams } from 'react-router-dom'
-import { BookOpen, Brain, Users } from 'lucide-react'
+import { useQuery, useQueryClient } from '@tanstack/react-query'
+import { useNavigate, useParams, useSearchParams } from 'react-router-dom'
+import { BookOpen, Brain, Clock, Pencil, Trash2, Users } from 'lucide-react'
 import { groups as groupsApi } from '../lib/api'
-import { formatScheduleDays } from '../lib/format'
-import { PageHeader, Spinner, ErrorBanner, PageTabs } from '../components/ui'
+import { useAuth } from '../lib/auth'
+import { dayLabel } from '../lib/format'
+import { levelStyles } from '../lib/levelColor'
+import { Spinner, ErrorBanner, PageTabs, Button } from '../components/ui'
 import { LiveClock } from '../components/dashboard/LiveClock'
 import { TodayLessonCard } from '../components/group/TodayLessonCard'
 import { RecentSessionsCard } from '../components/group/RecentSessionsCard'
 import { StudentsTab } from '../components/group/StudentsTab'
 import { QuizTab } from '../components/group/QuizTab'
+import { DeleteGroupModal, GroupFormModal, WEEKDAYS } from '../components/group/GroupFormModal'
+import { UpcomingChanges } from '../components/group/UpcomingChanges'
 
 type GroupViewTab = 'lesson' | 'students' | 'quizzes'
 
 export function GroupDetailPage() {
   const { id } = useParams<{ id: string }>()
+  const { actor } = useAuth()
+  const isAdmin = actor?.role === 'ADMIN'
+  const navigate = useNavigate()
+  const queryClient = useQueryClient()
   const [searchParams] = useSearchParams()
+  const [editing, setEditing] = useState(false)
+  const [deleting, setDeleting] = useState(false)
   // Set when arriving from a calendar deep link (e.g. double-clicking a past
   // lesson in the weekly timetable) -- every date-aware view below opens
   // already scoped to this date instead of defaulting to today.
@@ -38,14 +48,66 @@ export function GroupDetailPage() {
   if (groupQuery.isError || !groupQuery.data) return <ErrorBanner message="Guruh topilmadi" />
 
   const group = groupQuery.data
+  const accent = levelStyles(group.level?.color)
 
   return (
     <div>
-      <PageHeader
-        title={group.name}
-        description={`${group.level?.name ?? ''} · ${group.teacher?.fullName ?? ''} · ${formatScheduleDays(group.scheduleDays)} soat ${group.scheduleTime} da`}
-        actions={<LiveClock />}
-      />
+      <div className="relative mb-6 overflow-hidden rounded-xl border border-slate-200 bg-white p-5 shadow-sm dark:border-slate-800 dark:bg-slate-900">
+        <span className="absolute inset-y-0 left-0 w-1.5" style={accent.fill} />
+        <div className="flex flex-wrap items-start justify-between gap-4 pl-2">
+          <div className="min-w-0">
+            <div className="flex flex-wrap items-center gap-2">
+              <h1 className="text-2xl font-semibold tracking-tight text-slate-900 dark:text-slate-100">{group.name}</h1>
+              {group.level && (
+                <span className="inline-flex items-center gap-1.5 rounded-full px-2.5 py-0.5 text-xs font-semibold" style={accent.soft}>
+                  <span className="h-1.5 w-1.5 rounded-full" style={accent.fill} />
+                  {group.level.name}
+                </span>
+              )}
+            </div>
+            <div className="mt-3 flex flex-wrap items-center gap-x-4 gap-y-2 text-sm text-slate-500 dark:text-slate-400">
+              <span className="flex gap-1">
+                {WEEKDAYS.map((day) => {
+                  const active = group.scheduleDays.includes(day)
+                  return (
+                    <span
+                      key={day}
+                      style={active ? accent.solid : undefined}
+                      className={`flex h-6 w-7 items-center justify-center rounded-md text-[10px] font-bold ${
+                        active ? '' : 'bg-slate-100 text-slate-400 dark:bg-slate-800 dark:text-slate-600'
+                      }`}
+                    >
+                      {dayLabel[day]}
+                    </span>
+                  )
+                })}
+              </span>
+              <span className="flex items-center gap-1.5 font-semibold" style={accent.text}>
+                <Clock className="h-4 w-4" /> {group.scheduleTime}
+              </span>
+              <span className="flex items-center gap-1.5">
+                <Users className="h-4 w-4" /> {group.enrollments?.length ?? 0} oʻquvchi
+              </span>
+              {group.teacher && <span>{group.teacher.fullName}</span>}
+            </div>
+          </div>
+          <div className="flex shrink-0 items-center gap-2">
+            {isAdmin && (
+              <>
+                <Button variant="secondary" size="sm" onClick={() => setEditing(true)}>
+                  <Pencil className="h-3.5 w-3.5" /> Tahrirlash
+                </Button>
+                <Button variant="danger" size="sm" onClick={() => setDeleting(true)} title="Guruhni oʻchirish">
+                  <Trash2 className="h-3.5 w-3.5" />
+                </Button>
+              </>
+            )}
+            <LiveClock />
+          </div>
+        </div>
+      </div>
+
+      <UpcomingChanges group={group} />
 
       <div className="mb-6">
         <PageTabs
@@ -68,6 +130,21 @@ export function GroupDetailPage() {
         <StudentsTab group={group} initialDate={deepLinkDate} />
       ) : (
         <QuizTab group={group} initialDate={deepLinkDate} />
+      )}
+
+      {editing && (
+        <GroupFormModal
+          group={group}
+          onClose={() => setEditing(false)}
+          onSaved={() => {
+            queryClient.invalidateQueries({ queryKey: ['group', id] })
+            queryClient.invalidateQueries({ queryKey: ['groups'] })
+            setEditing(false)
+          }}
+        />
+      )}
+      {deleting && (
+        <DeleteGroupModal group={group} onClose={() => setDeleting(false)} onDeleted={() => navigate('/groups')} />
       )}
     </div>
   )

@@ -1,9 +1,11 @@
 import { useQuery } from '@tanstack/react-query'
 import { Link } from 'react-router-dom'
-import { Clock, GraduationCap, School, Users } from 'lucide-react'
-import { groups as groupsApi, students as studentsApi, teachers as teachersApi } from '../lib/api'
+import { CalendarClock, Clock, GraduationCap, School, Users } from 'lucide-react'
+import { groups as groupsApi, reschedules as reschedulesApi, students as studentsApi, teachers as teachersApi } from '../lib/api'
 import { useAuth } from '../lib/auth'
-import { weekdayCode } from '../lib/schedule'
+import { toDateInputValue } from '../lib/format'
+import { levelStyles } from '../lib/levelColor'
+import { lessonsOnDay } from '../lib/schedule'
 import { Badge, Card, PageHeader, Spinner, EmptyState } from '../components/ui'
 import { LiveClock } from '../components/dashboard/LiveClock'
 import { WeeklyTimetable } from '../components/dashboard/WeeklyTimetable'
@@ -20,12 +22,17 @@ export function DashboardPage() {
   })
   const teachersQuery = useQuery({ queryKey: ['teachers'], queryFn: teachersApi.list, enabled: isAdmin })
 
+  const now = new Date()
+  const todayKey = toDateInputValue(now)
+  const tomorrowKey = toDateInputValue(new Date(now.getFullYear(), now.getMonth(), now.getDate() + 1))
+  const todayReschedules = useQuery({
+    queryKey: ['reschedules', todayKey, tomorrowKey],
+    queryFn: () => reschedulesApi.list(todayKey, tomorrowKey),
+  })
+
   if (groupsQuery.isLoading) return <Spinner />
 
-  const today = weekdayCode(new Date())
-  const todaysGroups = (groupsQuery.data ?? [])
-    .filter((g) => g.scheduleDays.includes(today))
-    .sort((a, b) => a.scheduleTime.localeCompare(b.scheduleTime))
+  const { lessons: todaysLessons } = lessonsOnDay(groupsQuery.data ?? [], todayReschedules.data ?? [], now)
 
   return (
     <div className="space-y-6">
@@ -49,38 +56,52 @@ export function DashboardPage() {
           {isAdmin ? 'Barcha guruhlarning bugungi darslari' : 'Bugun darsingiz bor guruhlar'}
         </div>
 
-        {todaysGroups.length === 0 ? (
+        {todaysLessons.length === 0 ? (
           <EmptyState title="Bugun darslar rejalashtirilmagan" description="Dam olish kunidan bahramand boʻling." />
         ) : (
           <ul className="divide-y divide-slate-100 dark:divide-slate-800">
-            {todaysGroups.map((group) => (
-              <li key={group.id}>
-                <Link
-                  to={`/groups/${group.id}`}
-                  className="flex items-center justify-between gap-4 py-3 transition-colors hover:bg-slate-50 dark:hover:bg-slate-800/60 -mx-2 px-2 rounded-lg"
-                >
-                  <div>
-                    <p className="text-sm font-medium text-slate-900 dark:text-slate-100">{group.name}</p>
-                    <p className="text-xs text-slate-500 dark:text-slate-400">
-                      {group.level?.name ?? 'Daraja'} · {group.teacher?.fullName ?? "Oʻqituvchi"}
-                    </p>
-                  </div>
-                  <div className="flex shrink-0 items-center gap-2">
-                    <Badge tone="brand">
-                      <Clock className="h-3 w-3" /> {group.scheduleTime}
-                    </Badge>
-                    <Badge tone="slate">
-                      <Users className="h-3 w-3" /> {group.enrollments?.length ?? 0}
-                    </Badge>
-                  </div>
-                </Link>
-              </li>
-            ))}
+            {todaysLessons.map(({ group, time, reschedule }) => {
+              const accent = levelStyles(group.level?.color)
+              return (
+                <li key={group.id}>
+                  <Link
+                    to={`/groups/${group.id}`}
+                    className="-mx-2 flex items-center justify-between gap-4 rounded-lg px-2 py-3 transition-colors hover:bg-slate-50 dark:hover:bg-slate-800/60"
+                  >
+                    <div className="flex min-w-0 items-center gap-3">
+                      <span className="h-9 w-1.5 shrink-0 rounded-full" style={accent.fill} />
+                      <div className="min-w-0">
+                        <p className="truncate text-sm font-medium text-slate-900 dark:text-slate-100">{group.name}</p>
+                        <p className="truncate text-xs text-slate-500 dark:text-slate-400">
+                          <span style={accent.text} className="font-medium">
+                            {group.level?.name ?? 'Daraja'}
+                          </span>{' '}
+                          · {group.teacher?.fullName ?? 'Oʻqituvchi'}
+                        </p>
+                      </div>
+                    </div>
+                    <div className="flex shrink-0 items-center gap-2">
+                      {reschedule && (
+                        <Badge tone="amber">
+                          <CalendarClock className="h-3 w-3" /> Koʻchirilgan
+                        </Badge>
+                      )}
+                      <span className="inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-xs font-semibold" style={accent.soft}>
+                        <Clock className="h-3 w-3" /> {time}
+                      </span>
+                      <Badge tone="slate">
+                        <Users className="h-3 w-3" /> {group.enrollments?.length ?? 0}
+                      </Badge>
+                    </div>
+                  </Link>
+                </li>
+              )
+            })}
           </ul>
         )}
       </Card>
 
-      {isAdmin && <WeeklyTimetable groups={groupsQuery.data ?? []} />}
+      <WeeklyTimetable groups={groupsQuery.data ?? []} />
     </div>
   )
 }

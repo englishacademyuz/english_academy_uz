@@ -2,8 +2,9 @@ import { useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { useParams } from 'react-router-dom'
 import { MiniApiError, miniApi } from '../api'
-import { Card, CardTitle, ErrorState, InfoRow, Loading, Screen } from '../components/kit'
-import { formatDateTime } from '../format'
+import { GradeFace } from '../components/art'
+import { BigButton, ErrorState, Loading, Screen, Section } from '../components/kit'
+import { formatDateTime, gradeOf } from '../format'
 import { haptic } from '../telegram'
 import type { AttemptReview, AttemptState } from '../types'
 
@@ -53,25 +54,23 @@ export function QuizPage() {
     const progress = Math.round((state.index / state.total) * 100)
     return (
       <Screen title={state.quizTitle}>
-        <div>
-          <div className="flex justify-between text-xs font-medium text-slate-500 dark:text-slate-400">
+        <div className="flex flex-col gap-1.5">
+          <div className="flex justify-between text-sm font-extrabold text-tg-muted">
             <span>
               Savol {state.index + 1} / {state.total}
             </span>
             <span>{progress}%</span>
           </div>
-          <div className="mt-1.5 h-2 overflow-hidden rounded-full bg-slate-200 dark:bg-slate-800">
-            <div className="h-full rounded-full bg-brand-500 transition-all" style={{ width: `${progress}%` }} />
+          <div className="h-3 overflow-hidden rounded-full bg-tg-sand">
+            <div className="h-full rounded-full bg-tg-blue transition-all" style={{ width: `${progress}%` }} />
           </div>
         </div>
 
-        <Card>
-          <p className="whitespace-pre-wrap text-lg font-semibold leading-snug text-slate-900 dark:text-white">
-            {state.question.text}
-          </p>
-        </Card>
+        <div className="rounded-[26px] bg-tg-ink p-5 text-white">
+          <p className="whitespace-pre-wrap font-tg-display text-[22px] font-semibold leading-snug">{state.question.text}</p>
+        </div>
 
-        <div className="space-y-2">
+        <div className="flex flex-col gap-2.5">
           {state.question.options.map((option, i) => (
             <button
               key={option.id}
@@ -80,34 +79,35 @@ export function QuizPage() {
                 haptic('tap')
                 answer.mutate(option.id)
               }}
-              className="flex w-full items-center gap-3 rounded-2xl bg-white p-4 text-left shadow-sm ring-1 ring-slate-200 active:scale-[0.99] active:bg-brand-50 disabled:opacity-60 dark:bg-slate-900 dark:ring-slate-800 dark:active:bg-brand-500/10"
+              className="flex min-h-14 w-full items-center gap-3 rounded-[20px] border-2 border-tg-line bg-white p-3.5 text-left active:scale-[0.99] active:border-tg-blue active:bg-tg-blue-soft disabled:opacity-60"
             >
-              <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-slate-100 text-sm font-bold text-slate-600 dark:bg-slate-800 dark:text-slate-300">
+              <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-[14px] bg-tg-sun font-tg-display text-lg font-bold">
                 {LETTERS[i]}
               </span>
-              <span className="text-[15px] text-slate-900 dark:text-slate-100">{option.text}</span>
+              <span className="text-base font-bold">{option.text}</span>
             </button>
           ))}
         </div>
         {answer.error && <ErrorState error={answer.error} />}
-        <p className="text-center text-xs text-slate-400">Javobni oʻzgartirib boʻlmaydi — oʻylab tanlang.</p>
+        <p className="text-center text-sm font-bold text-tg-muted">Javobni oʻzgartirib boʻlmaydi — oʻylab tanlang.</p>
       </Screen>
     )
   }
 
   if (state?.kind === 'completed') return <QuizReview review={state.review} />
 
+  const back = { to: '/student/quizzes', label: 'Testlar' }
   if (quizzes.isLoading) return <Loading />
   if (quizzes.error) {
     return (
-      <Screen title="Test">
+      <Screen back={back} title="Test">
         <ErrorState error={quizzes.error} onRetry={() => quizzes.refetch()} />
       </Screen>
     )
   }
   if (!quiz) {
     return (
-      <Screen title="Test">
+      <Screen back={back} title="Test">
         <ErrorState error={new MiniApiError('Not found', 404)} />
       </Screen>
     )
@@ -118,36 +118,32 @@ export function QuizPage() {
   const startError = start.error instanceof MiniApiError && start.error.statusCode === 409
 
   return (
-    <Screen title={quiz.title} subtitle="🧠 Test">
-      <Card>
-        <div className="divide-y divide-slate-100 dark:divide-slate-800">
-          <InfoRow label="Savollar">{quiz.questionCount} ta</InfoRow>
-          <InfoRow label="Maksimal ball">{quiz.maxPoints}</InfoRow>
-          {quiz.deadline && <InfoRow label="Muddat">{formatDateTime(quiz.deadline)} gacha</InfoRow>}
-        </div>
-      </Card>
+    <Screen back={back} eyebrow="🧠 Test" title={quiz.title}>
+      <div className="grid grid-cols-3 gap-2">
+        <Fact label="Savollar" value={`${quiz.questionCount} ta`} />
+        <Fact label="Ball" value={String(quiz.maxPoints)} />
+        <Fact label="Muddat" value={quiz.deadline ? formatDateTime(quiz.deadline).slice(0, 5) : 'Yoʻq'} />
+      </div>
 
       {closed || startError ? (
-        <Card className="text-center">
-          <p className="text-3xl">⌛</p>
-          <p className="mt-2 font-medium text-slate-700 dark:text-slate-300">Bu test yopilgan</p>
-          <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">Muddat tugaganidan keyin testni ishlab boʻlmaydi.</p>
-        </Card>
+        <div className="flex flex-col items-center gap-2 rounded-[26px] bg-tg-sand px-4 py-6 text-center">
+          <p className="text-4xl">⌛</p>
+          <p className="font-tg-display text-xl font-semibold">Bu test yopilgan</p>
+          <p className="text-[15px] font-bold text-tg-muted">Muddat tugaganidan keyin testni ishlab boʻlmaydi.</p>
+        </div>
       ) : (
         <>
           {!done && (
-            <div className="rounded-2xl bg-amber-50 p-4 text-sm leading-relaxed text-amber-900 dark:bg-amber-500/10 dark:text-amber-200">
-              ⚠️ Testni faqat <b>bir marta</b> ishlash mumkin. Har bir javob darhol saqlanadi va uni oʻzgartirib boʻlmaydi.
+            <div className="rounded-[22px] border-[3px] border-tg-sun bg-tg-sun-soft p-4 text-[15px] font-bold leading-relaxed text-tg-sun-body">
+              ⚠️ Testni faqat <b className="font-extrabold">bir marta</b> ishlash mumkin. Har bir javob darhol saqlanadi va uni oʻzgartirib
+              boʻlmaydi.
               {quiz.attempt && ' Siz testni boshlagansiz — qolgan savollardan davom etasiz.'}
+              {quiz.deadline && ` Muddat: ${formatDateTime(quiz.deadline)} gacha.`}
             </div>
           )}
-          <button
-            onClick={() => start.mutate()}
-            disabled={start.isPending}
-            className="w-full rounded-2xl bg-brand-600 py-4 text-base font-semibold text-white shadow-md active:scale-[0.99] disabled:opacity-60"
-          >
-            {start.isPending ? 'Yuklanmoqda…' : done ? 'Natijani koʻrish' : quiz.attempt ? 'Davom ettirish' : '▶️ Boshlash'}
-          </button>
+          <BigButton onClick={() => start.mutate()} disabled={start.isPending} tone={done ? 'blue' : 'green'}>
+            {start.isPending ? 'Yuklanmoqda…' : done ? 'Natijani koʻrish' : quiz.attempt ? 'Davom ettirish' : 'Boshlash'}
+          </BigButton>
           {start.error && !startError && <ErrorState error={start.error} onRetry={() => start.mutate()} />}
         </>
       )}
@@ -155,42 +151,52 @@ export function QuizPage() {
   )
 }
 
+function Fact({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="flex flex-col gap-0.5 rounded-[18px] border-2 border-tg-line bg-white p-3">
+      <span className="text-xs font-extrabold uppercase text-tg-muted">{label}</span>
+      <span className="font-tg-display text-xl font-semibold">{value}</span>
+    </div>
+  )
+}
+
 function QuizReview({ review }: { review: AttemptReview }) {
   const percentValue = review.total ? Math.round((review.correctCount / review.total) * 100) : 0
+  const grade = gradeOf(percentValue)
   return (
     <Screen title="Test yakunlandi! 🎉" subtitle={review.quizTitle}>
-      <Card className="py-6 text-center">
-        <p className="text-5xl font-extrabold tabular-nums text-slate-900 dark:text-white">
+      <section className="flex flex-col items-center gap-2 rounded-[30px] bg-tg-grape px-5 py-6 text-center text-white">
+        <GradeFace grade={grade} size={72} />
+        <p className="font-tg-display text-5xl font-bold tabular-nums">
           {review.correctCount}
-          <span className="text-2xl text-slate-400">/{review.total}</span>
+          <span className="text-2xl text-tg-grape-soft">/{review.total}</span>
         </p>
-        <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">{percentValue}% toʻgʻri javob</p>
-        <p className="mt-3 inline-block rounded-full bg-emerald-50 px-4 py-1.5 text-sm font-semibold text-emerald-700 dark:bg-emerald-500/10 dark:text-emerald-300">
-          +{review.points} ball <span className="font-normal opacity-70">/ {review.maxPoints}</span>
+        <p className="text-[15px] font-bold text-tg-grape-soft">{percentValue}% toʻgʻri javob</p>
+        <p className="mt-1 rounded-full bg-tg-sun px-4 py-1.5 text-[15px] font-extrabold text-tg-ink">
+          +{review.points} ball <span className="font-bold opacity-70">/ {review.maxPoints}</span>
         </p>
-      </Card>
+      </section>
 
-      <Card>
-        <CardTitle icon="📋">Javoblar</CardTitle>
-        <ol className="space-y-3">
+      <Section title="Javoblar">
+        <ol className="flex flex-col gap-2.5">
           {review.questions.map((q, i) => (
             <li
               key={i}
-              className={`rounded-xl p-3 ${q.isCorrect ? 'bg-emerald-50 dark:bg-emerald-500/10' : 'bg-red-50 dark:bg-red-500/10'}`}
+              className={`rounded-[20px] p-4 ${q.isCorrect ? 'bg-tg-leaf-soft' : 'bg-tg-cherry-soft'}`}
             >
-              <p className="text-sm font-medium text-slate-900 dark:text-white">
+              <p className="text-[15px] font-extrabold">
                 {q.isCorrect ? '✅' : '❌'} {i + 1}. {q.text}
               </p>
               {!q.isCorrect && (
-                <div className="mt-1.5 space-y-0.5 pl-6 text-sm">
-                  <p className="text-red-700 dark:text-red-300">Sizning javobingiz: {q.chosen ?? 'Javob berilmagan'}</p>
-                  <p className="font-semibold text-emerald-700 dark:text-emerald-300">Toʻgʻri javob: {q.correct}</p>
+                <div className="mt-1.5 flex flex-col gap-0.5 pl-6 text-sm font-bold">
+                  <p className="text-tg-cherry">Sizning javobingiz: {q.chosen ?? 'Javob berilmagan'}</p>
+                  <p className="font-extrabold text-tg-leaf-dark">Toʻgʻri javob: {q.correct}</p>
                 </div>
               )}
             </li>
           ))}
         </ol>
-      </Card>
+      </Section>
     </Screen>
   )
 }

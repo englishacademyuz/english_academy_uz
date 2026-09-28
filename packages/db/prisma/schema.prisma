@@ -208,6 +208,9 @@ model Level {
   courseId String
   course   Course  @relation(fields: [courseId], references: [id])
   name     String
+  // "#rrggbb", picked at creation so no two levels share a color -- groups,
+  // timetables and the Mini App paint a level's groups in it.
+  color    String
   groups   Group[]
 
   assessmentCategories AssessmentCategory[]
@@ -258,6 +261,9 @@ model Group {
   scheduleTime String
   startDate    DateTime
   status       GroupStatus @default(ACTIVE)
+  // Set when an admin deletes the group. It is archived, never removed: its
+  // past lessons, marks and points stay as history (see archiveGroup).
+  archivedAt   DateTime?
   createdAt    DateTime    @default(now())
   updatedAt    DateTime    @updatedAt
 
@@ -265,6 +271,7 @@ model Group {
   lessonSessions    LessonSession[]
   assessments       Assessment[]
   pointTransactions PointTransaction[]
+  reschedules       LessonReschedule[]
 
   @@map("groups")
 }
@@ -555,4 +562,26 @@ model QuizAnswer {
 
   @@unique([attemptId, questionId])
   @@map("quiz_answers")
+}
+
+// One regular lesson moved to another day and/or time (a holiday, an event):
+// the group does not meet on `originalDate` and meets on `newDate` at
+// `newTime` instead. Dates are calendar days stored as UTC midnight, the same
+// convention as LessonSession.date.
+model LessonReschedule {
+  id           String    @id @default(cuid())
+  groupId      String
+  group        Group     @relation(fields: [groupId], references: [id])
+  originalDate DateTime
+  newDate      DateTime
+  newTime      String
+  reason       String?
+  // Last time the group's Telegram chats were told about this change.
+  notifiedAt   DateTime?
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+
+  @@unique([groupId, originalDate])
+  @@index([newDate])
+  @@map("lesson_reschedules")
 }

@@ -7,9 +7,8 @@ import type {
   MiniLessonDetail,
   MiniLessons,
   MiniProfile,
-  MiniProgress,
   MiniQuiz,
-  ProgressKind,
+  MiniYearMonth,
 } from './types'
 
 const BASE_URL = import.meta.env.VITE_API_URL ?? 'http://localhost:3000'
@@ -59,8 +58,8 @@ export const miniApi = {
   lessons: (page: number) => request<MiniLessons>(`/student/lessons?page=${page}`),
   lesson: (id: string) => request<MiniLessonDetail>(`/student/lessons/${id}`),
   homework: () => request<MiniHomework[]>('/student/homework'),
-  progress: (kind: ProgressKind) => request<MiniProgress>(`/student/progress?kind=${kind}`),
   attendance: (year: number, month: number) => request<MiniAttendance>(`/student/attendance?year=${year}&month=${month}`),
+  attendanceYear: () => request<{ months: MiniYearMonth[] }>('/student/attendance/year'),
   profile: () => request<MiniProfile>('/student/profile'),
   quizzes: () => request<MiniQuiz[]>('/student/quizzes'),
   startQuiz: (id: string) => request<AttemptState>(`/student/quizzes/${id}/start`, { method: 'POST' }),

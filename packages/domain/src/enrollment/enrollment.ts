@@ -16,6 +16,7 @@ async function createEnrollment(db: Db, studentId: string, groupId: string, star
     include: { level: { include: { course: true } } },
   })
   if (!group) throw new NotFoundError('Group not found')
+  if (group.archivedAt) throw new ConflictError('This group has been deleted')
 
   const subjectId = group.level.course.subjectId
   await assertNoActiveEnrollment(db, studentId, subjectId)

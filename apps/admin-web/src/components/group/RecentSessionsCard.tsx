@@ -5,9 +5,9 @@ import { sessions as sessionsApi } from '../../lib/api'
 import { formatDate, toDateInputValue } from '../../lib/format'
 import { notifyError, notifySuccess } from '../../lib/toast'
 import type { Group, LessonSession } from '../../lib/types'
-import { MaterialPreview } from '../shared/MaterialPreview'
+import { MaterialGallery, materialLook } from '../shared/MaterialPreview'
 import { MaterialsEditor, type MaterialDraft } from '../shared/MaterialsEditor'
-import { Badge, Button, Card, EmptyState, Spinner } from '../ui'
+import { Button, Card, EmptyState, Spinner } from '../ui'
 
 export function RecentSessionsCard({ group }: { group: Group }) {
   const [expandedId, setExpandedId] = useState<string | null>(null)
@@ -46,7 +46,7 @@ export function RecentSessionsCard({ group }: { group: Group }) {
                       </p>
                       <div className="mt-1 flex flex-wrap gap-1">
                         {session.materials.length > 0 ? (
-                          <Badge tone="brand">Manbalar: {session.materials.length}</Badge>
+                          <SourceIcons materials={session.materials} />
                         ) : (
                           <span className="text-xs text-slate-400 dark:text-slate-500">Manba yoʻq</span>
                         )}
@@ -134,17 +134,32 @@ function LessonSources({ session }: { session: LessonSession }) {
   return (
     <div className="space-y-3 rounded-lg bg-slate-50 dark:bg-slate-800/60 p-4">
       {session.materials.length > 0 && (
-        <ul className="space-y-4">
-          {session.materials.map((m) => (
-            <li key={m.id}>
-              <MaterialPreview material={m} />
-            </li>
-          ))}
-        </ul>
+        <MaterialGallery materials={session.materials} />
       )}
       {session.homework && (
         <p className="text-xs text-slate-500 dark:text-slate-400">Uy vazifasi: {session.homework.instructions}</p>
       )}
     </div>
+  )
+}
+
+/** One small colored icon per source -- enough to see "2 videos, 1 doc" at a glance. */
+function SourceIcons({ materials }: { materials: LessonSession['materials'] }) {
+  return (
+    <span className="flex items-center gap-1">
+      {materials.map((m) => {
+        const look = materialLook(m)
+        const Icon = look.icon
+        return (
+          <span
+            key={m.id}
+            title={look.label}
+            className={`flex h-5 w-5 items-center justify-center rounded bg-gradient-to-br text-white ${look.tile}`}
+          >
+            <Icon className={`h-3 w-3 ${look.kind === 'youtube' ? 'fill-current' : ''}`} />
+          </span>
+        )
+      })}
+    </span>
   )
 }

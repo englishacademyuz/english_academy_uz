@@ -1,16 +1,20 @@
 import { useQuery } from '@tanstack/react-query'
+import { Link } from 'react-router-dom'
+import { ChevronRight } from 'lucide-react'
 import { miniApi } from '../api'
-import { Empty, ErrorState, LinkCard, Loading, Pill, Screen } from '../components/kit'
-import { formatDate } from '../format'
+import { HomeworkTile } from '../components/art'
+import { DayBadge, Empty, ErrorState, Loading, Screen, Section } from '../components/kit'
+import { weekdayDate } from '../format'
 
-/** Vazifa: what to do, per lesson. It's checked in class and graded under Baholar, so no status here. */
+/** Uyga vazifalar: what to do, per lesson. It's checked in class and graded in Kundalik, so no status here. */
 export function HomeworkPage() {
   const homework = useQuery({ queryKey: ['mini', 'homework'], queryFn: miniApi.homework })
+  const back = { to: '/student/lessons', label: 'Darslar' }
 
   if (homework.isLoading) return <Loading />
   if (homework.error || !homework.data) {
     return (
-      <Screen title="Uy vazifasi">
+      <Screen back={back} title="Uyga vazifalar">
         <ErrorState error={homework.error} onRetry={() => homework.refetch()} />
       </Screen>
     )
@@ -18,40 +22,45 @@ export function HomeworkPage() {
 
   const [latest, ...older] = homework.data
   return (
-    <Screen title="Uy vazifasi" subtitle="Vazifalar darsda tekshiriladi va Baholar boʻlimida koʻrinadi">
+    <Screen back={back} title="Uyga vazifalar" subtitle="Ustoz darsda tekshiradi, baho Kundalikda chiqadi">
       {!latest ? (
-        <Empty icon="🎉" title="Hozircha uy vazifasi berilmagan" />
+        <Empty icon={<span className="text-4xl">🎉</span>} title="Hozircha uyga vazifa berilmagan" />
       ) : (
         <>
-          <LinkCard to={`/student/lessons/${latest.lessonId}`} className="ring-2 ring-brand-200 dark:ring-brand-500/30">
-            <div className="flex items-center gap-2">
-              <Pill tone="brand">Eng soʻnggi</Pill>
-              <span className="text-xs text-slate-500 dark:text-slate-400">{formatDate(latest.date)}</span>
+          <Link
+            to={`/student/lessons/${latest.lessonId}`}
+            className="flex items-center gap-4 rounded-[28px] border-[3px] border-tg-sun bg-tg-sun-soft p-[18px] active:scale-[0.99]"
+          >
+            <HomeworkTile size={72} />
+            <div className="flex min-w-0 grow flex-col gap-1">
+              <span className="text-sm font-extrabold text-tg-sun-ink">ENG SOʻNGGI</span>
+              <span className="whitespace-pre-wrap font-tg-display text-xl font-semibold leading-snug">{latest.instructions}</span>
+              <span className="text-sm font-bold text-tg-sun-body">
+                {latest.dueDate ? `${weekdayDate(new Date(latest.dueDate))} gacha` : latest.topic || weekdayDate(new Date(latest.date))}
+              </span>
             </div>
-            <p className="mt-2 whitespace-pre-wrap text-[15px] font-semibold leading-relaxed text-slate-900 dark:text-white">
-              {latest.instructions}
-            </p>
-            <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">
-              {latest.topic ? `Mavzu: ${latest.topic}` : 'Mavzu kiritilmagan'}
-              {latest.dueDate && ` · Topshirish: ${formatDate(latest.dueDate)}`}
-            </p>
-          </LinkCard>
+            <ChevronRight className="h-6 w-6 shrink-0" strokeWidth={2.5} />
+          </Link>
 
           {older.length > 0 && (
-            <>
-              <h2 className="px-1 pt-2 text-sm font-semibold text-slate-500 dark:text-slate-400">Oldingi vazifalar</h2>
-              <div className="space-y-2">
+            <Section title="Oldingi vazifalar">
+              <div className="flex flex-col gap-2.5">
                 {older.map((h) => (
-                  <LinkCard key={h.lessonId} to={`/student/lessons/${h.lessonId}`}>
-                    <p className="text-xs text-slate-500 dark:text-slate-400">
-                      {formatDate(h.date)}
-                      {h.topic && ` · ${h.topic}`}
-                    </p>
-                    <p className="mt-0.5 whitespace-pre-wrap text-sm text-slate-800 dark:text-slate-200">{h.instructions}</p>
-                  </LinkCard>
+                  <Link
+                    key={h.lessonId}
+                    to={`/student/lessons/${h.lessonId}`}
+                    className="flex items-center gap-3 rounded-[22px] border-2 border-tg-line bg-white p-3.5 active:scale-[0.99]"
+                  >
+                    <DayBadge date={new Date(h.date)} />
+                    <div className="flex min-w-0 grow flex-col gap-0.5">
+                      {h.topic && <span className="truncate text-[13px] font-extrabold uppercase text-tg-muted">{h.topic}</span>}
+                      <span className="line-clamp-2 text-[15px] font-bold">{h.instructions}</span>
+                    </div>
+                    <ChevronRight className="h-5 w-5 shrink-0 text-tg-faint" strokeWidth={2.5} />
+                  </Link>
                 ))}
               </div>
-            </>
+            </Section>
           )}
         </>
       )}
