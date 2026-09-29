@@ -1,8 +1,15 @@
 import { useState } from 'react'
 import { useQueryClient } from '@tanstack/react-query'
 import { Pencil, Plus } from 'lucide-react'
-import { formatMoney, formatMonthYear, paymentStatusLabel, paymentStatusTone } from '../../lib/format'
-import type { Payment } from '../../lib/types'
+import {
+  billingMonthOf,
+  firstCycleProration,
+  formatMoney,
+  formatMonthYear,
+  paymentStatusLabel,
+  paymentStatusTone,
+} from '../../lib/format'
+import type { Enrollment, Payment } from '../../lib/types'
 import { Badge, Button, Card, EmptyState } from '../ui'
 import { PaymentModal } from '../shared/PaymentModal'
 
@@ -10,15 +17,22 @@ export function PaymentsCard({
   studentId,
   payments,
   outstanding,
+  enrollment,
 }: {
   studentId: string
   payments: Payment[]
   outstanding: number
+  /** The group the student pays for now -- its fee and payment day fill the payment form in. */
+  enrollment?: Enrollment
 }) {
   const [showAdd, setShowAdd] = useState(false)
   const [editing, setEditing] = useState<Payment | null>(null)
   const queryClient = useQueryClient()
-  const now = new Date()
+  const group = enrollment?.group ?? null
+  const suggested = group
+    ? billingMonthOf(group.startDate)
+    : { year: new Date().getFullYear(), month: new Date().getMonth() + 1 }
+  const proration = group && enrollment ? firstCycleProration(group.startDate, enrollment.startDate) : null
 
   function handleSaved() {
     queryClient.invalidateQueries({ queryKey: ['student-overview', studentId] })
@@ -83,8 +97,10 @@ export function PaymentsCard({
       {showAdd && (
         <PaymentModal
           studentId={studentId}
-          initialYear={now.getFullYear()}
-          initialMonth={now.getMonth() + 1}
+          initialYear={suggested.year}
+          initialMonth={suggested.month}
+          group={group}
+          proration={proration}
           onClose={() => setShowAdd(false)}
           onSaved={handleSaved}
         />
@@ -95,6 +111,7 @@ export function PaymentsCard({
           initialYear={editing.year}
           initialMonth={editing.month}
           existing={editing}
+          group={group}
           onClose={() => setEditing(null)}
           onSaved={handleSaved}
         />

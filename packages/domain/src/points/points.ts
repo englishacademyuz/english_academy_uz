@@ -67,6 +67,22 @@ export async function syncAssessmentPoints(
 }
 
 /**
+ * Places on a points table, highest first. Equal points share a place and the
+ * next score takes the very next one (10, 10, 8 -> 1, 1, 2), so a tie never
+ * pushes anyone off the podium.
+ */
+export function placesByPoints<T extends { points: number }>(rows: T[]): Array<T & { place: number }> {
+  const sorted = [...rows].sort((a, b) => b.points - a.points)
+  let place = 0
+  let previous: number | null = null
+  return sorted.map((row) => {
+    if (row.points !== previous) place++
+    previous = row.points
+    return { ...row, place }
+  })
+}
+
+/**
  * Per-student point totals for one Group's currently active roster, summed
  * only from transactions tagged to that Group (§51.3) -- a student's prior
  * group's points never carry into this ranking. Every active student

@@ -5,6 +5,7 @@ import { miniApi } from '../api'
 import { HomeworkTile } from '../components/art'
 import { DayBadge, Empty, ErrorState, Loading, Screen, Section } from '../components/kit'
 import { weekdayDate } from '../format'
+import { richTextToPlain } from '../../lib/richText'
 
 /** Uyga vazifalar: what to do, per lesson. It's checked in class and graded in Kundalik, so no status here. */
 export function HomeworkPage() {
@@ -34,7 +35,7 @@ export function HomeworkPage() {
             <HomeworkTile size={72} />
             <div className="flex min-w-0 grow flex-col gap-1">
               <span className="text-sm font-extrabold text-tg-sun-ink">ENG SOʻNGGI</span>
-              <span className="whitespace-pre-wrap font-tg-display text-xl font-semibold leading-snug">{latest.instructions}</span>
+              <span className="line-clamp-4 font-tg-display text-xl font-semibold leading-snug">{richTextToPlain(latest.instructions)}</span>
               <span className="text-sm font-bold text-tg-sun-body">
                 {latest.dueDate ? `${weekdayDate(new Date(latest.dueDate))} gacha` : latest.topic || weekdayDate(new Date(latest.date))}
               </span>
@@ -54,7 +55,7 @@ export function HomeworkPage() {
                     <DayBadge date={new Date(h.date)} />
                     <div className="flex min-w-0 grow flex-col gap-0.5">
                       {h.topic && <span className="truncate text-[13px] font-extrabold uppercase text-tg-muted">{h.topic}</span>}
-                      <span className="line-clamp-2 text-[15px] font-bold">{h.instructions}</span>
+                      <span className="line-clamp-2 text-[15px] font-bold">{richTextToPlain(h.instructions)}</span>
                     </div>
                     <ChevronRight className="h-5 w-5 shrink-0 text-tg-faint" strokeWidth={2.5} />
                   </Link>

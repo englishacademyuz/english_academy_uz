@@ -7,6 +7,8 @@ import { notifyError, notifySuccess } from '../../lib/toast'
 import type { Group, LessonSession } from '../../lib/types'
 import { MaterialGallery, materialLook } from '../shared/MaterialPreview'
 import { MaterialsEditor, type MaterialDraft } from '../shared/MaterialsEditor'
+import { RichText } from '../shared/RichText'
+import { isRichTextEmpty } from '../../lib/richText'
 import { Button, Card, EmptyState, Spinner } from '../ui'
 
 export function RecentSessionsCard({ group }: { group: Group }) {
@@ -123,7 +125,8 @@ function SourcesEditor({ group, session, onDone }: { group: Group; session: Less
 }
 
 function LessonSources({ session }: { session: LessonSession }) {
-  if (session.materials.length === 0 && !session.homework) {
+  const explanation = isRichTextEmpty(session.notes) ? null : session.notes
+  if (session.materials.length === 0 && !session.homework && !explanation) {
     return (
       <p className="rounded-lg bg-slate-50 dark:bg-slate-800/60 p-4 text-xs text-slate-500 dark:text-slate-400">
         Bu dars uchun manbalar kiritilmagan. Qoʻshish uchun ✏️ tugmasini bosing.
@@ -132,14 +135,22 @@ function LessonSources({ session }: { session: LessonSession }) {
   }
 
   return (
-    <div className="space-y-3 rounded-lg bg-slate-50 dark:bg-slate-800/60 p-4">
+    <div className="space-y-4 rounded-lg bg-slate-50 dark:bg-slate-800/60 p-4">
+      {explanation && <LessonText title="Tushuntirish" value={explanation} />}
       {session.materials.length > 0 && (
         <MaterialGallery materials={session.materials} />
       )}
-      {session.homework && (
-        <p className="text-xs text-slate-500 dark:text-slate-400">Uy vazifasi: {session.homework.instructions}</p>
-      )}
+      {session.homework && <LessonText title="Uy vazifasi" value={session.homework.instructions} />}
     </div>
+  )
+}
+
+function LessonText({ title, value }: { title: string; value: string }) {
+  return (
+    <section className="rounded-lg bg-white p-3 ring-1 ring-slate-200 dark:bg-slate-900 dark:ring-slate-700">
+      <h4 className="mb-1.5 text-[11px] font-semibold uppercase tracking-wide text-slate-400 dark:text-slate-500">{title}</h4>
+      <RichText value={value} />
+    </section>
   )
 }
 

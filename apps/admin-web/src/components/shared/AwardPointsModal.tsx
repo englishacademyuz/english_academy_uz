@@ -68,7 +68,7 @@ export function AwardPointsModal({
         </Field>
 
         <Field label="Ball (tuzatish uchun manfiy son ham mumkin)">
-          <Input type="number" value={pointsValue} onChange={(e) => setPointsValue(Number(e.target.value))} required />
+          <Input type="number" step={0.5} value={pointsValue} onChange={(e) => setPointsValue(Number(e.target.value))} required />
         </Field>
 
         <Field label="Izoh (ixtiyoriy)">

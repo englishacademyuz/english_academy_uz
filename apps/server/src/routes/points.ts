@@ -2,7 +2,7 @@ import type { FastifyPluginAsync } from 'fastify'
 import { z } from 'zod'
 import { prisma } from '@tashkurgan/db'
 import { assertCan, awardPoints, getGroupLeaderboard, sumPoints } from '@tashkurgan/domain'
-import { NotFoundError } from '@tashkurgan/shared'
+import { NotFoundError, isWholeOrHalf } from '@tashkurgan/shared'
 
 const studentParams = z.object({ id: z.string() })
 const groupParams = z.object({ groupId: z.string() })
@@ -10,7 +10,7 @@ const groupParams = z.object({ groupId: z.string() })
 const awardSchema = z.object({
   studentId: z.string(),
   activityType: z.enum(['HOMEWORK', 'PARTICIPATION', 'QUIZ', 'ASSESSMENT', 'ATTENDANCE', 'OTHER']),
-  points: z.number().int(),
+  points: z.number().refine(isWholeOrHalf, 'Points must be a whole or half number'),
   note: z.string().optional(),
 })
 

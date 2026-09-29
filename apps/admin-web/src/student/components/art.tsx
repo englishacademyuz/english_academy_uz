@@ -156,3 +156,40 @@ export function GradeFace({ grade, size = 54 }: { grade: Grade | null; size?: nu
     </svg>
   )
 }
+
+/** Gold, silver and bronze -- the cup colors for places 1, 2 and 3. */
+export const MEDAL = {
+  1: { tile: '#FFF3BF', cup: '#FFD43B', shine: '#FFF9DB', stand: '#FFD43B', word: 'Oltin' },
+  2: { tile: '#EEF1F6', cup: '#CED4DA', shine: '#F8F9FA', stand: '#DEE2E6', word: 'Kumush' },
+  3: { tile: '#FFE8CC', cup: '#E8935A', shine: '#FFD8B8', stand: '#F5B98A', word: 'Bronza' },
+} as const
+
+export type Podium = keyof typeof MEDAL
+
+export const isPodium = (place: number | null): place is Podium => place === 1 || place === 2 || place === 3
+
+/** A cup on a rounded tile, in the place's medal color, with the place number on it. */
+export function CupTile({ place, size = 56, tile = true }: { place: Podium; size?: number; tile?: boolean }) {
+  const m = MEDAL[place]
+  return (
+    <svg width={size} height={size} viewBox="0 0 96 96" fill="none" aria-label={`${place}-oʻrin`} className="shrink-0">
+      {tile && <rect x="4" y="4" width="88" height="88" rx="26" fill={m.tile} />}
+      <path d="M30 28h-7a9 9 0 0 0 9 15M66 28h7a9 9 0 0 1-9 15" stroke="#1F2A44" strokeWidth="5" strokeLinecap="round" />
+      <path d="M29 20h38v19a19 19 0 0 1-38 0z" fill={m.cup} stroke="#1F2A44" strokeWidth="5" strokeLinejoin="round" />
+      <path d="M37 27v10" stroke={m.shine} strokeWidth="4.5" strokeLinecap="round" />
+      <path d="M48 58v9" stroke="#1F2A44" strokeWidth="5" strokeLinecap="round" />
+      <rect x="33" y="67" width="30" height="11" rx="4" fill={m.cup} stroke="#1F2A44" strokeWidth="4.5" />
+      <text
+        x="50"
+        y="45"
+        textAnchor="middle"
+        fontFamily="Fredoka, sans-serif"
+        fontWeight="700"
+        fontSize="20"
+        fill="#1F2A44"
+      >
+        {place}
+      </text>
+    </svg>
+  )
+}

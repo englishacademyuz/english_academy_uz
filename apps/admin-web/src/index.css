@@ -96,3 +96,93 @@ body {
 .Toastify__close-button:hover {
   opacity: 1;
 }
+
+/* A lesson's explanation and homework, as written in the editor (lib/richText.ts) --
+   the same look in the editor, the past-lessons list and (with .rich-text-tg) the Mini App. */
+.rich-text {
+  @apply text-sm leading-relaxed text-slate-700 dark:text-slate-300;
+}
+.rich-text > * + * {
+  @apply mt-2;
+}
+.rich-text h3 {
+  @apply text-base font-semibold text-slate-900 dark:text-slate-100;
+}
+.rich-text h4 {
+  @apply font-semibold text-slate-900 dark:text-slate-100;
+}
+.rich-text strong,
+.rich-text b {
+  @apply font-semibold text-slate-900 dark:text-slate-100;
+}
+.rich-text ul {
+  @apply list-disc pl-5;
+}
+.rich-text ol {
+  @apply list-decimal pl-5;
+}
+.rich-text li > p {
+  @apply m-0;
+}
+.rich-text blockquote {
+  @apply border-l-4 border-brand-200 pl-3 italic text-slate-500 dark:border-brand-500/40 dark:text-slate-400;
+}
+.rich-text a {
+  @apply text-brand-600 underline dark:text-brand-400;
+}
+.rich-text table {
+  @apply w-full border-collapse overflow-hidden rounded-lg text-left;
+}
+.rich-text th,
+.rich-text td {
+  @apply border border-slate-200 px-2.5 py-1.5 align-top dark:border-slate-700;
+}
+.rich-text th {
+  @apply bg-slate-50 font-semibold text-slate-900 dark:bg-slate-800 dark:text-slate-100;
+}
+.rich-text td > p,
+.rich-text th > p {
+  @apply m-0;
+}
+
+/* The Mini App reads bigger and warmer. */
+.rich-text-tg {
+  @apply text-[17px] font-semibold leading-[1.45] text-tg-ink;
+}
+.rich-text-tg h3,
+.rich-text-tg h4,
+.rich-text-tg strong,
+.rich-text-tg b {
+  @apply font-extrabold text-tg-ink;
+}
+.rich-text-tg h3 {
+  @apply font-tg-display text-xl;
+}
+.rich-text-tg blockquote {
+  @apply border-tg-sun text-tg-body;
+}
+.rich-text-tg a {
+  @apply text-tg-blue-dark;
+}
+.rich-text-tg th,
+.rich-text-tg td {
+  @apply border-tg-line-strong px-3 py-2;
+}
+.rich-text-tg th {
+  @apply bg-tg-sun-soft font-extrabold text-tg-sun-body;
+}
+
+/* The editor itself (components/shared/RichTextEditor). */
+.rich-editor .ProseMirror {
+  @apply min-h-24 px-3 py-2.5 outline-none;
+}
+.rich-editor .ProseMirror p.is-editor-empty:first-child::before {
+  content: attr(data-placeholder);
+  @apply pointer-events-none float-left h-0 text-slate-400 dark:text-slate-500;
+}
+.rich-editor .ProseMirror .selectedCell {
+  @apply bg-brand-50 dark:bg-brand-500/10;
+}
+.rich-editor .ProseMirror .tableWrapper {
+  @apply overflow-x-auto;
+}

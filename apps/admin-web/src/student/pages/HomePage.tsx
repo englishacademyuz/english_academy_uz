@@ -5,11 +5,12 @@ import { ChevronRight } from 'lucide-react'
 import { dayKeyOf } from '../../lib/schedule'
 import { toDateInputValue } from '../../lib/format'
 import { miniApi } from '../api'
-import { ClockIcon, GradeFace, HomeworkTile, TrophyIcon } from '../components/art'
+import { richTextToPlain } from '../../lib/richText'
+import { ClockIcon, CupTile, GradeFace, HomeworkTile, MEDAL, TrophyIcon, isPodium, type Podium } from '../components/art'
 import { ErrorState, LinkRow, Loading, Screen, SectionTitle } from '../components/kit'
 import { ScheduleChanges, nextLesson, relativeDay } from '../components/schedule'
 import { GRADE, MONTHS, averageOf, capitalize, firstName, formatDateTime, gradeOf, initialsOf, weekdayDate } from '../format'
-import type { GroupSummary, MiniHome, MiniScheduleChange } from '../types'
+import type { GroupSummary, MiniGroupRanking, MiniHome, MiniScheduleChange } from '../types'
 
 export function HomePage() {
   const home = useQuery({ queryKey: ['mini', 'home'], queryFn: miniApi.home })
@@ -23,7 +24,17 @@ export function HomePage() {
     )
   }
 
-  const { student, group, scheduleChanges, lastLesson, latestHomework, openQuizzes, monthProgress, totalPoints } = home.data
+  const {
+    student,
+    group,
+    scheduleChanges,
+    lastLesson,
+    latestHomework,
+    openQuizzes,
+    monthProgress,
+    totalPoints,
+    groupRanking,
+  } = home.data
 
   return (
     <div className="flex flex-col gap-[18px] px-[18px] pb-8 pt-5">
@@ -41,7 +52,9 @@ export function HomePage() {
         </Link>
       </header>
 
-      <PointsCard total={totalPoints} thisMonth={monthProgress.points} />
+      <PointsCard total={totalPoints} thisMonth={monthProgress.points} ranking={groupRanking} />
+
+      {groupRanking && groupRanking.rows.length > 0 && <GroupRanking ranking={groupRanking} />}
 
       {group && <Countdown group={group} changes={scheduleChanges} lastLesson={lastLesson} />}
 
@@ -68,35 +81,178 @@ export function HomePage() {
       {latestHomework && <HomeworkCard homework={latestHomework} />}
 
       <MonthTiles progress={monthProgress} />
+
     </div>
   )
 }
 
-function PointsCard({ total, thisMonth }: { total: number; thisMonth: number }) {
+function PointsCard({
+  total,
+  thisMonth,
+  ranking,
+}: {
+  total: number
+  thisMonth: number
+  ranking: MiniGroupRanking | null
+}) {
   return (
-    <section className="flex items-center gap-4 rounded-[28px] bg-tg-grape p-5 text-white">
-      <div className="flex h-[76px] w-[76px] shrink-0 items-center justify-center rounded-3xl bg-tg-sun text-tg-ink">
-        <TrophyIcon size={44} cupFill="#FFF3BF" />
+    <section className="flex flex-col gap-4 rounded-[28px] bg-tg-grape p-5 text-white">
+      <div className="flex items-center gap-4">
+        <div className="flex h-[76px] w-[76px] shrink-0 items-center justify-center rounded-3xl bg-tg-sun text-tg-ink">
+          <TrophyIcon size={44} cupFill="#FFF3BF" />
+        </div>
+        <div className="flex min-w-0 grow flex-col gap-0.5">
+          <span className="text-[15px] font-bold text-tg-grape-soft">Mening ballarim</span>
+          <span className="font-tg-display text-5xl font-bold leading-none tabular-nums">{total}</span>
+          <span className="mt-1 text-sm font-bold">
+            {thisMonth === 0 ? (
+              'Bu oy hali ball yoʻq'
+            ) : (
+              <>
+                Bu oy{' '}
+                <span className="rounded-full bg-tg-sun px-2 py-0.5 text-tg-ink">
+                  {thisMonth > 0 ? '+' : ''}
+                  {thisMonth} ball
+                </span>{' '}
+                yigʻdim
+              </>
+            )}
+          </span>
+        </div>
       </div>
-      <div className="flex min-w-0 grow flex-col gap-0.5">
-        <span className="text-[15px] font-bold text-tg-grape-soft">Mening ballarim</span>
-        <span className="font-tg-display text-5xl font-bold leading-none tabular-nums">{total}</span>
-        <span className="mt-1 text-sm font-bold">
-          {thisMonth === 0 ? (
-            'Bu oy hali ball yoʻq'
-          ) : (
-            <>
-              Bu oy{' '}
-              <span className="rounded-full bg-tg-sun px-2 py-0.5 text-tg-ink">
-                {thisMonth > 0 ? '+' : ''}
-                {thisMonth} ball
-              </span>{' '}
-              yigʻdim
-            </>
-          )}
+      {ranking?.myPlace != null && <MyPlace ranking={ranking} />}
+    </section>
+  )
+}
+
+/** A cup only goes to a place someone actually earned points for -- a fresh group, all on 0, has no winners yet. */
+const cupFor = (place: number | null, points: number) => (points > 0 && isPodium(place) ? place : null)
+
+/** "Guruhda 2-oʻrin" -- the student's own place, right under their points. */
+function MyPlace({ ranking }: { ranking: MiniGroupRanking }) {
+  const cup = cupFor(ranking.myPlace, ranking.myPoints)
+  return (
+    <div className="flex items-center gap-3 rounded-[20px] bg-tg-grape-2 p-2.5 pr-4">
+      {cup ? (
+        <CupTile place={cup} size={52} />
+      ) : (
+        <span className="flex h-[52px] w-[52px] shrink-0 items-center justify-center rounded-[16px] bg-white/15 font-tg-display text-2xl font-bold">
+          {ranking.myPlace}
+        </span>
+      )}
+      <div className="flex min-w-0 grow flex-col">
+        <span className="font-tg-display text-[22px] font-semibold leading-tight">Guruhda {ranking.myPlace}-oʻrin</span>
+        <span className="text-[13px] font-bold text-tg-grape-soft">
+          {cup ? `${MEDAL[cup].word} kubok! ` : ''}
+          {ranking.rows.length} ta oʻquvchi orasida
         </span>
       </div>
+    </div>
+  )
+}
+
+const COLLAPSED_ROWS = 5
+
+/** The whole group's table: a podium for the top three places, then everyone with their points. */
+function GroupRanking({ ranking }: { ranking: MiniGroupRanking }) {
+  const [expanded, setExpanded] = useState(false)
+  const { rows } = ranking
+  // Collapsed, the list keeps the first rows plus the student's own, wherever it is.
+  const visible = expanded ? rows : rows.filter((row, i) => i < COLLAPSED_ROWS || row.isMe)
+
+  return (
+    <section className="flex flex-col gap-3">
+      <SectionTitle>Guruh reytingi</SectionTitle>
+      <div className="flex flex-col gap-3 rounded-[28px] border-2 border-tg-line bg-white p-4">
+        <PodiumView rows={rows} />
+        <ol className="flex flex-col gap-1.5">
+          {visible.map((row, i) => {
+            const cup = cupFor(row.place, row.points)
+            const gap = !expanded && i > 0 && rows.indexOf(row) - rows.indexOf(visible[i - 1]) > 1
+            return (
+              <li key={row.name + row.place} className="contents">
+                {gap && <span className="text-center text-sm font-extrabold leading-none text-tg-faint">⋮</span>}
+                <div
+                  className={`flex items-center gap-3 rounded-[18px] px-2.5 py-2 ${
+                    row.isMe ? 'bg-tg-grape-soft ring-2 ring-inset ring-tg-grape-2' : 'bg-tg-cream'
+                  }`}
+                >
+                  {cup ? (
+                    <CupTile place={cup} size={36} />
+                  ) : (
+                    <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-tg-sand font-tg-display text-lg font-semibold text-tg-muted">
+                      {row.place}
+                    </span>
+                  )}
+                  <span className={`min-w-0 grow truncate text-base font-extrabold ${row.isMe ? 'text-tg-grape' : ''}`}>
+                    {row.name}
+                    {row.isMe && <span className="ml-1.5 text-[13px] font-bold text-tg-grape-2">(men)</span>}
+                  </span>
+                  <span className="shrink-0 font-tg-display text-xl font-semibold tabular-nums">
+                    {row.points}
+                    <span className="ml-1 font-tg-body text-xs font-bold text-tg-muted">ball</span>
+                  </span>
+                </div>
+              </li>
+            )
+          })}
+        </ol>
+        {rows.length > visible.length || expanded ? (
+          <button
+            onClick={() => setExpanded((e) => !e)}
+            className="rounded-[18px] border-2 border-tg-line py-3 text-base font-extrabold text-tg-blue-dark active:scale-[0.99]"
+          >
+            {expanded ? 'Qisqaroq koʻrsatish' : `Hammasini koʻrish (${rows.length})`}
+          </button>
+        ) : null}
+      </div>
     </section>
+  )
+}
+
+const STAND_HEIGHT: Record<Podium, number> = { 1: 76, 2: 54, 3: 38 }
+
+/** Places 2 · 1 · 3 on stands of matching height. Everyone tied on a place shares its stand. */
+function PodiumView({ rows }: { rows: MiniGroupRanking['rows'] }) {
+  const winners = ([2, 1, 3] as const).map((place) => ({
+    place,
+    rows: rows.filter((row) => row.place === place && row.points > 0),
+  }))
+  if (winners.every((w) => w.rows.length === 0)) {
+    return (
+      <div className="flex flex-col items-center gap-1 rounded-[22px] bg-tg-sun-soft px-4 py-5 text-center">
+        <span className="font-tg-display text-xl font-semibold text-tg-sun-body">Hali hech kim ball yigʻmagan</span>
+        <span className="text-sm font-bold text-tg-sun-ink">Birinchi kubok seniki boʻlishi mumkin!</span>
+      </div>
+    )
+  }
+
+  return (
+    <div className="grid grid-cols-3 items-end gap-2 rounded-[22px] bg-tg-cream px-2 pt-3">
+      {winners.map(({ place, rows: tied }) => (
+        <div key={place} className="flex min-w-0 flex-col items-center gap-1">
+          {tied.length > 0 && (
+            <>
+              <CupTile place={place} size={place === 1 ? 64 : 52} tile={false} />
+              <span
+                className={`max-w-full truncate text-center text-sm font-extrabold ${
+                  tied.some((r) => r.isMe) ? 'text-tg-grape' : ''
+                }`}
+              >
+                {tied.some((r) => r.isMe) ? 'Sen' : tied[0].name.split(' ')[0]}
+                {tied.length > 1 && ` +${tied.length - 1}`}
+              </span>
+            </>
+          )}
+          <div
+            className="flex w-full items-start justify-center rounded-t-[16px] pt-1.5 font-tg-display text-lg font-bold tabular-nums text-tg-ink"
+            style={{ height: STAND_HEIGHT[place], backgroundColor: tied.length > 0 ? MEDAL[place].stand : '#EFE4D2' }}
+          >
+            {tied.length > 0 ? tied[0].points : ''}
+          </div>
+        </div>
+      ))}
+    </div>
   )
 }
 
@@ -196,7 +352,7 @@ function HomeworkCard({ homework }: { homework: NonNullable<MiniHome['latestHome
       <HomeworkTile />
       <div className="flex min-w-0 grow flex-col gap-1">
         <span className="text-sm font-extrabold text-tg-sun-ink">UYGA VAZIFA</span>
-        <span className="line-clamp-3 font-tg-display text-[22px] font-semibold leading-[1.15]">{homework.instructions}</span>
+        <span className="line-clamp-3 font-tg-display text-[22px] font-semibold leading-[1.15]">{richTextToPlain(homework.instructions)}</span>
         <span className="text-sm font-bold text-tg-sun-body">{due}</span>
       </div>
       <ChevronRight className="h-6 w-6 shrink-0" strokeWidth={2.5} />

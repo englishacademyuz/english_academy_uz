@@ -1,5 +1,5 @@
 import { prisma, type AssessmentType } from '@tashkurgan/db'
-import { NotFoundError, ValidationError } from '@tashkurgan/shared'
+import { NotFoundError, ValidationError, pointsForPercentage } from '@tashkurgan/shared'
 import { syncAssessmentPoints } from '../points/points'
 
 /** The one place raw scores are normalized to a percentage (§51.1) -- everything that averages across differing max scores goes through this. */
@@ -8,9 +8,9 @@ export function toPercentage(score: number, maxScore: number): number {
   return (score / maxScore) * 100
 }
 
-/** How many Rating points a score is worth, scaled linearly off the category's pointsWorth -- a 50% result on a 2-point category earns 1 point, regardless of whether the category is graded 0-5 or 0-100. */
+/** How many Rating points a score is worth, scaled linearly off the category's pointsWorth and rounded to a half point -- a 50% result on a 2-point category earns 1 point, regardless of whether the category is graded 0-5 or 0-100. */
 export function pointsForScore(pointsWorth: number, score: number, maxScore: number): number {
-  return Math.round((pointsWorth * toPercentage(score, maxScore)) / 100)
+  return pointsForPercentage(pointsWorth, toPercentage(score, maxScore))
 }
 
 export function averagePercentage(scores: Array<{ score: number; maxScore: number }>): number | null {

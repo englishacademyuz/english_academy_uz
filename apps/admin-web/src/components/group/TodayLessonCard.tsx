@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { lazy, Suspense, useEffect, useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { CheckCircle2 } from 'lucide-react'
 import { sessions as sessionsApi } from '../../lib/api'
@@ -6,7 +6,16 @@ import { toDateInputValue, todayInputValue } from '../../lib/format'
 import { notifyError, notifySuccess } from '../../lib/toast'
 import type { Group } from '../../lib/types'
 import { MaterialsEditor, type MaterialDraft } from '../shared/MaterialsEditor'
+import { isRichTextEmpty } from '../../lib/richText'
 import { Button, Card, Field, Input } from '../ui'
+
+// The editor (TipTap) is heavy and only needed here -- load it with the lesson form, not the whole panel.
+const RichTextEditor = lazy(() => import('../shared/RichTextEditor').then((m) => ({ default: m.RichTextEditor })))
+
+/** Holds the editor's place while it loads, so the form doesn't jump. */
+const EditorPlaceholder = () => (
+  <div className="h-[135px] animate-pulse rounded-lg border border-slate-200 bg-slate-50 dark:border-slate-700 dark:bg-slate-800/60" />
+)
 
 export function TodayLessonCard({ group, initialDate }: { group: Group; initialDate?: Date }) {
   const queryClient = useQueryClient()
@@ -42,11 +51,12 @@ export function TodayLessonCard({ group, initialDate }: { group: Group; initialD
     mutationFn: () =>
       sessionsApi.record(group.id, {
         date,
-        topic: topic || undefined,
-        notes: notes || undefined,
+        // Sent even when cleared, so wiping the topic or explanation actually removes it.
+        topic: topic.trim(),
+        notes: isRichTextEmpty(notes) ? '' : notes,
         // Always sent, so removing every source actually clears them.
         materials,
-        homework: homeworkInstructions ? { instructions: homeworkInstructions } : undefined,
+        homework: isRichTextEmpty(homeworkInstructions) ? undefined : { instructions: homeworkInstructions },
       }),
     onSuccess: () => {
       notifySuccess('Dars saqlandi')
@@ -69,7 +79,8 @@ export function TodayLessonCard({ group, initialDate }: { group: Group; initialD
             setDate(e.target.value)
             setSavedAt(null)
           }}
-          className="w-40"
+          aria-label="Dars sanasi"
+          className="w-auto! py-1! text-xs"
         />
       </div>
 
@@ -80,22 +91,31 @@ export function TodayLessonCard({ group, initialDate }: { group: Group; initialD
         }}
         className="space-y-5"
       >
-        <div className="grid gap-4 sm:grid-cols-2">
-          <Field label="Mavzu">
-            <Input value={topic} onChange={(e) => setTopic(e.target.value)} placeholder="Present Perfect" />
-          </Field>
-          <Field label="Izohlar">
-            <Input value={notes} onChange={(e) => setNotes(e.target.value)} placeholder="Ixtiyoriy" />
-          </Field>
+        <Field label="Mavzu">
+          <Input value={topic} onChange={(e) => setTopic(e.target.value)} placeholder="Present Perfect" />
+        </Field>
+
+        <div>
+          <span className="mb-1 block text-sm font-medium text-slate-700 dark:text-slate-300">Tushuntirish</span>
+          <Suspense fallback={<EditorPlaceholder />}>
+            <RichTextEditor
+              value={notes}
+              onChange={setNotes}
+              placeholder="Darsda nima oʻtildi: qoida, misollar, jadval…"
+            />
+          </Suspense>
         </div>
 
-        <Field label="Uy vazifasi">
-          <Input
-            value={homeworkInstructions}
-            onChange={(e) => setHomeworkInstructions(e.target.value)}
-            placeholder="Ish daftari, 5-bob, 4–7-mashqlar"
-          />
-        </Field>
+        <div>
+          <span className="mb-1 block text-sm font-medium text-slate-700 dark:text-slate-300">Uy vazifasi</span>
+          <Suspense fallback={<EditorPlaceholder />}>
+            <RichTextEditor
+              value={homeworkInstructions}
+              onChange={setHomeworkInstructions}
+              placeholder="Ish daftari, 5-bob, 4–7-mashqlar — yoki «Lugʻat» tugmasi bilan soʻzlar jadvali"
+            />
+          </Suspense>
+        </div>
 
         <div>
           <span className="mb-1 block text-sm font-medium text-slate-700 dark:text-slate-300">Materiallar</span>

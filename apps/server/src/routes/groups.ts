@@ -11,6 +11,7 @@ const createSchema = z.object({
   scheduleDays: z.array(z.string()).min(1),
   scheduleTime: z.string().min(1),
   startDate: z.coerce.date(),
+  monthlyFee: z.number().int().min(0).optional(),
 })
 const updateSchema = createSchema.partial()
 

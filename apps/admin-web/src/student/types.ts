@@ -37,6 +37,7 @@ export type MiniHome = {
   openQuizzes: MiniQuiz[]
   monthProgress: MiniProgressSnapshot
   totalPoints: number
+  groupRanking: MiniGroupRanking | null
 }
 
 export type MiniLessons = {
@@ -51,6 +52,7 @@ export type MiniLessonDetail = {
   date: string
   topic: string | null
   group: string
+  notes: string | null
   materials: Array<{ id: string; type: LessonMaterialType; content: string }>
   homework: { instructions: string; dueDate: string | null } | null
 }
@@ -122,3 +124,8 @@ export type MiniScheduleChange = {
   newTime: string
   reason: string | null
 }
+
+/** One classmate on the group's points table -- names only, the student's own row flagged. */
+export type MiniRankRow = { name: string; points: number; place: number; isMe: boolean }
+
+export type MiniGroupRanking = { myPlace: number | null; myPoints: number; rows: MiniRankRow[] }

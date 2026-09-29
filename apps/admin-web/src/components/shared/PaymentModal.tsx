@@ -1,21 +1,44 @@
 import { useState } from 'react'
 import { useMutation } from '@tanstack/react-query'
 import { payments as paymentsApi } from '../../lib/api'
-import { formatMonthYear, type FirstCycleProration } from '../../lib/format'
+import {
+  dayMonthYearLabel,
+  formatMonthYear,
+  paymentDueDate,
+  paymentStatusLabel,
+  paymentStatusTone,
+  type FirstCycleProration,
+} from '../../lib/format'
 import { notifyError, notifySuccess } from '../../lib/toast'
-import type { Payment } from '../../lib/types'
-import { Button, Field, Input, Modal } from '../ui'
+import type { Payment, PaymentStatus } from '../../lib/types'
+import { Badge, Button, Field, Input, Modal, MoneyInput, Select } from '../ui'
 
-// Placeholder "full month" fee the amount fields default to -- there's no stored per-group
-// tariff (§51.4 keeps Payment.amountDue a free-entry Money value), so a partial first cycle's
-// suggested amount is this default scaled by the proration ratio, not a real configured price.
-const DEFAULT_MONTHLY_FEE = 500_000
+type MonthKey = { year: number; month: number }
+
+const keyOf = ({ year, month }: MonthKey) => `${year}-${month}`
+const addMonths = ({ year, month }: MonthKey, by: number): MonthKey => {
+  const d = new Date(year, month - 1 + by, 1)
+  return { year: d.getFullYear(), month: d.getMonth() + 1 }
+}
+
+/** The months offered in the picker: a year back and a couple ahead of the suggested one, newest first. */
+const monthChoices = (around: MonthKey) => Array.from({ length: 15 }, (_, i) => addMonths(around, 2 - i))
+
+/** What the status will be once saved -- the same rule the server applies. */
+function statusOf(amountDue: number, amountPaid: number): PaymentStatus {
+  if (amountPaid >= amountDue) return 'PAID'
+  return amountPaid > 0 ? 'PARTIAL' : 'DEBT'
+}
 
 /**
  * Shared by the student profile's Payments card and the group roster's
  * Toʻlovlar view. With `existing` it edits that month's row in place;
  * without it, it upserts a new (Student, year, month) row (§51.4) -- the
  * server-side `record` call already overwrites if that month exists.
+ *
+ * Students almost always pay the whole month, so everything is filled in from
+ * the group's fee up front and "Toʻladi" records it in one click; a partial
+ * payment is the exception the admin types in.
  */
 export function PaymentModal({
   studentId,
@@ -23,6 +46,7 @@ export function PaymentModal({
   initialYear,
   initialMonth,
   existing,
+  group,
   proration,
   onClose,
   onSaved,
@@ -32,41 +56,71 @@ export function PaymentModal({
   initialYear: number
   initialMonth: number
   existing?: Payment | null
-  /** Set when this row is the student's first billing cycle and they joined the group mid-cycle
-   * -- e.g. a group starting 5 September with a student joining the 15th owes only 20 of that
-   * cycle's 30 days. Ignored once `existing` is set, since an already-recorded amount was a
-   * deliberate choice, not something to silently overwrite. */
+  /** The group the student pays for: its fee fills the amounts in, its start day is the payment day. */
+  group?: { startDate: string; monthlyFee: number } | null
+  /** The student's first billing cycle, when they joined the group mid-cycle -- e.g. a group
+   * starting 5 September with a student joining the 15th owes only 20 of that cycle's 30 days.
+   * Applied only while that cycle's month is the one picked, and never to an `existing` row,
+   * whose recorded amount was a deliberate choice. */
   proration?: FirstCycleProration | null
   onClose: () => void
   onSaved: () => void
 }) {
-  const applyProration = !existing && !!proration
-  const [year, setYear] = useState(existing?.year ?? initialYear)
-  const [month, setMonth] = useState(existing?.month ?? initialMonth)
-  const [amountDue, setAmountDue] = useState(() => {
-    if (existing) return existing.amountDue
-    if (proration) return Math.round((DEFAULT_MONTHLY_FEE * proration.ratio) / 1000) * 1000
-    return DEFAULT_MONTHLY_FEE
-  })
-  const [amountPaid, setAmountPaid] = useState(existing?.amountPaid ?? 0)
+  const initial = { year: existing?.year ?? initialYear, month: existing?.month ?? initialMonth }
+  const [picked, setPicked] = useState<MonthKey>(initial)
+  const fee = group?.monthlyFee ?? 0
+
+  const prorated = (m: MonthKey) => !existing && !!proration && proration.year === m.year && proration.month === m.month
+  const suggestedDue = (m: MonthKey) => (prorated(m) ? Math.round((fee * proration!.ratio) / 1000) * 1000 : fee)
+
+  const [amountDue, setAmountDue] = useState(() => existing?.amountDue ?? suggestedDue(initial))
+  const [amountPaid, setAmountPaid] = useState(() => existing?.amountPaid ?? suggestedDue(initial))
+  // Until the admin types a paid amount of their own, it follows the due amount -- a full payment.
+  const [paidTouched, setPaidTouched] = useState(!!existing)
+  const [dueTouched, setDueTouched] = useState(!!existing)
   const [note, setNote] = useState(existing?.note ?? '')
+
+  function pickMonth(key: string) {
+    const [year, month] = key.split('-').map(Number)
+    const next = { year, month }
+    setPicked(next)
+    if (!dueTouched) {
+      setAmountDue(suggestedDue(next))
+      if (!paidTouched) setAmountPaid(suggestedDue(next))
+    }
+  }
+
+  function changeDue(value: number) {
+    setDueTouched(true)
+    setAmountDue(value)
+    if (!paidTouched) setAmountPaid(value)
+  }
+
+  function changePaid(value: number) {
+    setPaidTouched(true)
+    setAmountPaid(value)
+  }
 
   const saveMutation = useMutation({
     mutationFn: () =>
       existing
         ? paymentsApi.update(existing.id, { amountDue, amountPaid, note: note || undefined })
-        : paymentsApi.record(studentId, { year, month, amountDue, amountPaid, note: note || undefined }),
+        : paymentsApi.record(studentId, { ...picked, amountDue, amountPaid, note: note || undefined }),
     onSuccess: () => {
-      notifySuccess(existing ? "Toʻlov yangilandi" : "Toʻlov saqlandi")
+      notifySuccess(existing ? 'Toʻlov yangilandi' : 'Toʻlov saqlandi')
       onSaved()
     },
-    onError: (err) => notifyError(err, existing ? "Toʻlovni yangilab boʻlmadi" : "Toʻlovni saqlab boʻlmadi"),
+    onError: (err) => notifyError(err, existing ? 'Toʻlovni yangilab boʻlmadi' : 'Toʻlovni saqlab boʻlmadi'),
   })
 
   const titlePrefix = studentName ? `${studentName} — ` : ''
   const title = existing
     ? `${titlePrefix}${formatMonthYear(existing.month, existing.year)} toʻlovini tahrirlash`
     : `${titlePrefix}Toʻlov qoʻshish`
+  const status = statusOf(amountDue, amountPaid)
+  const dueDate = group ? paymentDueDate(group.startDate, picked.year, picked.month) : null
+  const chip =
+    'rounded-md px-2 py-0.5 text-xs font-medium text-brand-700 hover:bg-brand-50 dark:text-brand-300 dark:hover:bg-brand-500/10'
 
   return (
     <Modal title={title} onClose={onClose}>
@@ -78,49 +132,71 @@ export function PaymentModal({
         className="space-y-4"
       >
         {!existing && (
-          <div className="grid grid-cols-2 gap-4">
-            <Field label="Oy (1–12)">
-              <Input type="number" min={1} max={12} value={month} onChange={(e) => setMonth(Number(e.target.value))} required />
-            </Field>
-            <Field label="Yil">
-              <Input type="number" value={year} onChange={(e) => setYear(Number(e.target.value))} required />
-            </Field>
-          </div>
+          <Field label="Qaysi oy uchun">
+            <Select value={keyOf(picked)} onChange={(e) => pickMonth(e.target.value)}>
+              {monthChoices(initial).map((m) => (
+                <option key={keyOf(m)} value={keyOf(m)}>
+                  {formatMonthYear(m.month, m.year)}
+                </option>
+              ))}
+            </Select>
+          </Field>
+        )}
+        {dueDate && (
+          <p className="-mt-2 text-xs text-slate-500 dark:text-slate-400">
+            Toʻlov kuni: <span className="font-medium text-slate-700 dark:text-slate-300">{dayMonthYearLabel(dueDate)}</span>
+          </p>
         )}
 
-        {applyProration && (
+        {prorated(picked) && (
           <p className="rounded-lg bg-amber-50 px-3 py-2 text-xs text-amber-700 dark:bg-amber-500/10 dark:text-amber-400">
-            Oʻquvchi ushbu oyning bir qismida qoʻshilgan — {proration.cycleDays} kunlik oydan{' '}
-            {proration.enrolledDays} kuni hisoblanadi. Belgilangan summa shunga mos taklif qilindi, xohlasangiz
-            oʻzgartiring.
+            Oʻquvchi bu oyning oʻrtasida qoʻshilgan — {proration!.cycleDays} kundan {proration!.enrolledDays} kuni
+            hisoblandi.
+          </p>
+        )}
+        {!existing && fee === 0 && (
+          <p className="rounded-lg bg-slate-50 px-3 py-2 text-xs text-slate-500 dark:bg-slate-800/60 dark:text-slate-400">
+            Guruh uchun oylik narx belgilanmagan — guruhni tahrirlab narxni kiriting, keyin summa oʻzi toʻldiriladi.
           </p>
         )}
 
         <div className="grid grid-cols-2 gap-4">
           <Field label="Belgilangan summa">
-            <Input type="number" min={0} value={amountDue} onChange={(e) => setAmountDue(Number(e.target.value))} required />
+            <MoneyInput value={amountDue} onChange={changeDue} required />
           </Field>
-          <Field label="Toʻlangan summa">
-            <Input type="number" min={0} value={amountPaid} onChange={(e) => setAmountPaid(Number(e.target.value))} />
-          </Field>
+          <div>
+            <Field label="Toʻlangan summa">
+              <MoneyInput value={amountPaid} onChange={changePaid} />
+            </Field>
+            <div className="mt-1 flex gap-1">
+              <button type="button" className={chip} onClick={() => changePaid(amountDue)}>
+                Toʻliq
+              </button>
+              <button type="button" className={chip} onClick={() => changePaid(Math.round(amountDue / 2 / 1000) * 1000)}>
+                Yarmi
+              </button>
+            </div>
+          </div>
+        </div>
+
+        <div className="flex items-center justify-between rounded-lg bg-slate-50 px-3 py-2 text-sm dark:bg-slate-800/60">
+          <span className="text-slate-500 dark:text-slate-400">Holati</span>
+          <Badge tone={paymentStatusTone[status]}>
+            {paymentStatusLabel[status]}
+            {status === 'PARTIAL' && ` · qarz ${(amountDue - amountPaid).toLocaleString('ru-RU')} soʻm`}
+          </Badge>
         </div>
 
         <Field label="Izoh (ixtiyoriy)">
           <Input value={note} onChange={(e) => setNote(e.target.value)} />
         </Field>
 
-        {!existing && (
-          <p className="text-xs text-slate-400 dark:text-slate-500">
-            Ushbu oy uchun toʻlov allaqachon mavjud boʻlsa, u yangi qiymatlar bilan almashtiriladi.
-          </p>
-        )}
-
         <div className="flex justify-end gap-2 pt-2">
           <Button type="button" variant="secondary" onClick={onClose}>
             Bekor qilish
           </Button>
-          <Button type="submit" loading={saveMutation.isPending}>
-            Saqlash
+          <Button type="submit" loading={saveMutation.isPending} disabled={amountDue <= 0}>
+            {existing ? 'Saqlash' : 'Toʻladi'}
           </Button>
         </div>
       </form>

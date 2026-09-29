@@ -231,6 +231,26 @@ function billingCycleContaining(anchorDate: Date, target: Date): { start: Date; 
   return { start, end }
 }
 
+/**
+ * The payment row -- (year, month), keyed by its billing cycle's start like
+ * `firstCycleProration` -- that `date` falls in. A group paying on the 15th is
+ * still in September's cycle on 3 October. Before the group starts, its first
+ * cycle is the one due.
+ */
+export function billingMonthOf(groupStart: string | Date, date: Date = new Date()): { year: number; month: number } {
+  const anchor = typeof groupStart === 'string' ? new Date(groupStart) : groupStart
+  const day = new Date(date.getFullYear(), date.getMonth(), date.getDate())
+  const first = cycleAnchorDate(anchor.getDate(), anchor.getFullYear(), anchor.getMonth())
+  const { start } = billingCycleContaining(anchor, day < first ? first : day)
+  return { year: start.getFullYear(), month: start.getMonth() + 1 }
+}
+
+/** The day a (year, month) payment falls due: the group's start day in that month. */
+export function paymentDueDate(groupStart: string | Date, year: number, month: number): Date {
+  const anchor = typeof groupStart === 'string' ? new Date(groupStart) : groupStart
+  return cycleAnchorDate(anchor.getDate(), year, month - 1)
+}
+
 export type FirstCycleProration = {
   /** The (year, month) of the Payment row this proration applies to -- the billing cycle the
    * student's enrollment starts within, keyed by that cycle's start date. */

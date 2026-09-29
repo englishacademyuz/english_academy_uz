@@ -15,9 +15,9 @@ describe('quizPoints', () => {
     expect(quizPoints(10, 10, 10)).toBe(10)
   })
 
-  it('rounds to a whole point', () => {
-    expect(quizPoints(10, 1, 3)).toBe(3)
-    expect(quizPoints(10, 2, 3)).toBe(7)
+  it('rounds to a half point', () => {
+    expect(quizPoints(10, 1, 3)).toBe(3.5) // 3.33
+    expect(quizPoints(10, 2, 3)).toBe(6.5) // 6.67
   })
 
   it('gives nothing for a quiz with no questions or no correct answers', () => {

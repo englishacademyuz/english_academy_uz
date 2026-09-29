@@ -138,6 +138,28 @@ describe('lesson schedule, group edit/delete, level colors', () => {
     expect(res.json()).toMatchObject(payload)
   })
 
+  it("keeps a group's monthly fee, changeable later without touching the rest", async () => {
+    const { group, adminCookie } = await setup()
+    expect(group.monthlyFee).toBe(0)
+
+    const raised = await app.inject({
+      method: 'PATCH',
+      url: `/groups/${group.id}`,
+      headers: { cookie: adminCookie },
+      payload: { monthlyFee: 550_000 },
+    })
+    expect(raised.json()).toMatchObject({ monthlyFee: 550_000, name: group.name, scheduleTime: group.scheduleTime })
+
+    // Editing anything else leaves the fee alone.
+    const renamed = await app.inject({
+      method: 'PATCH',
+      url: `/groups/${group.id}`,
+      headers: { cookie: adminCookie },
+      payload: { name: 'Renamed' },
+    })
+    expect(renamed.json()).toMatchObject({ monthlyFee: 550_000, name: 'Renamed' })
+  })
+
   it('deleting a group archives it: history stays, the future and its students are released', async () => {
     const { group, student, teacher, adminCookie } = await setup()
     const past = await prisma.lessonSession.create({

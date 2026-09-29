@@ -1,16 +1,17 @@
 import { useState } from 'react'
-import { Plus, Trash2 } from 'lucide-react'
+import { FileText, Play, Plus, Trash2 } from 'lucide-react'
+import type { LucideIcon } from 'lucide-react'
 import { isYoutubeUrl, parseHttpUrl } from '../../lib/materials'
 import type { LessonMaterialType } from '../../lib/types'
-import { Button, Input, Select } from '../ui'
+import { Button, Input } from '../ui'
 import { MaterialChip } from './MaterialPreview'
 
 export type MaterialDraft = { type: LessonMaterialType; content: string }
 
 // Teachers add only these two kinds for now -- as many of each as they like.
-const MATERIAL_OPTIONS: Array<{ type: LessonMaterialType; label: string; placeholder: string }> = [
-  { type: 'VIDEO', label: 'YouTube', placeholder: 'https://www.youtube.com/watch?v=…' },
-  { type: 'DOCUMENT', label: 'Hujjat', placeholder: 'https://docs.google.com/document/d/…' },
+const MATERIAL_OPTIONS: Array<{ type: LessonMaterialType; label: string; placeholder: string; icon: LucideIcon; tile: string }> = [
+  { type: 'VIDEO', label: 'YouTube', placeholder: 'https://www.youtube.com/watch?v=…', icon: Play, tile: 'from-red-500 to-red-600' },
+  { type: 'DOCUMENT', label: 'Hujjat', placeholder: 'https://docs.google.com/document/d/…', icon: FileText, tile: 'from-blue-500 to-blue-600' },
 ]
 
 function materialError(draft: MaterialDraft): string | null {
@@ -41,21 +42,35 @@ export function MaterialsEditor({
 
   return (
     <div>
-      <div className="mb-2 flex gap-2">
-        <Select
-          value={draft.type}
-          onChange={(e) => {
-            setDraft((d) => ({ ...d, type: e.target.value as LessonMaterialType }))
-            setError(null)
-          }}
-          className="w-32"
-        >
-          {MATERIAL_OPTIONS.map((option) => (
-            <option key={option.type} value={option.type}>
+      <div role="radiogroup" aria-label="Material turi" className="mb-2 flex gap-2">
+        {MATERIAL_OPTIONS.map((option) => {
+          const active = draft.type === option.type
+          const Icon = option.icon
+          return (
+            <button
+              key={option.type}
+              type="button"
+              role="radio"
+              aria-checked={active}
+              onClick={() => {
+                setDraft((d) => ({ ...d, type: option.type }))
+                setError(null)
+              }}
+              className={`flex items-center gap-2 rounded-lg px-3 py-1.5 text-sm font-medium transition-colors ${
+                active
+                  ? 'bg-brand-50 text-brand-700 ring-2 ring-inset ring-brand-500 dark:bg-brand-500/10 dark:text-brand-300 dark:ring-brand-400'
+                  : 'text-slate-600 ring-1 ring-inset ring-slate-200 hover:bg-slate-50 dark:text-slate-300 dark:ring-slate-700 dark:hover:bg-slate-800'
+              }`}
+            >
+              <span className={`flex h-5 w-5 items-center justify-center rounded bg-gradient-to-br text-white ${option.tile}`}>
+                <Icon className={`h-3 w-3 ${option.type === 'VIDEO' ? 'fill-current' : ''}`} />
+              </span>
               {option.label}
-            </option>
-          ))}
-        </Select>
+            </button>
+          )
+        })}
+      </div>
+      <div className="mb-2 flex gap-2">
         <Input
           value={draft.content}
           onChange={(e) => {

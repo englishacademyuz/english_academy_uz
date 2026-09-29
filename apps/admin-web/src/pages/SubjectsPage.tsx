@@ -1,14 +1,16 @@
-import { useEffect, useState, type FormEvent } from 'react'
+import { useEffect, useState, type FormEvent, type ReactNode } from 'react'
 import { useMutation, useQueries, useQuery, useQueryClient } from '@tanstack/react-query'
-import { ChevronRight, Plus, Trash2 } from 'lucide-react'
+import { Check, ChevronRight, Pencil, Plus, Star, Trash2, X } from 'lucide-react'
+import { pointsForPercentage } from '@tashkurgan/shared/points'
 import {
+  ApiError,
   assessmentCategories as categoriesApi,
   courses as coursesApi,
   levels as levelsApi,
   subjects as subjectsApi,
 } from '../lib/api'
 import { notifyError, notifySuccess } from '../lib/toast'
-import { Badge, Button, Card, Input, PageHeader, Select, Spinner } from '../components/ui'
+import { Badge, Button, Card, Input, PageHeader, Spinner, Tabs } from '../components/ui'
 import { assessmentCategoryCadenceLabel } from '../lib/format'
 import type { AssessmentCategory, AssessmentCategoryCadence } from '../lib/types'
 
@@ -38,6 +40,44 @@ function InlineAddForm({
   )
 }
 
+type CurriculumKind = 'subject' | 'course' | 'level'
+const curriculumApi = { subject: subjectsApi, course: coursesApi, level: levelsApi }
+const isConflict = (err: unknown) => err instanceof ApiError && err.statusCode === 409
+
+function InlineRenameForm({
+  initial,
+  onSubmit,
+  onCancel,
+}: {
+  initial: string
+  onSubmit: (value: string) => void
+  onCancel: () => void
+}) {
+  const [value, setValue] = useState(initial)
+  function handleSubmit(e: FormEvent) {
+    e.preventDefault()
+    if (!value.trim()) return
+    onSubmit(value.trim())
+  }
+  return (
+    <form onSubmit={handleSubmit} className="flex gap-1 py-0.5">
+      <Input
+        autoFocus
+        value={value}
+        onChange={(e) => setValue(e.target.value)}
+        onKeyDown={(e) => e.key === 'Escape' && onCancel()}
+        className="text-sm"
+      />
+      <Button type="submit" variant="secondary" title="Saqlash">
+        <Check className="h-4 w-4" />
+      </Button>
+      <Button type="button" variant="secondary" onClick={onCancel} title="Bekor qilish">
+        <X className="h-4 w-4" />
+      </Button>
+    </form>
+  )
+}
+
 /** One of the three master columns (Fanlar / Kurslar / Darajalar). Presentation only --
  selection state lives in the parent so the three columns and the detail panel stay in sync. */
 function NavColumn({
@@ -50,6 +90,9 @@ function NavColumn({
   onAdd,
   addPending,
   emptyLabel,
+  onRename,
+  onDelete,
+  deleteConfirm,
 }: {
   title: string
   items: Array<{ id: string; name: string; color?: string }>
@@ -60,7 +103,12 @@ function NavColumn({
   onAdd: (name: string) => void
   addPending: boolean
   emptyLabel: string
+  onRename: (id: string, name: string) => void
+  onDelete: (id: string) => void
+  deleteConfirm: (name: string) => string
 }) {
+  const [editingId, setEditingId] = useState<string | null>(null)
+
   return (
     <Card className="flex flex-col p-0">
       <div className="flex items-center justify-between px-4 pt-4 pb-2">
@@ -80,8 +128,22 @@ function NavColumn({
             {items.map((item) => {
               const active = item.id === selectedId
               const count = getCount?.(item.id)
+              if (item.id === editingId) {
+                return (
+                  <li key={item.id}>
+                    <InlineRenameForm
+                      initial={item.name}
+                      onSubmit={(name) => {
+                        if (name !== item.name) onRename(item.id, name)
+                        setEditingId(null)
+                      }}
+                      onCancel={() => setEditingId(null)}
+                    />
+                  </li>
+                )
+              }
               return (
-                <li key={item.id}>
+                <li key={item.id} className="group relative">
                   <button
                     onClick={() => onSelect(item.id)}
                     className={`flex w-full items-center justify-between gap-2 rounded-lg border-l-2 px-2.5 py-2 text-left text-sm transition-colors ${
@@ -111,6 +173,24 @@ function NavColumn({
                       />
                     </span>
                   </button>
+                  <div className="absolute inset-y-0 right-7 hidden items-center gap-0.5 rounded-md bg-white/90 px-0.5 group-hover:flex dark:bg-slate-900/90">
+                    <button
+                      onClick={() => setEditingId(item.id)}
+                      title="Tahrirlash"
+                      className="rounded-md p-1 text-slate-400 hover:bg-slate-100 hover:text-slate-600 dark:text-slate-500 dark:hover:bg-slate-800 dark:hover:text-slate-300"
+                    >
+                      <Pencil className="h-3.5 w-3.5" />
+                    </button>
+                    <button
+                      onClick={() => {
+                        if (window.confirm(deleteConfirm(item.name))) onDelete(item.id)
+                      }}
+                      title="Oʻchirish"
+                      className="rounded-md p-1 text-slate-400 hover:bg-red-50 hover:text-red-500 dark:text-slate-500 dark:hover:bg-red-500/10 dark:hover:text-red-400"
+                    >
+                      <Trash2 className="h-3.5 w-3.5" />
+                    </button>
+                  </div>
                 </li>
               )
             })}
@@ -237,6 +317,42 @@ export function SubjectsPage() {
     onError: (err) => notifyError(err, 'Darajani yaratib boʻlmadi'),
   })
 
+  // Names show up elsewhere too (group cards, filters), so a rename/delete refreshes every
+  // curriculum-derived list rather than just this column.
+  function refreshCurriculum() {
+    for (const key of ['subjects', 'courses', 'levels', 'groups']) {
+      queryClient.invalidateQueries({ queryKey: [key] })
+    }
+  }
+
+  const renameItem = useMutation({
+    mutationFn: ({ kind, id, name }: { kind: CurriculumKind; id: string; name: string }) =>
+      curriculumApi[kind].rename(id, name),
+    onSuccess: () => {
+      notifySuccess('Nomi oʻzgartirildi')
+      refreshCurriculum()
+    },
+    onError: (err) =>
+      isConflict(err)
+        ? notifyError(null, 'Bu nom allaqachon mavjud')
+        : notifyError(err, 'Nomini oʻzgartirib boʻlmadi'),
+  })
+
+  const deleteItem = useMutation({
+    mutationFn: ({ kind, id }: { kind: CurriculumKind; id: string }) => curriculumApi[kind].remove(id),
+    onSuccess: (_, { kind, id }) => {
+      notifySuccess('Oʻchirildi')
+      if (kind === 'subject' && id === subjectId) setSubjectId(null)
+      if (kind === 'course' && id === courseId) setCourseId(null)
+      if (kind === 'level' && id === levelId) setLevelId(null)
+      refreshCurriculum()
+    },
+    onError: (err) =>
+      isConflict(err)
+        ? notifyError(null, 'Oʻchirib boʻlmaydi: bu yerda guruhlar oʻqigan yoki oʻqiyapti (arxivdagilari ham)')
+        : notifyError(err, 'Oʻchirib boʻlmadi'),
+  })
+
   const selectedSubject = subjectsQuery.data?.find((s) => s.id === subjectId)
   const selectedCourse = coursesQuery.data?.find((c) => c.id === courseId)
   const selectedLevel = levelsQuery.data?.find((l) => l.id === levelId)
@@ -268,6 +384,11 @@ export function SubjectsPage() {
             onAdd={(name) => createSubject.mutate(name)}
             addPending={createSubject.isPending}
             emptyLabel="Hozircha fan yoʻq"
+            onRename={(id, name) => renameItem.mutate({ kind: 'subject', id, name })}
+            onDelete={(id) => deleteItem.mutate({ kind: 'subject', id })}
+            deleteConfirm={(name) =>
+              `"${name}" fani oʻchirilsinmi? Uning barcha kurslari, darajalari va baholash toifalari ham oʻchadi.`
+            }
           />
 
           <NavColumn
@@ -283,6 +404,11 @@ export function SubjectsPage() {
             onAdd={(name) => createCourse.mutate(name)}
             addPending={createCourse.isPending}
             emptyLabel={subjectId ? 'Hozircha kurs yoʻq' : 'Avval fan tanlang'}
+            onRename={(id, name) => renameItem.mutate({ kind: 'course', id, name })}
+            onDelete={(id) => deleteItem.mutate({ kind: 'course', id })}
+            deleteConfirm={(name) =>
+              `"${name}" kursi oʻchirilsinmi? Uning barcha darajalari va baholash toifalari ham oʻchadi.`
+            }
           />
 
           <NavColumn
@@ -295,6 +421,9 @@ export function SubjectsPage() {
             onAdd={(name) => createLevel.mutate(name)}
             addPending={createLevel.isPending}
             emptyLabel={courseId ? 'Hozircha daraja yoʻq' : 'Avval kurs tanlang'}
+            onRename={(id, name) => renameItem.mutate({ kind: 'level', id, name })}
+            onDelete={(id) => deleteItem.mutate({ kind: 'level', id })}
+            deleteConfirm={(name) => `"${name}" darajasi oʻchirilsinmi? Uning baholash toifalari ham oʻchadi.`}
           />
 
           <DetailPanel levelId={levelId} pathLabel={crumbs.join(' · ')} />
@@ -373,18 +502,74 @@ function DetailPanel({ levelId, pathLabel }: { levelId: string | null; pathLabel
   )
 }
 
-function CategoryCard({ category, onRetire }: { category: AssessmentCategory; onRetire: () => void }) {
-  const scaleLabel = category.maxScore === 100 ? 'Foiz' : category.maxScore === 5 ? 'Baho' : `0–${category.maxScore}`
+type Scale = 'PERCENT' | 'MARK' | 'CUSTOM'
 
+const SCALES: Array<{ key: Scale; title: string; range: string }> = [
+  { key: 'PERCENT', title: 'Foiz', range: '0–100%' },
+  { key: 'MARK', title: 'Baho', range: '0–5' },
+  { key: 'CUSTOM', title: 'Boshqa', range: 'oʻz maksimali' },
+]
+
+const scaleOf = (maxScore: number): Scale => (maxScore === 100 ? 'PERCENT' : maxScore === 5 ? 'MARK' : 'CUSTOM')
+
+const scaleLabel = (maxScore: number) =>
+  maxScore === 100 ? 'Foiz · 0–100%' : maxScore === 5 ? 'Baho · 0–5' : `Ball · 0–${maxScore}`
+
+/** Sample results a student might get, from the top down -- the marks themselves on a 0-5 scale, 100/80/60/40/20% of the maximum otherwise. */
+function sampleScores(maxScore: number): Array<{ label: string; score: number }> {
+  if (maxScore === 5) return [5, 4, 3, 2, 1].map((mark) => ({ label: String(mark), score: mark }))
+  return [100, 80, 60, 40, 20].map((pct) => {
+    const score = Math.round((maxScore * pct) / 100)
+    return { label: maxScore === 100 ? `${pct}%` : `${score}/${maxScore}`, score }
+  })
+}
+
+const CADENCE_OPTIONS: AssessmentCategoryCadence[] = ['DAILY', 'WEEKLY', 'MONTHLY']
+
+const cadenceHint: Record<AssessmentCategoryCadence, string> = {
+  DAILY: 'Har dars kuni jurnalda ustun boʻlib turadi',
+  WEEKLY: 'Haftada bir marta — oʻqituvchi ochganda baholanadi',
+  MONTHLY: 'Oyda bir marta — oʻqituvchi ochganda baholanadi',
+}
+
+/** What a student earns for each sample result -- the same half-point rounding the server applies when marks are saved. */
+function PointsPreview({ maxScore, pointsWorth }: { maxScore: number; pointsWorth: number }) {
+  return (
+    <div className="grid grid-cols-5 gap-1">
+      {sampleScores(maxScore).map(({ label, score }) => {
+        const points = pointsForPercentage(pointsWorth, (score / maxScore) * 100)
+        return (
+          <div
+            key={label}
+            className="rounded-lg bg-white px-1 py-1.5 text-center ring-1 ring-inset ring-slate-200 dark:bg-slate-900 dark:ring-slate-700"
+          >
+            <p className="truncate text-[11px] text-slate-500 dark:text-slate-400">{label}</p>
+            <p
+              className={`text-sm font-semibold tabular-nums ${
+                points > 0 ? 'text-brand-700 dark:text-brand-300' : 'text-slate-300 dark:text-slate-600'
+              }`}
+            >
+              {points}
+            </p>
+          </div>
+        )
+      })}
+    </div>
+  )
+}
+
+function CategoryCard({ category, onRetire }: { category: AssessmentCategory; onRetire: () => void }) {
   return (
     <div className="rounded-xl border border-slate-200 p-4 dark:border-slate-700">
-      <div className="flex items-center justify-between gap-3">
-        <p className="font-semibold text-slate-900 dark:text-slate-100">{category.name}</p>
+      <div className="flex items-start justify-between gap-3">
+        <div className="min-w-0">
+          <p className="truncate font-semibold text-slate-900 dark:text-slate-100">{category.name}</p>
+          <p className="mt-0.5 text-xs text-slate-500 dark:text-slate-400">{scaleLabel(category.maxScore)}</p>
+        </div>
         <div className="flex shrink-0 items-center gap-2">
           <Badge tone={category.cadence === 'DAILY' ? 'slate' : 'amber'}>
             {assessmentCategoryCadenceLabel[category.cadence]}
           </Badge>
-          <Badge tone="brand">{scaleLabel}</Badge>
           <button
             onClick={onRetire}
             title="Chetlash uchun bosing"
@@ -394,30 +579,26 @@ function CategoryCard({ category, onRetire }: { category: AssessmentCategory; on
           </button>
         </div>
       </div>
-      <div className="mt-2 flex flex-wrap gap-x-5 gap-y-1 text-xs text-slate-500 dark:text-slate-400">
-        <span>
-          Maksimal: <strong className="font-semibold text-slate-700 dark:text-slate-200">{category.maxScore}</strong>
-        </span>
-        {category.pointsWorth > 0 && (
-          <span>
-            Reyting ball:{' '}
-            <strong className="font-semibold text-slate-700 dark:text-slate-200">{category.pointsWorth}</strong>
-          </span>
-        )}
-      </div>
+
+      {category.pointsWorth > 0 ? (
+        <div className="mt-3 rounded-lg bg-slate-50 p-2 dark:bg-slate-800/50">
+          <p className="mb-1.5 flex items-center gap-1 text-xs text-slate-500 dark:text-slate-400">
+            <Star className="h-3.5 w-3.5 text-yellow-500" />
+            Maksimal natija uchun{' '}
+            <strong className="text-slate-700 dark:text-slate-200">{category.pointsWorth} point</strong>
+          </p>
+          <PointsPreview maxScore={category.maxScore} pointsWorth={category.pointsWorth} />
+        </div>
+      ) : (
+        <p className="mt-2 text-xs text-slate-400 dark:text-slate-500">Reytingga point bermaydi — faqat baho</p>
+      )}
     </div>
   )
 }
 
-const MAX_SCORE_PRESETS = [
-  { label: 'Foiz (0-100)', value: 100 },
-  { label: 'Baho (0-5)', value: 5 },
-]
-
-/** Captures the category's grading scale (§18/§43/§51.1) and its Rating weight -- both fixed
- once here so a teacher never has to re-type them while grading, and a 100% result auto-awards
- pointsWorth points to the Reyting ledger (0 = doesn't feed Reyting). */
-const CADENCE_OPTIONS: AssessmentCategoryCadence[] = ['DAILY', 'WEEKLY', 'MONTHLY']
+function FormLabel({ children }: { children: ReactNode }) {
+  return <p className="mb-1.5 text-xs font-semibold text-slate-600 dark:text-slate-300">{children}</p>
+}
 
 function CategoryAddForm({
   onSubmit,
@@ -427,87 +608,128 @@ function CategoryAddForm({
   pending: boolean
 }) {
   const [name, setName] = useState('')
+  const [cadence, setCadence] = useState<AssessmentCategoryCadence>('DAILY')
   const [maxScore, setMaxScore] = useState(100)
   const [pointsWorth, setPointsWorth] = useState(0)
-  const [cadence, setCadence] = useState<AssessmentCategoryCadence>('DAILY')
+  // "Boshqa" is remembered on its own -- otherwise typing 100 or 5 as a custom
+  // maximum would snap the choice back to Foiz/Baho.
+  const [custom, setCustom] = useState(false)
+  const scale = custom ? 'CUSTOM' : scaleOf(maxScore)
+
+  function chooseScale(next: Scale) {
+    setCustom(next === 'CUSTOM')
+    if (next === 'PERCENT') setMaxScore(100)
+    if (next === 'MARK') setMaxScore(5)
+    if (next === 'CUSTOM' && scale !== 'CUSTOM') setMaxScore(10)
+  }
+
+  const valid = name.trim() !== '' && maxScore >= 1 && pointsWorth >= 0
 
   function handleSubmit(e: FormEvent) {
     e.preventDefault()
-    if (!name.trim() || maxScore < 1 || pointsWorth < 0) return
+    if (!valid) return
     onSubmit(name.trim(), maxScore, pointsWorth, cadence)
     setName('')
+    setCadence('DAILY')
     setMaxScore(100)
     setPointsWorth(0)
-    setCadence('DAILY')
+    setCustom(false)
   }
 
   return (
-    <form onSubmit={handleSubmit} className="space-y-2 rounded-xl border border-dashed border-slate-300 p-4 dark:border-slate-700">
-      <p className="text-xs font-medium text-slate-500 dark:text-slate-400">Yangi baholash toifasi</p>
-      <div className="flex flex-wrap gap-2">
-        <Input
-          value={name}
-          onChange={(e) => setName(e.target.value)}
-          placeholder="Masalan: Gapirish"
-          className="min-w-40 flex-1 text-sm"
-        />
-        <Select
-          value={cadence}
-          onChange={(e) => setCadence(e.target.value as AssessmentCategoryCadence)}
-          className="w-32 text-sm"
-          title="Necha marta baholanadi"
-        >
-          {CADENCE_OPTIONS.map((c) => (
-            <option key={c} value={c}>
-              {assessmentCategoryCadenceLabel[c]}
-            </option>
-          ))}
-        </Select>
-        <Input
-          type="number"
-          min={1}
-          value={maxScore}
-          onChange={(e) => setMaxScore(Number(e.target.value))}
-          className="w-20 text-sm"
-          title="Maksimal ball"
-        />
-        <Input
-          type="number"
-          min={0}
-          value={pointsWorth}
-          onChange={(e) => setPointsWorth(Number(e.target.value))}
-          className="w-24 text-sm"
-          title="100% natija Reytingga necha ball beradi (0 — Reytingga ta'sir qilmaydi)"
-          placeholder="Reyting"
-        />
-        <Button type="submit" variant="secondary" loading={pending}>
-          <Plus className="h-4 w-4" />
-        </Button>
+    <form
+      onSubmit={handleSubmit}
+      className="space-y-4 rounded-xl border border-dashed border-slate-300 p-4 dark:border-slate-700"
+    >
+      <p className="text-sm font-semibold text-slate-900 dark:text-slate-100">Yangi baholash toifasi</p>
+
+      <div>
+        <FormLabel>Nomi</FormLabel>
+        <Input value={name} onChange={(e) => setName(e.target.value)} placeholder="Masalan: Gapirish" />
       </div>
-      <div className="flex gap-1.5">
-        {MAX_SCORE_PRESETS.map((preset) => (
-          <button
-            key={preset.value}
-            type="button"
-            onClick={() => setMaxScore(preset.value)}
-            className={`rounded-md px-2 py-0.5 text-[11px] font-medium transition-colors ${
-              maxScore === preset.value
-                ? 'bg-brand-100 text-brand-700 dark:bg-brand-500/15 dark:text-brand-300'
-                : 'text-slate-400 hover:bg-slate-200 dark:text-slate-500 dark:hover:bg-slate-700'
-            }`}
-          >
-            {preset.label}
-          </button>
-        ))}
+
+      <div>
+        <FormLabel>Qachon baholanadi?</FormLabel>
+        <Tabs
+          variant="segmented"
+          size="md"
+          active={cadence}
+          onChange={setCadence}
+          tabs={CADENCE_OPTIONS.map((c) => ({ key: c, label: assessmentCategoryCadenceLabel[c] }))}
+        />
+        <p className="mt-1.5 text-xs text-slate-400 dark:text-slate-500">{cadenceHint[cadence]}</p>
       </div>
-      <p className="text-[11px] text-slate-400 dark:text-slate-500">
-        Kunlik toifalar har bir dars kunida ustun sifatida ochiq turadi. Haftalik/oylik toifalar esa faqat
-        oʻqituvchi "Belgilash qoʻshish" orqali oʻsha davrni ochganda baholanadi.
-      </p>
-      <p className="text-[11px] text-slate-400 dark:text-slate-500">
-        Reyting ball — 100% natija (yoki maksimal baho) uchun beriladigan ball. Oraliq natijalar shunga mutanosib
-        hisoblanadi (masalan, 50% → yarim ball).
-      </p>
+
+      <div>
+        <FormLabel>Qanday baholanadi?</FormLabel>
+        <div role="radiogroup" className="grid grid-cols-3 gap-2">
+          {SCALES.map((s) => {
+            const active = scale === s.key
+            return (
+              <button
+                key={s.key}
+                type="button"
+                role="radio"
+                aria-checked={active}
+                onClick={() => chooseScale(s.key)}
+                className={`rounded-lg px-2 py-2 text-center transition-colors ${
+                  active
+                    ? 'bg-brand-50 ring-2 ring-inset ring-brand-500 dark:bg-brand-500/10 dark:ring-brand-400'
+                    : 'ring-1 ring-inset ring-slate-200 hover:bg-slate-50 dark:ring-slate-700 dark:hover:bg-slate-800'
+                }`}
+              >
+                <p
+                  className={`text-sm font-semibold ${
+                    active ? 'text-brand-700 dark:text-brand-300' : 'text-slate-700 dark:text-slate-200'
+                  }`}
+                >
+                  {s.title}
+                </p>
+                <p className="text-[11px] text-slate-400 dark:text-slate-500">{s.range}</p>
+              </button>
+            )
+          })}
+        </div>
+      </div>
+
+      <div className="space-y-2 rounded-xl bg-slate-50 p-3 dark:bg-slate-800/50">
+        <div className="grid grid-cols-2 gap-3">
+          <div>
+            <FormLabel>Maksimal baho</FormLabel>
+            <Input
+              type="number"
+              min={1}
+              value={maxScore}
+              disabled={scale !== 'CUSTOM'}
+              onChange={(e) => setMaxScore(Number(e.target.value))}
+              className="disabled:bg-slate-100 disabled:text-slate-500 dark:disabled:bg-slate-800"
+            />
+          </div>
+          <div>
+            <FormLabel>Reyting point</FormLabel>
+            <Input type="number" min={0} value={pointsWorth} onChange={(e) => setPointsWorth(Number(e.target.value))} />
+          </div>
+        </div>
+        {pointsWorth > 0 && maxScore >= 1 ? (
+          <>
+            <p className="text-xs text-slate-500 dark:text-slate-400">
+              Oʻquvchi {scale === 'MARK' ? 'bahosi' : 'natijasi'} →{' '}
+              <strong className="text-brand-700 dark:text-brand-300">Reytingga point</strong>
+            </p>
+            <PointsPreview maxScore={maxScore} pointsWorth={pointsWorth} />
+            <p className="text-[11px] text-slate-400 dark:text-slate-500">Point 0.5 gacha yaxlitlanadi</p>
+          </>
+        ) : (
+          <p className="text-xs text-slate-400 dark:text-slate-500">
+            0 point — bu toifa Reytingga taʼsir qilmaydi, faqat baho qoʻyiladi.
+          </p>
+        )}
+      </div>
+
+      <Button type="submit" loading={pending} disabled={!valid} className="w-full gap-1.5">
+        <Plus className="h-4 w-4" />
+        Toifa qoʻshish
+      </Button>
     </form>
   )
 }

@@ -85,16 +85,22 @@ export const auth = {
 export const subjects = {
   list: () => get<Subject[]>('/subjects'),
   create: (name: string) => post<Subject>('/subjects', { name }),
+  rename: (id: string, name: string) => patch<Subject>(`/subjects/${id}`, { name }),
+  remove: (id: string) => del<{ ok: true }>(`/subjects/${id}`),
 }
 
 export const courses = {
   list: (subjectId?: string) => get<Course[]>(`/courses${subjectId ? `?subjectId=${subjectId}` : ''}`),
   create: (subjectId: string, name: string) => post<Course>(`/subjects/${subjectId}/courses`, { name }),
+  rename: (id: string, name: string) => patch<Course>(`/courses/${id}`, { name }),
+  remove: (id: string) => del<{ ok: true }>(`/courses/${id}`),
 }
 
 export const levels = {
   list: (courseId?: string) => get<Level[]>(`/levels${courseId ? `?courseId=${courseId}` : ''}`),
   create: (courseId: string, name: string) => post<Level>(`/courses/${courseId}/levels`, { name }),
+  rename: (id: string, name: string) => patch<Level>(`/levels/${id}`, { name }),
+  remove: (id: string) => del<{ ok: true }>(`/levels/${id}`),
 }
 
 export const teachers = {
@@ -123,6 +129,7 @@ export type GroupInput = {
   scheduleDays: string[]
   scheduleTime: string
   startDate: string
+  monthlyFee?: number
 }
 
 export const groups = {

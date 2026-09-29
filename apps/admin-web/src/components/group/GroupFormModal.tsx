@@ -12,7 +12,7 @@ import { dayLabel, toDateInputValue } from '../../lib/format'
 import { levelStyles } from '../../lib/levelColor'
 import { notifyError, notifySuccess } from '../../lib/toast'
 import type { Group } from '../../lib/types'
-import { Button, Field, Input, Modal, Select } from '../ui'
+import { Button, Field, Input, Modal, MoneyInput, Select } from '../ui'
 
 export const WEEKDAYS = ['MON', 'TUE', 'WED', 'THU', 'FRI', 'SAT', 'SUN']
 
@@ -34,6 +34,7 @@ export function GroupFormModal({
   const [scheduleDays, setScheduleDays] = useState<string[]>(group?.scheduleDays ?? [])
   const [scheduleTime, setScheduleTime] = useState(group?.scheduleTime ?? '18:00')
   const [startDate, setStartDate] = useState(group ? toDateInputValue(group.startDate) : '')
+  const [monthlyFee, setMonthlyFee] = useState(group?.monthlyFee ?? 0)
 
   const subjectsQuery = useQuery({ queryKey: ['subjects'], queryFn: subjectsApi.list })
   const levelsQuery = useQuery({ queryKey: ['levels'], queryFn: () => levelsApi.list() })
@@ -47,7 +48,7 @@ export function GroupFormModal({
 
   const saveMutation = useMutation({
     mutationFn: () => {
-      const data: GroupInput = { levelId, teacherId, name, scheduleDays, scheduleTime, startDate }
+      const data: GroupInput = { levelId, teacherId, name, scheduleDays, scheduleTime, startDate, monthlyFee }
       return editing ? groupsApi.update(group.id, data) : groupsApi.create(data)
     },
     onSuccess: (saved) => {
@@ -148,9 +149,21 @@ export function GroupFormModal({
           <Field label="Vaqt">
             <Input type="time" value={scheduleTime} onChange={(e) => setScheduleTime(e.target.value)} required />
           </Field>
-          <Field label="Boshlanish sanasi">
+          <Field label="Darslar boshlanish sanasi">
             <Input type="date" value={startDate} onChange={(e) => setStartDate(e.target.value)} required />
           </Field>
+        </div>
+
+        <div>
+          <Field label="Oylik kurs narxi">
+            <MoneyInput value={monthlyFee} onChange={setMonthlyFee} placeholder="Masalan: 500 000" />
+          </Field>
+          <p className="mt-1 text-xs text-slate-400 dark:text-slate-500">
+            {startDate
+              ? `Toʻlov har oyning ${Number(startDate.slice(8, 10))}-sanasida — darslar boshlangan kuni. `
+              : 'Toʻlov har oy darslar boshlangan kunda boʻladi. '}
+            Toʻlov oynasi shu narx bilan toʻldiriladi.
+          </p>
         </div>
 
         {editing && (

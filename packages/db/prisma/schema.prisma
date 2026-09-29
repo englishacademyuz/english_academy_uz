@@ -260,6 +260,9 @@ model Group {
   scheduleDays String[]
   scheduleTime String
   startDate    DateTime
+  // The monthly course fee, in so'm -- what a payment defaults to. 0 means it hasn't been set.
+  // Payments fall due every month on startDate's day of the month.
+  monthlyFee   Int         @default(0)
   status       GroupStatus @default(ACTIVE)
   // Set when an admin deletes the group. It is archived, never removed: its
   // past lessons, marks and points stay as history (see archiveGroup).
@@ -458,7 +461,7 @@ model PointTransaction {
   groupId      String
   group        Group             @relation(fields: [groupId], references: [id])
   activityType PointActivityType
-  points       Int
+  points       Float
   note         String?
   createdAt    DateTime          @default(now())
 
@@ -540,7 +543,7 @@ model QuizAttempt {
   // Set together when the attempt is scored (all answered, or the deadline passed).
   completedAt  DateTime?
   correctCount Int?
-  points       Int?
+  points       Float?
 
   answers          QuizAnswer[]
   pointTransaction PointTransaction?

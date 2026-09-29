@@ -1,5 +1,5 @@
 import { prisma, type Prisma } from '@tashkurgan/db'
-import { ConflictError, NotFoundError, ValidationError } from '@tashkurgan/shared'
+import { ConflictError, NotFoundError, ValidationError, roundPoints } from '@tashkurgan/shared'
 
 const MIN_OPTIONS = 2
 const MAX_OPTIONS = 6
@@ -10,10 +10,10 @@ export type QuizInput = {
   questions: Array<{ text: string; options: Array<{ text: string; isCorrect: boolean }> }>
 }
 
-/** Points are proportional to the share answered correctly, rounded to a whole point. */
+/** Points are proportional to the share answered correctly, rounded to a half point. */
 export function quizPoints(maxPoints: number, correctCount: number, totalQuestions: number): number {
   if (totalQuestions === 0) return 0
-  return Math.round((maxPoints * correctCount) / totalQuestions)
+  return roundPoints((maxPoints * correctCount) / totalQuestions)
 }
 
 export function isQuizOpen(quiz: { status: string; deadline: Date | null }, now = new Date()): boolean {

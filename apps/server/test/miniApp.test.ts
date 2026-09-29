@@ -78,6 +78,7 @@ describe('mini app API', () => {
         teacherId: group.teacherId,
         date: new Date('2026-09-10'),
         topic: 'To be',
+        notes: '<p>Qoida: <strong>am, is, are</strong></p>',
         materials: { create: [{ type: 'VIDEO', content: 'https://youtu.be/abc' }] },
         homework: { create: { instructions: '20 ta lugʻat yodlash' } },
         attendances: { create: [{ studentId: student.id, status: 'PRESENT' }] },
@@ -90,7 +91,11 @@ describe('mini app API', () => {
     expect(home.latestHomework).toMatchObject({ instructions: '20 ta lugʻat yodlash' })
 
     const detail = await app.inject({ method: 'GET', url: `/student/lessons/${lesson.id}`, headers: miniAppAuth(902) })
-    expect(detail.json()).toMatchObject({ topic: 'To be', materials: [{ type: 'VIDEO' }] })
+    expect(detail.json()).toMatchObject({
+      topic: 'To be',
+      notes: '<p>Qoida: <strong>am, is, are</strong></p>',
+      materials: [{ type: 'VIDEO' }],
+    })
 
     const attendance = (
       await app.inject({ method: 'GET', url: '/student/attendance?year=2026&month=9', headers: miniAppAuth(902) })
@@ -102,6 +107,39 @@ describe('mini app API', () => {
     await prisma.telegramLink.create({ data: { chatId: '903', studentId: other.id } })
     const probe = await app.inject({ method: 'GET', url: `/student/lessons/${lesson.id}`, headers: miniAppAuth(903) })
     expect(probe.statusCode).toBe(404)
+  })
+
+  it("places the student among their group by the points earned there, ties sharing a place", async () => {
+    const { group, subject, student } = await seedAcademicStructure()
+    await prisma.telegramLink.create({ data: { chatId: '906', studentId: student.id } })
+    const classmate = async (firstName: string, lastName: string) => {
+      const s = await prisma.student.create({ data: { firstName, lastName, dob: new Date('2012-01-01') } })
+      await prisma.enrollment.create({
+        data: { studentId: s.id, groupId: group.id, subjectId: subject.id, startDate: new Date(), status: 'ACTIVE' },
+      })
+      return s
+    }
+    const vali = await classmate('Vali', 'Botirov')
+    const sardor = await classmate('Sardor', 'Toshev')
+    await classmate('Zafar', 'Qodirov')
+    const award = (studentId: string, points: number) =>
+      prisma.pointTransaction.create({ data: { studentId, groupId: group.id, activityType: 'OTHER', points } })
+    await award(student.id, 7.5)
+    await award(student.id, 2.5)
+    await award(vali.id, 10)
+    await award(sardor.id, 8)
+
+    const { groupRanking } = (await app.inject({ method: 'GET', url: '/student/home', headers: miniAppAuth(906) })).json()
+    expect(groupRanking).toEqual({
+      myPlace: 1,
+      myPoints: 10,
+      rows: [
+        { name: 'Ali K.', points: 10, place: 1, isMe: true },
+        { name: 'Vali B.', points: 10, place: 1, isMe: false },
+        { name: 'Sardor T.', points: 8, place: 2, isMe: false },
+        { name: 'Zafar Q.', points: 0, place: 3, isMe: false },
+      ],
+    })
   })
 
   it('summarises the academic year month by month, newest first', async () => {

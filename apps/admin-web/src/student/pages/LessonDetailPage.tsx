@@ -3,6 +3,8 @@ import { useQuery } from '@tanstack/react-query'
 import { useParams } from 'react-router-dom'
 import { ExternalLink, FileSpreadsheet, HardDrive, Link2, Presentation, X } from 'lucide-react'
 import { MaterialViewer, materialLook } from '../../components/shared/MaterialPreview'
+import { RichText } from '../../components/shared/RichText'
+import { isRichTextEmpty } from '../../lib/richText'
 import { docKind, parseHttpUrl, type DocKind } from '../../lib/materials'
 import { miniApi } from '../api'
 import { CheckIcon, ClockIcon, DocIcon, HomeworkScene, PlayIcon } from '../components/art'
@@ -40,9 +42,17 @@ export function LessonDetailPage() {
     )
   }
 
-  const { topic, date, group, materials, homework } = lesson.data
+  const { topic, date, group, notes, materials, homework } = lesson.data
   return (
     <Screen back={back} eyebrow={weekdayDayMonth(new Date(date))} title={topic || 'Mavzu kiritilmagan'} subtitle={group}>
+      {!isRichTextEmpty(notes) && (
+        <Section title="Tushuntirish">
+          <div className="rounded-[22px] border-2 border-tg-line bg-white px-4 py-3.5">
+            <RichText value={notes!} variant="tg" />
+          </div>
+        </Section>
+      )}
+
       <Section title="Dars materiallari">
         {materials.length === 0 ? (
           <p className="rounded-[22px] bg-tg-sand px-4 py-5 text-center text-[15px] font-bold text-tg-muted">
@@ -141,7 +151,7 @@ function Homework({ homework }: { homework: NonNullable<MiniLessonDetail['homewo
       )}
       <div className="flex w-full flex-col gap-1.5 rounded-[20px] bg-white px-4 py-3.5 text-left">
         <span className="text-[13px] font-extrabold text-tg-muted">USTOZ YOZDI</span>
-        <p className="whitespace-pre-wrap text-[17px] font-bold leading-[1.4]">{homework.instructions}</p>
+        <RichText value={homework.instructions} variant="tg" />
       </div>
       {/* Homework is checked by the teacher in class (CONTEXT.md: HomeworkResult), so there's no "done" button here. */}
       <div className="flex w-full items-center justify-center gap-2 rounded-[18px] border-[3px] border-tg-leaf bg-tg-leaf-soft px-3 py-3.5 text-base font-extrabold text-tg-leaf-dark">

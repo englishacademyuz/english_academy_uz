@@ -9,8 +9,7 @@ import type { StudentStatus } from '../lib/types'
 import { useAuth } from '../lib/auth'
 import { Button, Card, ErrorBanner, PageHeader, Select, Spinner } from '../components/ui'
 import { GroupsCard } from '../components/student/GroupsCard'
-import { AttendanceCard } from '../components/student/AttendanceCard'
-import { MarksCard } from '../components/student/MarksCard'
+import { DiaryCard } from '../components/student/DiaryCard'
 import { PointsCard } from '../components/student/PointsCard'
 import { PaymentsCard } from '../components/student/PaymentsCard'
 
@@ -77,8 +76,6 @@ export function StudentDetailPage() {
 
       <div className="grid gap-6 lg:grid-cols-2">
         <GroupsCard enrollments={overview.enrollments} />
-
-        <AttendanceCard attendance={overview.attendance} lessonDays={overview.lessonDays} />
         <PointsCard
           studentId={student.id}
           total={overview.points.total}
@@ -87,8 +84,14 @@ export function StudentDetailPage() {
           actor={actor}
         />
 
-        <MarksCard assessmentResults={overview.assessmentResults} quizResults={overview.quizResults} />
-        <PaymentsCard studentId={student.id} payments={overview.payments.list} outstanding={overview.payments.outstanding} />
+        <DiaryCard overview={overview} />
+
+        <PaymentsCard
+          studentId={student.id}
+          payments={overview.payments.list}
+          outstanding={overview.payments.outstanding}
+          enrollment={activeEnrollments[0]}
+        />
 
         <Card className="p-5">
           <h2 className="mb-3 text-sm font-semibold text-slate-900 dark:text-slate-100">Telegram kirish huquqi</h2>

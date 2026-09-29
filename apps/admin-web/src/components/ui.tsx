@@ -84,6 +84,34 @@ export function Input({ className = '', ...props }: InputHTMLAttributes<HTMLInpu
   )
 }
 
+/** A so'm amount typed and shown with its thousands spaced out ("500 000"), handed back as a plain number. */
+export function MoneyInput({
+  value,
+  onChange,
+  className = '',
+  ...props
+}: Omit<InputHTMLAttributes<HTMLInputElement>, 'value' | 'onChange' | 'type'> & {
+  value: number
+  onChange: (value: number) => void
+}) {
+  return (
+    <div className="relative">
+      <Input
+        {...props}
+        type="text"
+        inputMode="numeric"
+        value={value ? value.toLocaleString('ru-RU').replace(/\s/g, ' ') : ''}
+        onChange={(e) => onChange(Number(e.target.value.replace(/\D/g, '')) || 0)}
+        placeholder={props.placeholder ?? '0'}
+        className={`pr-12 tabular-nums ${className}`}
+      />
+      <span className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-sm text-slate-400 dark:text-slate-500">
+        soʻm
+      </span>
+    </div>
+  )
+}
+
 export function Select({ className = '', children, ...props }: SelectHTMLAttributes<HTMLSelectElement>) {
   return (
     <select
@@ -169,6 +197,7 @@ export function Tabs<T extends string>({
         />
         {tabs.map((tab) => (
           <button
+            type="button"
             key={tab.key}
             onClick={() => onChange(tab.key)}
             className={`relative z-10 whitespace-nowrap text-center font-semibold transition-colors ${button} ${
@@ -189,6 +218,7 @@ export function Tabs<T extends string>({
     <div className="flex flex-wrap gap-2">
       {tabs.map((tab) => (
         <button
+          type="button"
           key={tab.key}
           onClick={() => onChange(tab.key)}
           className={`inline-flex items-center font-semibold transition-colors ${button} ${

@@ -4,8 +4,10 @@ import { prisma, type AttendanceStatus } from '@tashkurgan/db'
 import {
   answerQuizQuestion,
   calculateAttendanceRate,
+  getGroupLeaderboard,
   getProgress,
   listQuizzesForStudent,
+  placesByPoints,
   startQuizAttempt,
   sumPoints,
   toPercentage,
@@ -66,7 +68,7 @@ export const miniAppRoutes: FastifyPluginAsync = async (app) => {
     const enrollment = await activeEnrollment(student.id)
     const now = new Date()
 
-    const [lastLesson, latestHomework, quizzes, progress, points, changes] = await Promise.all([
+    const [lastLesson, latestHomework, quizzes, progress, points, changes, ranking] = await Promise.all([
       enrollment
         ? prisma.lessonSession.findFirst({
             where: { groupId: enrollment.groupId, date: { lte: now } },
@@ -85,6 +87,7 @@ export const miniAppRoutes: FastifyPluginAsync = async (app) => {
       getProgress(student.id, { kind: 'month' }),
       prisma.pointTransaction.findMany({ where: { studentId: student.id }, select: { points: true } }),
       scheduleChanges(enrollment),
+      groupRanking(enrollment, student.id),
     ])
 
     return {
@@ -98,6 +101,7 @@ export const miniAppRoutes: FastifyPluginAsync = async (app) => {
       openQuizzes: quizzes.filter((q) => q.isOpen && !q.attempt?.completed),
       monthProgress: progress,
       totalPoints: sumPoints(points),
+      groupRanking: ranking,
     }
   })
 
@@ -154,6 +158,8 @@ export const miniAppRoutes: FastifyPluginAsync = async (app) => {
       date: lesson.date,
       topic: lesson.topic,
       group: lesson.group.name,
+      // The teacher's explanation of the lesson ("Tushuntirish"), as the editor's HTML.
+      notes: lesson.notes,
       materials: lesson.materials.map((m) => ({ id: m.id, type: m.type, content: m.content })),
       homework: lesson.homework ? { instructions: lesson.homework.instructions, dueDate: lesson.homework.dueDate } : null,
     }
@@ -364,4 +370,24 @@ async function scheduleChanges(enrollment: Awaited<ReturnType<typeof activeEnrol
     newTime: r.newTime,
     reason: r.reason,
   }))
+}
+
+/**
+ * Everyone in the active group, placed by the points they earned in it. Classmates
+ * appear by first name and last initial only, and no ids leave the server -- the
+ * student's own row is flagged `isMe` instead.
+ */
+async function groupRanking(enrollment: Awaited<ReturnType<typeof activeEnrollment>>, studentId: string) {
+  if (!enrollment) return null
+  const leaderboard = await getGroupLeaderboard(enrollment.groupId)
+  const rows = placesByPoints(
+    // Classmates tied on points are listed alphabetically.
+    leaderboard.map(({ student, points }) => ({
+      name: `${student.firstName} ${student.lastName.charAt(0)}.`.trim(),
+      points,
+      isMe: student.id === studentId,
+    })).sort((a, b) => a.name.localeCompare(b.name)),
+  )
+  const mine = rows.find((row) => row.isMe)
+  return { myPlace: mine?.place ?? null, myPoints: mine?.points ?? 0, rows }
 }

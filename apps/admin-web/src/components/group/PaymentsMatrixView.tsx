@@ -94,7 +94,7 @@ export function PaymentsMatrixView({ group }: { group: Group }) {
                 year: monthAnchor.year,
                 month: monthAnchor.month,
                 payment,
-                proration: isPartialMonth ? proration : null,
+                proration,
               })
             }
             className="flex flex-col items-center gap-0.5 rounded-md transition-opacity hover:opacity-75"
@@ -141,6 +141,7 @@ export function PaymentsMatrixView({ group }: { group: Group }) {
           initialYear={editing.year}
           initialMonth={editing.month}
           existing={editing.payment}
+          group={group}
           proration={editing.proration}
           onClose={() => setEditing(null)}
           onSaved={() => {

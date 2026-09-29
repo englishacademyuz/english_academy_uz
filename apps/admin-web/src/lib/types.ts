@@ -41,6 +41,8 @@ export type Group = {
   scheduleDays: string[]
   scheduleTime: string
   startDate: string
+  /** Monthly course fee in so'm; 0 = not set. */
+  monthlyFee: number
   status: string
   archivedAt?: string | null
   level?: Level
