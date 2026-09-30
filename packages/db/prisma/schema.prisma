@@ -386,6 +386,8 @@ model Attendance {
   studentId       String
   student         Student          @relation(fields: [studentId], references: [id])
   status          AttendanceStatus
+  // When the student's chats were told they missed this lesson -- null until someone presses the button.
+  absenceNotifiedAt DateTime?
   createdAt       DateTime         @default(now())
   updatedAt       DateTime         @updatedAt
 

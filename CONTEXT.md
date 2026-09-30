@@ -111,11 +111,14 @@ One Student's billing record for one monthly cycle (amount due, amount paid, sta
 _Avoid_: Invoice, bill
 
 **Payment day**:
-The day of the month a Student joined the center (`Student.joinedAt`); each cycle runs from one payment day to the next, and is owed from its first day. It is per Student, not per Group. A cycle's Payment row is keyed by the month its payment day falls in.
+The day of the month a Student joined the center (`Student.joinedAt`); each cycle runs a month from that day and is paid at its end, so a Student who joined on 30 September first owes on 30 October. It is per Student, not per Group. A cycle's Payment row is keyed by the month the cycle starts in (the 30 October payment is September's).
 
 **Payment reminder**:
 Shown from 3 days before a payment day until that cycle is fully paid: *upcoming* (1–3 days ahead), *due* (the day itself), *overdue* (1–5 days late), then *debtor* (more than 5 days late). Staff can send it to the Student's Telegram chats; the Mini App home screen shows it too.
 _Avoid_: Invoice, dunning
+
+**Absence notice**:
+Shown on the students list while a Student's latest recorded lesson is one they were marked absent from. The group's Teacher (or an Admin) can send it to the Student's Telegram chats; it stays, marked as sent (`Attendance.absenceNotifiedAt`), until the Student attends a later lesson.
 
 ### Cross-Cutting
 

@@ -35,9 +35,9 @@ function statusOf(amountDue: number, amountPaid: number): PaymentStatus {
  * without it, it upserts a new (Student, year, month) row (§51.4) -- the
  * server-side `record` call already overwrites if that month exists.
  *
- * Students almost always pay the whole month, so everything is filled in from
- * the group's fee up front and "Toʻladi" records it in one click; a partial
- * payment is the exception the admin types in.
+ * The course price is filled in from the group's fee, but nothing counts as
+ * paid until the admin enters the amount the student handed over -- typed, or
+ * with the "Toʻliq" / "Yarmi" shortcuts.
  */
 export function PaymentModal({
   studentId,
@@ -65,9 +65,7 @@ export function PaymentModal({
   const initial = { year: existing?.year ?? initialYear, month: existing?.month ?? initialMonth }
   const [picked, setPicked] = useState<MonthKey>(initial)
   const [amountDue, setAmountDue] = useState(() => existing?.amountDue ?? fee)
-  const [amountPaid, setAmountPaid] = useState(() => existing?.amountPaid ?? fee)
-  // Until the admin types a paid amount of their own, it follows the due amount -- a full payment.
-  const [paidTouched, setPaidTouched] = useState(!!existing)
+  const [amountPaid, setAmountPaid] = useState(() => existing?.amountPaid ?? 0)
   const [dueTouched, setDueTouched] = useState(!!existing)
   const [note, setNote] = useState(existing?.note ?? '')
 
@@ -75,21 +73,12 @@ export function PaymentModal({
     const [year, month] = key.split('-').map(Number)
     const next = { year, month }
     setPicked(next)
-    if (!dueTouched) {
-      setAmountDue(fee)
-      if (!paidTouched) setAmountPaid(fee)
-    }
+    if (!dueTouched) setAmountDue(fee)
   }
 
   function changeDue(value: number) {
     setDueTouched(true)
     setAmountDue(value)
-    if (!paidTouched) setAmountPaid(value)
-  }
-
-  function changePaid(value: number) {
-    setPaidTouched(true)
-    setAmountPaid(value)
   }
 
   const saveMutation = useMutation({
@@ -146,18 +135,18 @@ export function PaymentModal({
         )}
 
         <div className="grid grid-cols-2 gap-4">
-          <Field label="Belgilangan summa">
+          <Field label="Kurs narxi">
             <MoneyInput value={amountDue} onChange={changeDue} required />
           </Field>
           <div>
             <Field label="Toʻlangan summa">
-              <MoneyInput value={amountPaid} onChange={changePaid} />
+              <MoneyInput value={amountPaid} onChange={setAmountPaid} />
             </Field>
             <div className="mt-1 flex gap-1">
-              <button type="button" className={chip} onClick={() => changePaid(amountDue)}>
+              <button type="button" className={chip} onClick={() => setAmountPaid(amountDue)}>
                 Toʻliq
               </button>
-              <button type="button" className={chip} onClick={() => changePaid(Math.round(amountDue / 2 / 1000) * 1000)}>
+              <button type="button" className={chip} onClick={() => setAmountPaid(Math.round(amountDue / 2 / 1000) * 1000)}>
                 Yarmi
               </button>
             </div>
@@ -167,7 +156,7 @@ export function PaymentModal({
         <div className="flex items-center justify-between rounded-lg bg-slate-50 px-3 py-2 text-sm dark:bg-slate-800/60">
           <span className="text-slate-500 dark:text-slate-400">Holati</span>
           <Badge tone={paymentStatusTone[status]}>
-            {paymentStatusLabel[status]}
+            {status === 'DEBT' ? 'Toʻlanmagan' : paymentStatusLabel[status]}
             {status === 'PARTIAL' && ` · qarz ${(amountDue - amountPaid).toLocaleString('ru-RU')} soʻm`}
           </Badge>
         </div>
@@ -180,8 +169,12 @@ export function PaymentModal({
           <Button type="button" variant="secondary" onClick={onClose}>
             Bekor qilish
           </Button>
-          <Button type="submit" loading={saveMutation.isPending} disabled={amountDue <= 0}>
-            {existing ? 'Saqlash' : 'Toʻladi'}
+          <Button
+            type="submit"
+            loading={saveMutation.isPending}
+            disabled={amountDue <= 0 || (!existing && amountPaid <= 0)}
+          >
+            Saqlash
           </Button>
         </div>
       </form>

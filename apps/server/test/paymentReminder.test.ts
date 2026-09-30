@@ -13,6 +13,12 @@ function daysFromToday(offset: number) {
   return date
 }
 
+/** A join date whose first month fell due `daysPastDue` days ago -- one month before that day. */
+function joinedWithFirstDue(daysPastDue: number) {
+  const due = daysFromToday(-daysPastDue)
+  return new Date(Date.UTC(due.getUTCFullYear(), due.getUTCMonth() - 1, due.getUTCDate()))
+}
+
 describe('payment reminders', () => {
   let app: Awaited<ReturnType<typeof buildApp>>
   const sent: Array<{ chatIds: string[]; reminder: PaymentReminderAnnouncement }> = []
@@ -36,10 +42,10 @@ describe('payment reminders', () => {
     await prisma.$disconnect()
   })
 
-  async function setup(joinedDaysAgo: number) {
+  async function setup(joinedAt: Date) {
     const seeded = await seedAcademicStructure()
     await prisma.group.update({ where: { id: seeded.group.id }, data: { monthlyFee: 400_000 } })
-    await prisma.student.update({ where: { id: seeded.student.id }, data: { joinedAt: daysFromToday(-joinedDaysAgo) } })
+    await prisma.student.update({ where: { id: seeded.student.id }, data: { joinedAt } })
     await prisma.telegramLink.create({ data: { chatId: '777', studentId: seeded.student.id } })
     await createAdmin()
     const cookie = await loginAs(app, 'admin', 'admin12345')
@@ -47,7 +53,7 @@ describe('payment reminders', () => {
   }
 
   it('creates a student with the day they joined', async () => {
-    const { cookie } = await setup(0)
+    const { cookie } = await setup(daysFromToday(0))
     const res = await app.inject({
       method: 'POST',
       url: '/students',
@@ -59,7 +65,7 @@ describe('payment reminders', () => {
   })
 
   it('shows a debtor on the students list and sends the reminder to their chats', async () => {
-    const { student, cookie } = await setup(8)
+    const { student, cookie } = await setup(joinedWithFirstDue(8))
 
     const list = await app.inject({ method: 'GET', url: '/students', headers: { cookie } })
     const row = list.json().find((s: { id: string }) => s.id === student.id)
@@ -74,8 +80,8 @@ describe('payment reminders', () => {
   })
 
   it('goes quiet once the month is paid', async () => {
-    const { student, cookie } = await setup(2)
-    const joined = daysFromToday(-2)
+    const joined = joinedWithFirstDue(2)
+    const { student, cookie } = await setup(joined)
     await app.inject({
       method: 'POST',
       url: `/students/${student.id}/payments`,
@@ -92,8 +98,16 @@ describe('payment reminders', () => {
     expect(sent).toHaveLength(0)
   })
 
+  it('says nothing during the first month', async () => {
+    const { student, cookie } = await setup(daysFromToday(-3))
+    const list = await app.inject({ method: 'GET', url: '/students', headers: { cookie } })
+    expect(list.json().find((s: { id: string }) => s.id === student.id).paymentReminder).toBeNull()
+    const home = await app.inject({ method: 'GET', url: '/student/home', headers: miniAppAuth('777') })
+    expect(home.json().payment).toBeNull()
+  })
+
   it('warns the student on the Mini App home screen', async () => {
-    await setup(1)
+    await setup(joinedWithFirstDue(1))
     const res = await app.inject({ method: 'GET', url: '/student/home', headers: miniAppAuth('777') })
     expect(res.statusCode).toBe(200)
     expect(res.json().payment).toMatchObject({ stage: 'overdue', daysLeft: -1, amount: 400_000 })

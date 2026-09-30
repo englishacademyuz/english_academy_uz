@@ -5,6 +5,7 @@ import { looksLikeLinkingCode, redeemLinkingCode } from '@tashkurgan/domain'
 import { ConflictError, NotFoundError } from '@tashkurgan/shared'
 import type { QuizAnnouncement } from '../routes/quizzes'
 import type { PaymentReminderAnnouncement } from '../routes/payments'
+import type { AbsenceAnnouncement } from '../routes/absences'
 import type { LessonChangeAnnouncement } from '../routes/schedule'
 import type { BotContext } from './types'
 import { miniAppMenuKeyboard, openHomeKeyboard, openMiniAppKeyboard, quizStartKeyboard } from './keyboards'
@@ -164,6 +165,26 @@ export async function announcePaymentReminder(
       })
     } catch (err) {
       console.error(`Payment reminder to chat ${chatId} failed:`, err)
+    }
+  }
+}
+
+/** Tells every chat of the student they missed a lesson; one failed chat doesn't stop the rest. */
+export async function announceAbsence(
+  bot: Bot<BotContext>,
+  miniAppUrl: string,
+  chatIds: string[],
+  absence: AbsenceAnnouncement,
+) {
+  const text = fmt.formatAbsenceNotice(absence)
+  for (const chatId of chatIds) {
+    try {
+      await bot.api.sendMessage(chatId, text, {
+        parse_mode: 'HTML',
+        ...(miniAppUrl ? { reply_markup: openHomeKeyboard(miniAppUrl) } : {}),
+      })
+    } catch (err) {
+      console.error(`Absence notice to chat ${chatId} failed:`, err)
     }
   }
 }

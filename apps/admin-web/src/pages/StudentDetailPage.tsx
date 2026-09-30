@@ -112,7 +112,6 @@ export function StudentDetailPage() {
         <PaymentsCard
           student={student}
           payments={overview.payments.list}
-          outstanding={overview.payments.outstanding}
           reminder={overview.payments.reminder}
           enrollment={activeEnrollments[0]}
         />

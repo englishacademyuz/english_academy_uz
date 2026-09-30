@@ -242,9 +242,18 @@ export type LessonReschedule = {
 }
 
 /** A row of the students list -- the student plus their current group(s), rating and attendance. */
+/** The student's latest lesson, when they missed it. */
+export type StudentAbsence = {
+  attendanceId: string
+  date: string
+  groupName: string
+  notifiedAt: string | null
+}
+
 export type StudentListItem = Student & {
   groups: Array<{ id: string; name: string; level: { name: string; color: string } }>
   points: number
   attendance: { totals: Record<AttendanceStatus, number>; rate: number | null }
   paymentReminder: StudentPaymentReminder | null
+  lastAbsence: StudentAbsence | null
 }

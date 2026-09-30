@@ -244,6 +244,12 @@ export const payments = {
     post<{ notifiedChats: number; remindedAt: string }>(`/students/${studentId}/payment-reminder`),
 }
 
+export const attendances = {
+  /** Tells the student's Telegram chats they missed this lesson. */
+  notifyAbsence: (attendanceId: string) =>
+    post<{ notifiedChats: number; notifiedAt: string }>(`/attendances/${attendanceId}/absence-notice`),
+}
+
 export const points = {
   listForStudent: (studentId: string) =>
     get<{ transactions: PointTransaction[]; total: number }>(`/students/${studentId}/points`),

@@ -1,10 +1,11 @@
 import { prisma, type AttendanceStatus, type StudentStatus } from '@tashkurgan/db'
 import { calculateAttendanceRate } from '../attendance/attendance'
+import { getLatestAbsences } from '../attendance/absenceNotice'
 import { getPaymentReminders } from '../payment/payment'
 
 /**
  * The students list screen: each student with their current group (and its
- * level color), all-time Rating points, attendance totals and payment reminder --
+ * level color), all-time Rating points, attendance totals, a missed latest lesson and payment reminder --
  * aggregated in a few grouped queries rather than per student, so the list stays one fast call.
  */
 export async function listStudentsWithStats(filter: { status?: StudentStatus } = {}) {
@@ -21,10 +22,11 @@ export async function listStudentsWithStats(filter: { status?: StudentStatus } =
   })
   const ids = students.map((s) => s.id)
 
-  const [pointSums, attendanceCounts, reminders] = await Promise.all([
+  const [pointSums, attendanceCounts, reminders, absences] = await Promise.all([
     prisma.pointTransaction.groupBy({ by: ['studentId'], where: { studentId: { in: ids } }, _sum: { points: true } }),
     prisma.attendance.groupBy({ by: ['studentId', 'status'], where: { studentId: { in: ids } }, _count: { _all: true } }),
     getPaymentReminders(ids),
+    getLatestAbsences(ids),
   ])
 
   const pointsBy = new Map(pointSums.map((p) => [p.studentId, p._sum.points ?? 0]))
@@ -44,6 +46,7 @@ export async function listStudentsWithStats(filter: { status?: StudentStatus } =
       points: pointsBy.get(student.id) ?? 0,
       attendance: { totals, rate: calculateAttendanceRate(statuses) },
       paymentReminder: reminders.get(student.id) ?? null,
+      lastAbsence: absences.get(student.id) ?? null,
     }
   })
 }

@@ -1,7 +1,7 @@
 import { finalizeExpiredAttempts } from '@tashkurgan/domain'
 import { buildApp } from './app'
 import { config } from './config'
-import { announceLessonChange, announcePaymentReminder, announceQuiz, createBot } from './bot/client'
+import { announceAbsence, announceLessonChange, announcePaymentReminder, announceQuiz, createBot } from './bot/client'
 
 // Long polling for now (no public HTTPS URL to receive webhooks in local
 // dev/this environment). Swapping to bot.api.setWebhook() + mounting
@@ -17,6 +17,7 @@ const app = await buildApp({
   paymentReminderNotifier: bot
     ? (chatIds, reminder) => announcePaymentReminder(bot, config.miniAppUrl, chatIds, reminder)
     : undefined,
+  absenceNotifier: bot ? (chatIds, absence) => announceAbsence(bot, config.miniAppUrl, chatIds, absence) : undefined,
 })
 
 app.listen({ port: config.port, host: '0.0.0.0' }).catch((err) => {

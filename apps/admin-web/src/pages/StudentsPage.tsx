@@ -9,6 +9,7 @@ import type { Student, StudentListItem, StudentStatus } from '../lib/types'
 import { AssignGroupModal } from '../components/student/AssignGroupModal'
 import { StudentFormModal } from '../components/student/StudentFormModal'
 import { PaymentReminderButton } from '../components/shared/PaymentReminderButton'
+import { AbsenceNoticeButton } from '../components/shared/AbsenceNoticeButton'
 import { Badge, Button, Card, EmptyState, Input, PageHeader, Select, Spinner } from '../components/ui'
 
 const STATUSES: StudentStatus[] = ['ACTIVE', 'PAUSED', 'INACTIVE', 'COMPLETED', 'LEFT']
@@ -358,12 +359,15 @@ function StudentRow({ student }: { student: StudentListItem }) {
         )}
       </td>
       <td className="px-3 py-2.5 text-right">
-        <span
-          className={`text-sm font-semibold tabular-nums ${
-            totals.ABSENT > 0 ? 'text-red-600 dark:text-red-400' : 'text-slate-300 dark:text-slate-600'
-          }`}
-        >
-          {totals.ABSENT}
+        <span className="inline-flex items-center justify-end gap-2">
+          {student.lastAbsence && <AbsenceNoticeButton studentId={student.id} absence={student.lastAbsence} />}
+          <span
+            className={`text-sm font-semibold tabular-nums ${
+              totals.ABSENT > 0 ? 'text-red-600 dark:text-red-400' : 'text-slate-300 dark:text-slate-600'
+            }`}
+          >
+            {totals.ABSENT}
+          </span>
         </span>
       </td>
       <td className="px-3 py-2.5">

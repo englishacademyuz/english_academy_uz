@@ -15,6 +15,7 @@ import { lessonSessionRoutes } from './routes/lessonSessions'
 import { assessmentRoutes } from './routes/assessments'
 import { progressRoutes } from './routes/progress'
 import { paymentRoutes, type PaymentReminderNotifier } from './routes/payments'
+import { absenceRoutes, type AbsenceNotifier } from './routes/absences'
 import { pointRoutes } from './routes/points'
 import { quizRoutes, type QuizNotifier } from './routes/quizzes'
 import { miniAppRoutes } from './routes/miniApp'
@@ -27,6 +28,8 @@ export type BuildAppOptions = {
   lessonChangeNotifier?: LessonChangeNotifier
   /** Reminds a student's Telegram chats about a payment; omitted (no bot) means the button sends nothing. */
   paymentReminderNotifier?: PaymentReminderNotifier
+  /** Tells a student's Telegram chats they missed a lesson; omitted (no bot) means the button sends nothing. */
+  absenceNotifier?: AbsenceNotifier
   /** Verifies Telegram Mini App init data; defaults to the configured bot token. */
   telegramBotToken?: string
 }
@@ -54,6 +57,7 @@ export async function buildApp(options: BuildAppOptions = {}) {
   await app.register(assessmentRoutes)
   await app.register(progressRoutes)
   await app.register(paymentRoutes, { notifier: options.paymentReminderNotifier })
+  await app.register(absenceRoutes, { notifier: options.absenceNotifier })
   await app.register(pointRoutes)
   await app.register(quizRoutes, { notifier: options.quizNotifier })
   await app.register(scheduleRoutes, { notifier: options.lessonChangeNotifier })

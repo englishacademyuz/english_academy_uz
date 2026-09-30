@@ -143,3 +143,16 @@ export function formatPaymentReminder(reminder: {
     ask,
   ].join('\n')
 }
+
+/** "The student didn't come to today's lesson" -- sent when the teacher presses the button. */
+export function formatAbsenceNotice(absence: { studentName: string; groupName: string; date: Date }): string {
+  return [
+    '❗️ <b>Oʻquvchi darsga kelmadi</b>',
+    `Oʻquvchi: <b>${escapeHtml(absence.studentName)}</b>`,
+    `Guruh: ${escapeHtml(absence.groupName)}`,
+    '',
+    `📅 ${formatLessonDay(absence.date)}`,
+    '',
+    'Iltimos, sababini oʻqituvchiga yoki markazga maʼlum qiling.',
+  ].join('\n')
+}
