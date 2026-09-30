@@ -49,6 +49,7 @@ export function QuizTab({ group, initialDate }: { group: Group; initialDate?: Da
     return (
       <QuizEditor
         groupId={group.id}
+        level={group.level?.name}
         initialDate={initialDate ?? new Date()}
         quiz={editing.quiz}
         onDone={() => setEditing(null)}

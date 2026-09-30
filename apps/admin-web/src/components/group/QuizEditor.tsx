@@ -1,11 +1,13 @@
 import { useState } from 'react'
 import { useMutation, useQueryClient } from '@tanstack/react-query'
-import { Plus, Trash2 } from 'lucide-react'
+import { ClipboardPaste, Plus, Sparkles, Trash2 } from 'lucide-react'
 import { quizzes as quizzesApi } from '../../lib/api'
 import { toDateInputValue } from '../../lib/format'
+import type { ParsedQuizQuestion } from '../../lib/quizText'
 import { notifyError, notifySuccess } from '../../lib/toast'
 import type { QuizDetail, QuizInput, QuizQuestionInput } from '../../lib/types'
 import { Button, Card, Field, Input } from '../ui'
+import { QuizImportModal, QuizPromptModal } from './QuizTextModals'
 
 const LETTERS = ['A', 'B', 'C', 'D', 'E', 'F']
 const MAX_OPTIONS = 6
@@ -19,6 +21,8 @@ const blankQuestion = (): QuizQuestionInput => ({
     { text: '', isCorrect: false },
   ],
 })
+
+const isBlankQuestion = (q: QuizQuestionInput) => !q.text.trim() && q.options.every((o) => !o.text.trim())
 
 /** Blank options are just unused slots -- dropped rather than rejected. */
 function withoutBlankOptions(questions: QuizQuestionInput[]): QuizQuestionInput[] {
@@ -39,11 +43,14 @@ function validationError(input: QuizInput): string | null {
 
 export function QuizEditor({
   groupId,
+  level,
   initialDate,
   quiz,
   onDone,
 }: {
   groupId: string
+  /** The group's level name ("Elementary"), used in the AI prompt. */
+  level?: string
   initialDate: Date
   /** Present when editing an existing draft. */
   quiz?: QuizDetail
@@ -59,6 +66,7 @@ export function QuizEditor({
       : [blankQuestion()],
   )
   const [error, setError] = useState<string | null>(null)
+  const [textModal, setTextModal] = useState<'prompt' | 'import' | null>(null)
 
   const input: QuizInput = { title, maxPoints: Number(maxPoints), questions: withoutBlankOptions(questions) }
 
@@ -76,6 +84,20 @@ export function QuizEditor({
   function updateQuestion(index: number, change: (q: QuizQuestionInput) => QuizQuestionInput) {
     setQuestions((prev) => prev.map((q, i) => (i === index ? change(q) : q)))
     setError(null)
+  }
+
+  /** Imported questions land in the form for review -- saving is still the teacher's "Saqlash". */
+  function importQuestions(imported: ParsedQuizQuestion[], mode: 'append' | 'replace') {
+    const existing = questions.filter((q) => !isBlankQuestion(q))
+    if (mode === 'replace' && existing.length > 0 && !window.confirm('Mavjud savollar oʻchirilib, import qilinganlari bilan almashtirilsinmi?')) {
+      return
+    }
+    // The lone blank question a new quiz starts with is a placeholder, not something to keep above the import.
+    const kept = mode === 'append' && !(questions.length === 1 && isBlankQuestion(questions[0])) ? questions : []
+    setQuestions([...kept, ...imported])
+    setError(null)
+    setTextModal(null)
+    notifySuccess(`${imported.length} ta savol qoʻshildi`)
   }
 
   return (
@@ -190,9 +212,17 @@ export function QuizEditor({
           ))}
         </ol>
 
-        <Button type="button" variant="secondary" onClick={() => setQuestions((prev) => [...prev, blankQuestion()])}>
-          <Plus className="h-4 w-4" /> Savol qoʻshish
-        </Button>
+        <div className="flex flex-wrap gap-2">
+          <Button type="button" variant="secondary" onClick={() => setQuestions((prev) => [...prev, blankQuestion()])}>
+            <Plus className="h-4 w-4" /> Savol qoʻshish
+          </Button>
+          <Button type="button" variant="ghost" onClick={() => setTextModal('prompt')}>
+            <Sparkles className="h-4 w-4" /> AI uchun prompt
+          </Button>
+          <Button type="button" variant="ghost" onClick={() => setTextModal('import')}>
+            <ClipboardPaste className="h-4 w-4" /> Matndan import qilish
+          </Button>
+        </div>
 
         {error && <p className="text-sm text-red-600 dark:text-red-400">{error}</p>}
 
@@ -205,6 +235,10 @@ export function QuizEditor({
           </Button>
         </div>
       </form>
+
+      {/* Outside the <form> so Enter in a modal field can't submit the quiz. */}
+      {textModal === 'prompt' && <QuizPromptModal level={level} onClose={() => setTextModal(null)} />}
+      {textModal === 'import' && <QuizImportModal onImport={importQuestions} onClose={() => setTextModal(null)} />}
     </Card>
   )
 }

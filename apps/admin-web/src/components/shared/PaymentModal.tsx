@@ -1,13 +1,12 @@
 import { useState } from 'react'
 import { useMutation } from '@tanstack/react-query'
+import { paymentDay, toStoredDate } from '@tashkurgan/shared/billing'
 import { payments as paymentsApi } from '../../lib/api'
 import {
   dayMonthYearLabel,
   formatMonthYear,
-  paymentDueDate,
   paymentStatusLabel,
   paymentStatusTone,
-  type FirstCycleProration,
 } from '../../lib/format'
 import { notifyError, notifySuccess } from '../../lib/toast'
 import type { Payment, PaymentStatus } from '../../lib/types'
@@ -46,8 +45,8 @@ export function PaymentModal({
   initialYear,
   initialMonth,
   existing,
-  group,
-  proration,
+  fee = 0,
+  joinedAt,
   onClose,
   onSaved,
 }: {
@@ -56,25 +55,17 @@ export function PaymentModal({
   initialYear: number
   initialMonth: number
   existing?: Payment | null
-  /** The group the student pays for: its fee fills the amounts in, its start day is the payment day. */
-  group?: { startDate: string; monthlyFee: number } | null
-  /** The student's first billing cycle, when they joined the group mid-cycle -- e.g. a group
-   * starting 5 September with a student joining the 15th owes only 20 of that cycle's 30 days.
-   * Applied only while that cycle's month is the one picked, and never to an `existing` row,
-   * whose recorded amount was a deliberate choice. */
-  proration?: FirstCycleProration | null
+  /** The monthly fee of the group the student pays for -- fills the amounts in; 0 = not set. */
+  fee?: number
+  /** The day the student joined -- its day of the month is their payment day. */
+  joinedAt?: string
   onClose: () => void
   onSaved: () => void
 }) {
   const initial = { year: existing?.year ?? initialYear, month: existing?.month ?? initialMonth }
   const [picked, setPicked] = useState<MonthKey>(initial)
-  const fee = group?.monthlyFee ?? 0
-
-  const prorated = (m: MonthKey) => !existing && !!proration && proration.year === m.year && proration.month === m.month
-  const suggestedDue = (m: MonthKey) => (prorated(m) ? Math.round((fee * proration!.ratio) / 1000) * 1000 : fee)
-
-  const [amountDue, setAmountDue] = useState(() => existing?.amountDue ?? suggestedDue(initial))
-  const [amountPaid, setAmountPaid] = useState(() => existing?.amountPaid ?? suggestedDue(initial))
+  const [amountDue, setAmountDue] = useState(() => existing?.amountDue ?? fee)
+  const [amountPaid, setAmountPaid] = useState(() => existing?.amountPaid ?? fee)
   // Until the admin types a paid amount of their own, it follows the due amount -- a full payment.
   const [paidTouched, setPaidTouched] = useState(!!existing)
   const [dueTouched, setDueTouched] = useState(!!existing)
@@ -85,8 +76,8 @@ export function PaymentModal({
     const next = { year, month }
     setPicked(next)
     if (!dueTouched) {
-      setAmountDue(suggestedDue(next))
-      if (!paidTouched) setAmountPaid(suggestedDue(next))
+      setAmountDue(fee)
+      if (!paidTouched) setAmountPaid(fee)
     }
   }
 
@@ -118,7 +109,7 @@ export function PaymentModal({
     ? `${titlePrefix}${formatMonthYear(existing.month, existing.year)} toʻlovini tahrirlash`
     : `${titlePrefix}Toʻlov qoʻshish`
   const status = statusOf(amountDue, amountPaid)
-  const dueDate = group ? paymentDueDate(group.startDate, picked.year, picked.month) : null
+  const dueDate = joinedAt ? toStoredDate(paymentDay(joinedAt, picked)) : null
   const chip =
     'rounded-md px-2 py-0.5 text-xs font-medium text-brand-700 hover:bg-brand-50 dark:text-brand-300 dark:hover:bg-brand-500/10'
 
@@ -148,12 +139,6 @@ export function PaymentModal({
           </p>
         )}
 
-        {prorated(picked) && (
-          <p className="rounded-lg bg-amber-50 px-3 py-2 text-xs text-amber-700 dark:bg-amber-500/10 dark:text-amber-400">
-            Oʻquvchi bu oyning oʻrtasida qoʻshilgan — {proration!.cycleDays} kundan {proration!.enrolledDays} kuni
-            hisoblandi.
-          </p>
-        )}
         {!existing && fee === 0 && (
           <p className="rounded-lg bg-slate-50 px-3 py-2 text-xs text-slate-500 dark:bg-slate-800/60 dark:text-slate-400">
             Guruh uchun oylik narx belgilanmagan — guruhni tahrirlab narxni kiriting, keyin summa oʻzi toʻldiriladi.

@@ -117,16 +117,20 @@ model User {
 }
 
 model Student {
-  id        String        @id @default(cuid())
-  firstName String
-  lastName  String
-  dob       DateTime
-  phone     String?
-  status    StudentStatus @default(ACTIVE)
-  userId    String?       @unique
-  user      User?         @relation(fields: [userId], references: [id])
-  createdAt DateTime      @default(now())
-  updatedAt DateTime      @updatedAt
+  id                String        @id @default(cuid())
+  firstName         String
+  lastName          String
+  dob               DateTime
+  phone             String?
+  status            StudentStatus @default(ACTIVE)
+  // The day the student joined the center -- their own monthly payment day (packages/shared billing.ts).
+  joinedAt          DateTime      @default(now())
+  // When a payment reminder was last sent to their Telegram chats.
+  paymentRemindedAt DateTime?
+  userId            String?       @unique
+  user              User?         @relation(fields: [userId], references: [id])
+  createdAt         DateTime      @default(now())
+  updatedAt         DateTime      @updatedAt
 
   enrollments       Enrollment[]
   telegramLinks     TelegramLink[]
@@ -144,6 +148,8 @@ model Student {
 model Teacher {
   id        String   @id @default(cuid())
   fullName  String
+  // Shown to students in the Mini App, with a button that calls it.
+  phone     String?
   userId    String   @unique
   user      User     @relation(fields: [userId], references: [id])
   createdAt DateTime @default(now())

@@ -1,17 +1,8 @@
 import { useState } from 'react'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
+import { calendarDayOf, daysBetween, paymentDay, tashkentToday, toStoredDate } from '@tashkurgan/shared/billing'
 import { payments as paymentsApi } from '../../lib/api'
-import {
-  daysUntil,
-  firstCycleProration,
-  formatDate,
-  nextPaymentDueDate,
-  paymentCountdownLabel,
-  paymentCountdownTone,
-  paymentStatusLabel,
-  paymentStatusTone,
-  type FirstCycleProration,
-} from '../../lib/format'
+import { formatDayMonth, paymentCountdownLabel, paymentCountdownTone, paymentStatusLabel, paymentStatusTone } from '../../lib/format'
 import type { Group, Payment } from '../../lib/types'
 import { Badge, ColumnLabel, Spinner } from '../ui'
 import { DetailMatrix, type MatrixColumn } from './DetailMatrix'
@@ -32,7 +23,7 @@ export function PaymentsMatrixView({ group }: { group: Group }) {
     year: number
     month: number
     payment: Payment | null
-    proration: FirstCycleProration | null
+    joinedAt?: string
   } | null>(null)
 
   const historyQuery = useQuery({
@@ -43,10 +34,7 @@ export function PaymentsMatrixView({ group }: { group: Group }) {
   const payments = historyQuery.data?.payments ?? []
   const isCurrentMonth = monthAnchor.year === now.getFullYear() && monthAnchor.month === now.getMonth() + 1
 
-  // Every student in the group is billed on the same monthly day, counted from when the
-  // group's own lessons started -- not from whenever each student individually joined.
-  const nextDue = nextPaymentDueDate(group.startDate, now)
-  const nextDueDays = daysUntil(nextDue, now)
+  const today = tashkentToday(now)
 
   function goPrev() {
     setMonthAnchor(({ year, month }) => (month === 1 ? { year: year - 1, month: 12 } : { year, month: month - 1 }))
@@ -63,17 +51,11 @@ export function PaymentsMatrixView({ group }: { group: Group }) {
     {
       key: 'status',
       grow: true,
-      // Every student shares the same due date (billed from the group's own start, not
-      // individually), so it's shown once here instead of repeated down every row.
+      // Each student pays on their own day of the month -- the day they joined.
       header: (
         <div className="flex w-full items-center justify-between px-1">
           <ColumnLabel>Holati</ColumnLabel>
-          <div className="flex items-center gap-1.5">
-            <span className="text-[11px] font-medium text-slate-500 dark:text-slate-400">
-              Keyingi toʻlov: {formatDate(nextDue)}
-            </span>
-            <Badge tone={paymentCountdownTone(nextDueDays)}>{paymentCountdownLabel(nextDueDays)}</Badge>
-          </div>
+          <span className="text-[11px] font-medium text-slate-500 dark:text-slate-400">Toʻlov kuni</span>
         </div>
       ),
       render: (studentId) => {
@@ -82,8 +64,13 @@ export function PaymentsMatrixView({ group }: { group: Group }) {
           null
         const enrollment = roster.find((e) => e.studentId === studentId)
         const studentName = `${enrollment?.student?.firstName ?? ''} ${enrollment?.student?.lastName ?? ''}`.trim()
-        const proration = enrollment ? firstCycleProration(group.startDate, enrollment.startDate) : null
-        const isPartialMonth = proration?.year === monthAnchor.year && proration?.month === monthAnchor.month
+        const joinedAt = enrollment?.student?.joinedAt
+        const due = joinedAt ? paymentDay(joinedAt, monthAnchor) : null
+        const dueDays = due ? daysBetween(today, due) : null
+        // Nothing is owed for a month before the student joined.
+        const joined = joinedAt ? calendarDayOf(joinedAt) : null
+        const beforeJoining = !!joined && monthAnchor.year * 12 + monthAnchor.month < joined.year * 12 + joined.month
+        const unpaid = payment?.status !== 'PAID'
         return (
           <button
             type="button"
@@ -94,17 +81,24 @@ export function PaymentsMatrixView({ group }: { group: Group }) {
                 year: monthAnchor.year,
                 month: monthAnchor.month,
                 payment,
-                proration,
+                joinedAt,
               })
             }
             className="flex flex-col items-center gap-0.5 rounded-md transition-opacity hover:opacity-75"
           >
-            <Badge tone={payment ? paymentStatusTone[payment.status] : 'red'}>
-              {payment ? paymentStatusLabel[payment.status] : "Yoʻq"}
-            </Badge>
-            {isPartialMonth && (
-              <span className="text-[10px] font-medium text-slate-400 dark:text-slate-500">
-                {proration!.enrolledDays}/{proration!.cycleDays} kun
+            {beforeJoining && !payment ? (
+              <span className="text-xs text-slate-300 dark:text-slate-600">—</span>
+            ) : (
+              <Badge tone={payment ? paymentStatusTone[payment.status] : dueDays !== null && dueDays > 3 ? 'slate' : 'red'}>
+                {payment ? paymentStatusLabel[payment.status] : "Yoʻq"}
+              </Badge>
+            )}
+            {due && !beforeJoining && (
+              <span className="flex items-center gap-1 text-[10px] font-medium text-slate-400 dark:text-slate-500">
+                {formatDayMonth(toStoredDate(due))}
+                {unpaid && dueDays !== null && dueDays <= 3 && (
+                  <Badge tone={paymentCountdownTone(dueDays)}>{paymentCountdownLabel(dueDays)}</Badge>
+                )}
               </span>
             )}
           </button>
@@ -141,8 +135,8 @@ export function PaymentsMatrixView({ group }: { group: Group }) {
           initialYear={editing.year}
           initialMonth={editing.month}
           existing={editing.payment}
-          group={group}
-          proration={editing.proration}
+          fee={group.monthlyFee}
+          joinedAt={editing.joinedAt}
           onClose={() => setEditing(null)}
           onSaved={() => {
             queryClient.invalidateQueries({ queryKey: ['group-payments-history', group.id] })

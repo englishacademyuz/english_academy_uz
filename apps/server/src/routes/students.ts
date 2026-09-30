@@ -1,21 +1,35 @@
 import type { FastifyPluginAsync } from 'fastify'
 import { z } from 'zod'
 import { prisma } from '@tashkurgan/db'
-import { assertCan, getStudentOverview, issueLinkingCode, listStudentsWithStats } from '@tashkurgan/domain'
-import { NotFoundError } from '@tashkurgan/shared'
+import { assertCan, deleteStudent, getStudentOverview, issueLinkingCode, listStudentsWithStats } from '@tashkurgan/domain'
+import { NotFoundError, tashkentToday, toStoredDate } from '@tashkurgan/shared'
+
+const age = z.number().int().min(1).max(100)
+
+/**
+ * The admin enters only an age, not a birth date -- stored as a birth date that many years
+ * before today, so the age shown keeps counting up year by year.
+ */
+function dobFromAge(years: number): Date {
+  const today = tashkentToday()
+  return toStoredDate({ ...today, year: today.year - years })
+}
 
 const createSchema = z.object({
   firstName: z.string().min(1),
   lastName: z.string().min(1),
-  dob: z.coerce.date(),
+  age,
   phone: z.string().optional(),
+  // The day they joined -- their monthly payment day; defaults to now.
+  joinedAt: z.coerce.date().optional(),
 })
 
 const updateSchema = z.object({
   firstName: z.string().min(1).optional(),
   lastName: z.string().min(1).optional(),
-  dob: z.coerce.date().optional(),
+  age: age.optional(),
   phone: z.string().optional(),
+  joinedAt: z.coerce.date().optional(),
   status: z.enum(['ACTIVE', 'PAUSED', 'INACTIVE', 'COMPLETED', 'LEFT']).optional(),
 })
 
@@ -28,8 +42,8 @@ const paramsSchema = z.object({ id: z.string() })
 export const studentRoutes: FastifyPluginAsync = async (app) => {
   app.post('/', { preHandler: app.authenticate }, async (request) => {
     assertCan(request.actor!, { resource: 'student', action: 'manage' })
-    const body = createSchema.parse(request.body)
-    return prisma.student.create({ data: body })
+    const { age: years, ...body } = createSchema.parse(request.body)
+    return prisma.student.create({ data: { ...body, dob: dobFromAge(years) } })
   })
 
   app.get('/', { preHandler: app.authenticate }, async (request) => {
@@ -52,8 +66,19 @@ export const studentRoutes: FastifyPluginAsync = async (app) => {
   app.patch('/:id', { preHandler: app.authenticate }, async (request) => {
     assertCan(request.actor!, { resource: 'student', action: 'manage' })
     const { id } = paramsSchema.parse(request.params)
-    const body = updateSchema.parse(request.body)
-    return prisma.student.update({ where: { id }, data: body })
+    const { age: years, ...body } = updateSchema.parse(request.body)
+    return prisma.student.update({
+      where: { id },
+      data: { ...body, ...(years !== undefined ? { dob: dobFromAge(years) } : {}) },
+    })
+  })
+
+  // Deletes the student and all their records -- admins only, like every other student change.
+  app.delete('/:id', { preHandler: app.authenticate }, async (request) => {
+    assertCan(request.actor!, { resource: 'student', action: 'manage' })
+    const { id } = paramsSchema.parse(request.params)
+    await deleteStudent(id)
+    return { ok: true }
   })
 
   // The single deep read model backing the student detail screen -- groups,

@@ -4,9 +4,10 @@ import { prisma } from '@tashkurgan/db'
 import { looksLikeLinkingCode, redeemLinkingCode } from '@tashkurgan/domain'
 import { ConflictError, NotFoundError } from '@tashkurgan/shared'
 import type { QuizAnnouncement } from '../routes/quizzes'
+import type { PaymentReminderAnnouncement } from '../routes/payments'
 import type { LessonChangeAnnouncement } from '../routes/schedule'
 import type { BotContext } from './types'
-import { miniAppMenuKeyboard, openMiniAppKeyboard, quizStartKeyboard } from './keyboards'
+import { miniAppMenuKeyboard, openHomeKeyboard, openMiniAppKeyboard, quizStartKeyboard } from './keyboards'
 import * as fmt from './format'
 
 /**
@@ -143,6 +144,26 @@ export async function announceLessonChange(
       })
     } catch (err) {
       console.error(`Lesson change announcement to chat ${chatId} failed:`, err)
+    }
+  }
+}
+
+/** Sends a payment reminder to every chat of the student; one failed chat doesn't stop the rest. */
+export async function announcePaymentReminder(
+  bot: Bot<BotContext>,
+  miniAppUrl: string,
+  chatIds: string[],
+  reminder: PaymentReminderAnnouncement,
+) {
+  const text = fmt.formatPaymentReminder(reminder)
+  for (const chatId of chatIds) {
+    try {
+      await bot.api.sendMessage(chatId, text, {
+        parse_mode: 'HTML',
+        ...(miniAppUrl ? { reply_markup: openHomeKeyboard(miniAppUrl) } : {}),
+      })
+    } catch (err) {
+      console.error(`Payment reminder to chat ${chatId} failed:`, err)
     }
   }
 }

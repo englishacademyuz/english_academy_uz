@@ -194,100 +194,6 @@ export function formatMonthYear(month: number, year: number): string {
   return `${UZ_MONTHS_SHORT[month - 1]} ${year}`
 }
 
-function daysInMonth(year: number, month: number): number {
-  return new Date(year, month + 1, 0).getDate()
-}
-
-function cycleAnchorDate(anchorDay: number, year: number, month: number): Date {
-  return new Date(year, month, Math.min(anchorDay, daysInMonth(year, month)))
-}
-
-/**
- * The recurring monthly due date implied by an anchor date (the group's lesson start date,
- * not any individual student's enrollment date -- every student in a group shares the same
- * payment day) -- e.g. a 5 September start makes the 5th of every month the payment day.
- * Clamped to the last day of shorter months (a 31st start is due the 28th/30th in months
- * without one), and never lands before the anchor's own first cycle.
- */
-export function nextPaymentDueDate(anchorDate: string | Date, from: Date = new Date()): Date {
-  const anchor = typeof anchorDate === 'string' ? new Date(anchorDate) : anchorDate
-  const anchorDay = anchor.getDate()
-  const today = new Date(from.getFullYear(), from.getMonth(), from.getDate())
-
-  let candidate = cycleAnchorDate(anchorDay, today.getFullYear(), today.getMonth())
-  if (candidate < today) candidate = cycleAnchorDate(anchorDay, today.getFullYear(), today.getMonth() + 1)
-
-  const firstDue = cycleAnchorDate(anchorDay, anchor.getFullYear(), anchor.getMonth())
-  return candidate < firstDue ? firstDue : candidate
-}
-
-/** The [start, end) of the monthly billing cycle -- anchored to `anchorDate`'s day-of-month,
- * e.g. the group's lesson start date -- that contains `target`. */
-function billingCycleContaining(anchorDate: Date, target: Date): { start: Date; end: Date } {
-  const anchorDay = anchorDate.getDate()
-  let start = cycleAnchorDate(anchorDay, target.getFullYear(), target.getMonth())
-  if (start > target) start = cycleAnchorDate(anchorDay, target.getFullYear(), target.getMonth() - 1)
-  const end = cycleAnchorDate(anchorDay, start.getFullYear(), start.getMonth() + 1)
-  return { start, end }
-}
-
-/**
- * The payment row -- (year, month), keyed by its billing cycle's start like
- * `firstCycleProration` -- that `date` falls in. A group paying on the 15th is
- * still in September's cycle on 3 October. Before the group starts, its first
- * cycle is the one due.
- */
-export function billingMonthOf(groupStart: string | Date, date: Date = new Date()): { year: number; month: number } {
-  const anchor = typeof groupStart === 'string' ? new Date(groupStart) : groupStart
-  const day = new Date(date.getFullYear(), date.getMonth(), date.getDate())
-  const first = cycleAnchorDate(anchor.getDate(), anchor.getFullYear(), anchor.getMonth())
-  const { start } = billingCycleContaining(anchor, day < first ? first : day)
-  return { year: start.getFullYear(), month: start.getMonth() + 1 }
-}
-
-/** The day a (year, month) payment falls due: the group's start day in that month. */
-export function paymentDueDate(groupStart: string | Date, year: number, month: number): Date {
-  const anchor = typeof groupStart === 'string' ? new Date(groupStart) : groupStart
-  return cycleAnchorDate(anchor.getDate(), year, month - 1)
-}
-
-export type FirstCycleProration = {
-  /** The (year, month) of the Payment row this proration applies to -- the billing cycle the
-   * student's enrollment starts within, keyed by that cycle's start date. */
-  year: number
-  month: number
-  enrolledDays: number
-  cycleDays: number
-  ratio: number
-}
-
-/**
- * When a student joins a group mid-cycle, they're billed on the same shared monthly schedule
- * as everyone else (see `nextPaymentDueDate`), but only for the days they were actually
- * enrolled during that first cycle -- e.g. a group starting 5 September with a student joining
- * 15 September owes for 20 of that cycle's 30 days, not the full month. Returns null when the
- * student joined exactly on a cycle boundary, so their first cycle is already full.
- */
-export function firstCycleProration(groupStart: string | Date, enrollmentStart: string | Date): FirstCycleProration | null {
-  const anchor = typeof groupStart === 'string' ? new Date(groupStart) : groupStart
-  const joinedRaw = typeof enrollmentStart === 'string' ? new Date(enrollmentStart) : enrollmentStart
-  const joined = new Date(joinedRaw.getFullYear(), joinedRaw.getMonth(), joinedRaw.getDate())
-
-  const { start, end } = billingCycleContaining(anchor, joined)
-  if (joined.getTime() === start.getTime()) return null
-
-  const cycleDays = Math.round((end.getTime() - start.getTime()) / 86_400_000)
-  const missedDays = Math.round((joined.getTime() - start.getTime()) / 86_400_000)
-  const enrolledDays = cycleDays - missedDays
-  return { year: start.getFullYear(), month: start.getMonth() + 1, enrolledDays, cycleDays, ratio: enrolledDays / cycleDays }
-}
-
-export function daysUntil(date: Date, from: Date = new Date()): number {
-  const a = new Date(from.getFullYear(), from.getMonth(), from.getDate())
-  const b = new Date(date.getFullYear(), date.getMonth(), date.getDate())
-  return Math.round((b.getTime() - a.getTime()) / 86_400_000)
-}
-
 export function paymentCountdownLabel(days: number): string {
   if (days === 0) return 'Bugun'
   if (days === 1) return 'Ertaga'
@@ -413,4 +319,9 @@ export function ageFrom(dob: string | Date, now: Date = new Date()): number | nu
     now.getMonth() > date.getMonth() || (now.getMonth() === date.getMonth() && now.getDate() >= date.getDate())
   if (!hadBirthday) age -= 1
   return age
+}
+
+/** A `tel:` link for a phone as typed ("+998 90 123-45-67") -- tapping it opens the phone's dialer. */
+export function telHref(phone: string): string {
+  return `tel:${phone.replace(/[^\d+]/g, '')}`
 }

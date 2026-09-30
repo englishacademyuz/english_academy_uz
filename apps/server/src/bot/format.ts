@@ -102,3 +102,44 @@ export function formatLessonChange(change: {
     ...(change.reason ? ['', `Sabab: ${escapeHtml(change.reason)}`] : []),
   ].join('\n')
 }
+
+function formatSum(amount: number): string {
+  return `${amount.toLocaleString('ru-RU').replace(/\u00a0/g, ' ')} soʻm`
+}
+
+/**
+ * "Your payment day is coming / has come / has passed" -- a friendly nudge until five days past
+ * the payment day, then a firmer one: the student counts as a debtor from then on.
+ */
+export function formatPaymentReminder(reminder: {
+  studentName: string
+  stage: 'upcoming' | 'due' | 'overdue' | 'debtor'
+  dueDate: string
+  daysLeft: number
+  unpaidCycles: number
+  amount: number
+}): string {
+  const day = formatLessonDay(new Date(reminder.dueDate))
+  const headline = {
+    upcoming: `🔔 <b>${reminder.daysLeft} kundan soʻng toʻlov kuni</b>`,
+    due: '🔔 <b>Bugun toʻlov kuni</b>',
+    overdue: `⏰ <b>Toʻlov kuni ${-reminder.daysLeft} kun oldin oʻtdi</b>`,
+    debtor: '❗️ <b>Toʻlov kechiktirilmoqda</b>',
+  }[reminder.stage]
+  const ask = {
+    upcoming: 'Iltimos, toʻlovni oʻz vaqtida tayyorlab qoʻying.',
+    due: 'Iltimos, bugun toʻlovni amalga oshiring yoki markazga olib keling.',
+    overdue: 'Iltimos, toʻlovni imkon qadar tezroq amalga oshiring yoki markazga olib keling.',
+    debtor: `Toʻlov kunidan ${-reminder.daysLeft} kun oʻtdi — hisobingizda qarzdorlik bor. Iltimos, toʻlovni zudlik bilan amalga oshiring.`,
+  }[reminder.stage]
+  return [
+    headline,
+    `Oʻquvchi: <b>${escapeHtml(reminder.studentName)}</b>`,
+    '',
+    `📅 Toʻlov kuni: ${day}`,
+    ...(reminder.amount > 0 ? [`💰 Summa: <b>${formatSum(reminder.amount)}</b>`] : []),
+    ...(reminder.unpaidCycles > 1 ? [`Toʻlanmagan oylar: ${reminder.unpaidCycles} ta`] : []),
+    '',
+    ask,
+  ].join('\n')
+}

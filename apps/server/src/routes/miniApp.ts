@@ -5,6 +5,7 @@ import {
   answerQuizQuestion,
   calculateAttendanceRate,
   getGroupLeaderboard,
+  getPaymentReminder,
   getProgress,
   listQuizzesForStudent,
   placesByPoints,
@@ -48,6 +49,7 @@ function groupSummary(enrollment: Awaited<ReturnType<typeof activeEnrollment>>) 
     level: group.level.name,
     levelColor: group.level.color,
     teacher: group.teacher.fullName,
+    teacherPhone: group.teacher.phone,
     scheduleDays: group.scheduleDays,
     scheduleTime: group.scheduleTime,
   }
@@ -68,7 +70,7 @@ export const miniAppRoutes: FastifyPluginAsync = async (app) => {
     const enrollment = await activeEnrollment(student.id)
     const now = new Date()
 
-    const [lastLesson, latestHomework, quizzes, progress, points, changes, ranking] = await Promise.all([
+    const [lastLesson, latestHomework, quizzes, progress, points, changes, ranking, payment] = await Promise.all([
       enrollment
         ? prisma.lessonSession.findFirst({
             where: { groupId: enrollment.groupId, date: { lte: now } },
@@ -88,6 +90,7 @@ export const miniAppRoutes: FastifyPluginAsync = async (app) => {
       prisma.pointTransaction.findMany({ where: { studentId: student.id }, select: { points: true } }),
       scheduleChanges(enrollment),
       groupRanking(enrollment, student.id),
+      getPaymentReminder(student.id),
     ])
 
     return {
@@ -102,6 +105,14 @@ export const miniAppRoutes: FastifyPluginAsync = async (app) => {
       monthProgress: progress,
       totalPoints: sumPoints(points),
       groupRanking: ranking,
+      // Upcoming or overdue payment -- null when nothing is due within three days.
+      payment: payment && {
+        stage: payment.stage,
+        dueDate: payment.dueDate,
+        daysLeft: payment.daysLeft,
+        unpaidCycles: payment.unpaidCycles,
+        amount: payment.amount,
+      },
     }
   })
 

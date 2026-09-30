@@ -105,21 +105,25 @@ export const levels = {
 
 export const teachers = {
   list: () => get<Teacher[]>('/teachers'),
-  create: (data: { fullName: string; username: string; password: string }) => post<Teacher>('/teachers', data),
+  create: (data: { fullName: string; username: string; password: string; phone?: string }) =>
+    post<Teacher>('/teachers', data),
+  update: (id: string, data: { fullName?: string; phone?: string }) => patch<Teacher>(`/teachers/${id}`, data),
 }
 
 export const students = {
   list: (status?: StudentStatus) => get<StudentListItem[]>(`/students${status ? `?status=${status}` : ''}`),
   get: (id: string) => get<Student>(`/students/${id}`),
   overview: (id: string) => get<StudentOverview>(`/students/${id}/overview`),
-  create: (data: { firstName: string; lastName: string; dob: string; phone?: string }) =>
+  create: (data: { firstName: string; lastName: string; age: number; phone?: string; joinedAt?: string }) =>
     post<Student>('/students', data),
   update: (
     id: string,
-    data: Partial<{ firstName: string; lastName: string; dob: string; phone: string; status: StudentStatus }>,
+    data: Partial<{ firstName: string; lastName: string; age: number; phone: string; joinedAt: string; status: StudentStatus }>,
   ) =>
     patch<Student>(`/students/${id}`, data),
   issueLinkingCode: (id: string) => post<{ code: string }>(`/students/${id}/linking-code`),
+  /** Deletes the student with all their records -- can't be undone. */
+  remove: (id: string) => del<{ ok: true }>(`/students/${id}`),
 }
 
 export type GroupInput = {
@@ -235,6 +239,9 @@ export const payments = {
   forGroup: (groupId: string, year: number, month: number) =>
     get<GroupPaymentEntry[]>(`/groups/${groupId}/payments?year=${year}&month=${month}`),
   historyForGroup: (groupId: string) => get<GroupPaymentHistory>(`/groups/${groupId}/payments-history`),
+  /** Sends the student's Telegram chats a reminder about the payment that is due. */
+  remind: (studentId: string) =>
+    post<{ notifiedChats: number; remindedAt: string }>(`/students/${studentId}/payment-reminder`),
 }
 
 export const points = {

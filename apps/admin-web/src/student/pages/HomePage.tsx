@@ -10,7 +10,7 @@ import { ClockIcon, CupTile, GradeFace, HomeworkTile, MEDAL, TrophyIcon, isPodiu
 import { ErrorState, LinkRow, Loading, Screen, SectionTitle } from '../components/kit'
 import { ScheduleChanges, nextLesson, relativeDay } from '../components/schedule'
 import { GRADE, MONTHS, averageOf, capitalize, firstName, formatDateTime, gradeOf, initialsOf, weekdayDate } from '../format'
-import type { GroupSummary, MiniGroupRanking, MiniHome, MiniScheduleChange } from '../types'
+import type { GroupSummary, MiniGroupRanking, MiniHome, MiniPaymentReminder, MiniScheduleChange } from '../types'
 
 export function HomePage() {
   const home = useQuery({ queryKey: ['mini', 'home'], queryFn: miniApi.home })
@@ -34,6 +34,7 @@ export function HomePage() {
     monthProgress,
     totalPoints,
     groupRanking,
+    payment,
   } = home.data
 
   return (
@@ -51,6 +52,8 @@ export function HomePage() {
           {initialsOf(student.firstName, student.lastName)}
         </Link>
       </header>
+
+      {payment && <PaymentCard payment={payment} />}
 
       <PointsCard total={totalPoints} thisMonth={monthProgress.points} ranking={groupRanking} />
 
@@ -83,6 +86,60 @@ export function HomePage() {
       <MonthTiles progress={monthProgress} />
 
     </div>
+  )
+}
+
+/**
+ * The payment nudge: a warm yellow card from three days before the payment day until five days
+ * after it, then a red, unhappy one -- the student counts as a debtor from then on.
+ */
+function PaymentCard({ payment }: { payment: MiniPaymentReminder }) {
+  const { stage, daysLeft } = payment
+  const debtor = stage === 'debtor'
+  const title = {
+    upcoming: `${daysLeft} kundan soʻng toʻlov kuni`,
+    due: 'Bugun toʻlov kuni!',
+    overdue: 'Toʻlov kuni keldi',
+    debtor: 'Toʻlov kechikmoqda',
+  }[stage]
+  const hint = {
+    upcoming: 'Toʻlovni oldindan tayyorlab qoʻying 🙂',
+    due: 'Iltimos, toʻlovni amalga oshiring yoki markazga olib keling.',
+    overdue: `Toʻlov kunidan ${-daysLeft} kun oʻtdi. Iltimos, toʻlovni amalga oshiring yoki olib keling.`,
+    debtor: `Toʻlov kunidan ${-daysLeft} kun oʻtdi — qarzdorlik bor. Iltimos, zudlik bilan toʻlang.`,
+  }[stage]
+
+  return (
+    <section
+      className={`flex items-center gap-4 rounded-[28px] border-[3px] p-[18px] ${
+        debtor ? 'border-tg-cherry bg-tg-cherry-soft' : 'border-tg-sun bg-tg-sun-soft'
+      }`}
+    >
+      {/* A worried face while it's only due, a sad one once they're a debtor. */}
+      <GradeFace grade={debtor ? 2 : 3} size={64} />
+      <div className="flex min-w-0 grow flex-col gap-1">
+        <span className={`text-sm font-extrabold uppercase ${debtor ? 'text-tg-cherry' : 'text-tg-sun-ink'}`}>
+          {debtor ? '❗️ Qarzdorlik' : '🔔 Toʻlov eslatmasi'}
+        </span>
+        <span className="font-tg-display text-[22px] font-semibold leading-[1.15]">{title}</span>
+        <span className={`text-sm font-bold ${debtor ? 'text-tg-cherry' : 'text-tg-sun-body'}`}>{hint}</span>
+        <span className="mt-1 flex flex-wrap gap-1.5">
+          <span className="rounded-full bg-white px-2.5 py-0.5 text-[13px] font-extrabold">
+            📅 {weekdayDate(new Date(payment.dueDate))}
+          </span>
+          {payment.amount > 0 && (
+            <span className="rounded-full bg-white px-2.5 py-0.5 text-[13px] font-extrabold tabular-nums">
+              💰 {payment.amount.toLocaleString('ru-RU')} soʻm
+            </span>
+          )}
+          {payment.unpaidCycles > 1 && (
+            <span className="rounded-full bg-white px-2.5 py-0.5 text-[13px] font-extrabold text-tg-cherry">
+              {payment.unpaidCycles} oy toʻlanmagan
+            </span>
+          )}
+        </span>
+      </div>
+    </section>
   )
 }
 

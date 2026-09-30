@@ -20,7 +20,7 @@ export type Subject = { id: string; name: string; courses?: Course[] }
 export type Course = { id: string; subjectId: string; name: string; levels?: Level[]; subject?: Subject }
 export type Level = { id: string; courseId: string; name: string; color: string; course?: Course }
 
-export type Teacher = { id: string; fullName: string; userId: string }
+export type Teacher = { id: string; fullName: string; phone: string | null; userId: string }
 
 export type Student = {
   id: string
@@ -29,7 +29,22 @@ export type Student = {
   dob: string
   phone?: string | null
   status: StudentStatus
+  /** The day they joined -- their own monthly payment day. */
+  joinedAt: string
+  paymentRemindedAt?: string | null
   enrollments?: Enrollment[]
+}
+
+/** A payment that is coming up (within 3 days) or overdue -- see @tashkurgan/shared/billing. */
+export type StudentPaymentReminder = {
+  stage: 'upcoming' | 'due' | 'overdue' | 'debtor'
+  year: number
+  month: number
+  dueDate: string
+  daysLeft: number
+  unpaidCycles: number
+  amount: number
+  remindedAt: string | null
 }
 
 
@@ -160,7 +175,7 @@ export type StudentOverview = {
   lessonDays: Array<{ id: string; date: string; group: { id: string; name: string } }>
   assessmentResults: StudentOverviewAssessmentResult[]
   quizResults: StudentOverviewQuizResult[]
-  payments: { list: Payment[]; outstanding: number }
+  payments: { list: Payment[]; outstanding: number; reminder: StudentPaymentReminder | null }
   points: { total: number; recent: PointTransaction[] }
 }
 
@@ -231,4 +246,5 @@ export type StudentListItem = Student & {
   groups: Array<{ id: string; name: string; level: { name: string; color: string } }>
   points: number
   attendance: { totals: Record<AttendanceStatus, number>; rate: number | null }
+  paymentReminder: StudentPaymentReminder | null
 }

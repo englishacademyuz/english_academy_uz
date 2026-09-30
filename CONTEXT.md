@@ -107,8 +107,15 @@ A recorded achievement (e.g., "Monthly Champion") granted to a Student. Granting
 _Avoid_: Prize, gift — the physical prize is just a note on the Reward; there is no inventory.
 
 **Payment**:
-One Student's billing record for one calendar month (amount due, amount paid, status). Months are tracked independently of one another — an unpaid balance is not automatically rolled into the next month's amount due.
+One Student's billing record for one monthly cycle (amount due, amount paid, status). Months are tracked independently of one another — an unpaid balance is not automatically rolled into the next month's amount due.
 _Avoid_: Invoice, bill
+
+**Payment day**:
+The day of the month a Student joined the center (`Student.joinedAt`); each cycle runs from one payment day to the next, and is owed from its first day. It is per Student, not per Group. A cycle's Payment row is keyed by the month its payment day falls in.
+
+**Payment reminder**:
+Shown from 3 days before a payment day until that cycle is fully paid: *upcoming* (1–3 days ahead), *due* (the day itself), *overdue* (1–5 days late), then *debtor* (more than 5 days late). Staff can send it to the Student's Telegram chats; the Mini App home screen shows it too.
+_Avoid_: Invoice, dunning
 
 ### Cross-Cutting
 

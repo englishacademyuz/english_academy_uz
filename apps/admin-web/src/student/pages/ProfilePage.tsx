@@ -1,8 +1,8 @@
 import type { ReactNode } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { Link } from 'react-router-dom'
-import { ChevronRight } from 'lucide-react'
-import { studentStatusLabel } from '../../lib/format'
+import { ChevronRight, Phone } from 'lucide-react'
+import { ageFrom, studentStatusLabel, telHref } from '../../lib/format'
 import { miniApi } from '../api'
 import { GroupIcon, LockIcon, TrophyIcon } from '../components/art'
 import { ErrorState, LabeledValue, Loading, Screen, SectionTitle } from '../components/kit'
@@ -56,6 +56,7 @@ export function ProfilePage() {
               </span>
               <LabeledValue label="Ustozim">{group.teacher}</LabeledValue>
             </div>
+            {group.teacherPhone && <CallTeacher phone={group.teacherPhone} />}
             <div className="flex items-center gap-3">
               <span className="flex h-14 w-14 shrink-0 items-center justify-center rounded-[18px] bg-tg-sun text-tg-ink">
                 <GroupIcon size={28} />
@@ -77,7 +78,7 @@ export function ProfilePage() {
         </div>
         {group && <ParentRow label="Daraja">{group.level}</ParentRow>}
         {memberSince && <ParentRow label="Guruhda">{formatDate(memberSince)} dan beri</ParentRow>}
-        <ParentRow label="Tugʻilgan sana">{formatDate(student.dob)}</ParentRow>
+        {ageFrom(student.dob) !== null && <ParentRow label="Yoshi">{ageFrom(student.dob)} yosh</ParentRow>}
         <ParentRow label="Telefon">{student.phone || 'Kiritilmagan'}</ParentRow>
         <ParentRow label="Ulangan hisoblar" last>
           {linkedAccounts} ta Telegram
@@ -99,6 +100,29 @@ function ParentRow({ label, children, last }: { label: string; children: ReactNo
     <div className={`flex justify-between gap-3 py-2.5 text-[15px] ${last ? '' : 'border-b border-tg-line-strong'}`}>
       <span className="font-bold text-tg-body">{label}</span>
       <span className="text-right font-extrabold">{children}</span>
+    </div>
+  )
+}
+
+/**
+ * The teacher's number and a big call button -- both are plain `tel:` links, which Telegram hands
+ * to the phone's dialer (Telegram.WebApp.openLink only takes http/https).
+ */
+function CallTeacher({ phone }: { phone: string }) {
+  const href = telHref(phone)
+  return (
+    <div className="flex flex-col gap-2 rounded-[20px] bg-tg-leaf-soft p-3">
+      <a href={href} className="flex items-center gap-2 self-start px-1 text-lg font-extrabold text-tg-leaf-dark tabular-nums">
+        <Phone className="h-5 w-5" strokeWidth={2.5} />
+        {phone}
+      </a>
+      <a
+        href={href}
+        className="flex min-h-12 items-center justify-center gap-2 rounded-[16px] bg-tg-leaf px-4 text-[17px] font-extrabold text-white active:scale-[0.99]"
+      >
+        <Phone className="h-5 w-5" strokeWidth={2.5} />
+        Qoʻngʻiroq qilish
+      </a>
     </div>
   )
 }

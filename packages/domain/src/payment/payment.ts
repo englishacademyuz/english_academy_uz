@@ -1,5 +1,12 @@
 import { prisma, type PaymentStatus } from '@tashkurgan/db'
-import { NotFoundError, ValidationError } from '@tashkurgan/shared'
+import {
+  NotFoundError,
+  ValidationError,
+  paymentReminder,
+  tashkentToday,
+  type CalendarDay,
+  type PaymentReminder,
+} from '@tashkurgan/shared'
 
 /** Status is always re-derived from the amounts (never set independently), so it can't drift out of sync (§51.4). */
 export function derivePaymentStatus(amountDue: number, amountPaid: number): PaymentStatus {
@@ -126,4 +133,84 @@ export async function getGroupPaymentHistory(groupId: string) {
   })
 
   return { students: enrollments.map((e) => e.student), payments }
+}
+
+export type StudentPaymentReminder = PaymentReminder & {
+  /** What's left to pay for the owed month -- its recorded remainder, else the group's fee; 0 = fee not set. */
+  amount: number
+  /** When a reminder was last sent to the student's Telegram chats. */
+  remindedAt: Date | null
+}
+
+/**
+ * The payment reminder (see `paymentReminder`) for each of `studentIds` -- null for a student who
+ * owes nothing within three days, or who isn't billed at all: not active, or in no group right now.
+ * Two queries however many students, so the students list can show every row's button.
+ */
+export async function getPaymentReminders(
+  studentIds: string[],
+  today: CalendarDay = tashkentToday(),
+): Promise<Map<string, StudentPaymentReminder | null>> {
+  const [students, payments] = await Promise.all([
+    prisma.student.findMany({
+      where: { id: { in: studentIds } },
+      select: {
+        id: true,
+        status: true,
+        joinedAt: true,
+        paymentRemindedAt: true,
+        // The group joined most recently is the one whose fee the student pays, as on the payment form.
+        enrollments: {
+          where: { status: 'ACTIVE' },
+          select: { group: { select: { monthlyFee: true } } },
+          orderBy: { startDate: 'desc' },
+          take: 1,
+        },
+      },
+    }),
+    prisma.payment.findMany({
+      where: { studentId: { in: studentIds } },
+      select: { studentId: true, year: true, month: true, amountDue: true, amountPaid: true, status: true },
+    }),
+  ])
+
+  const result = new Map<string, StudentPaymentReminder | null>()
+  for (const student of students) {
+    const current = student.enrollments[0]
+    if (student.status !== 'ACTIVE' || !current) {
+      result.set(student.id, null)
+      continue
+    }
+    const own = payments.filter((p) => p.studentId === student.id)
+    const reminder = paymentReminder(
+      student.joinedAt,
+      own.filter((p) => p.status === 'PAID'),
+      today,
+    )
+    if (!reminder) {
+      result.set(student.id, null)
+      continue
+    }
+    const row = own.find((p) => p.year === reminder.year && p.month === reminder.month)
+    result.set(student.id, {
+      ...reminder,
+      amount: row ? Math.max(row.amountDue - row.amountPaid, 0) : current.group.monthlyFee,
+      remindedAt: student.paymentRemindedAt,
+    })
+  }
+  return result
+}
+
+export async function getPaymentReminder(studentId: string, today?: CalendarDay) {
+  return (await getPaymentReminders([studentId], today)).get(studentId) ?? null
+}
+
+/** Every Telegram chat linked to the student -- the student's own and their parents'. */
+export async function studentChatIds(studentId: string): Promise<string[]> {
+  const links = await prisma.telegramLink.findMany({ where: { studentId }, select: { chatId: true } })
+  return links.map((l) => l.chatId)
+}
+
+export async function markPaymentReminded(studentId: string, at: Date = new Date()) {
+  return prisma.student.update({ where: { id: studentId }, data: { paymentRemindedAt: at } })
 }

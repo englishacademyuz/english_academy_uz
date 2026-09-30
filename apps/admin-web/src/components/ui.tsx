@@ -1,6 +1,13 @@
 import { Loader2, X } from 'lucide-react'
 import type { LucideIcon } from 'lucide-react'
-import type { ButtonHTMLAttributes, InputHTMLAttributes, ReactNode, SelectHTMLAttributes } from 'react'
+import { forwardRef } from 'react'
+import type {
+  ButtonHTMLAttributes,
+  InputHTMLAttributes,
+  ReactNode,
+  SelectHTMLAttributes,
+  TextareaHTMLAttributes,
+} from 'react'
 
 export function Card({ children, className = '' }: { children: ReactNode; className?: string }) {
   return (
@@ -83,6 +90,18 @@ export function Input({ className = '', ...props }: InputHTMLAttributes<HTMLInpu
     />
   )
 }
+
+export const Textarea = forwardRef<HTMLTextAreaElement, TextareaHTMLAttributes<HTMLTextAreaElement>>(
+  function Textarea({ className = '', ...props }, ref) {
+    return (
+      <textarea
+        ref={ref}
+        className={`w-full rounded-lg border border-slate-300 px-3 py-2 text-sm text-slate-900 placeholder:text-slate-400 focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-100 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100 dark:placeholder:text-slate-500 dark:focus:ring-brand-500/20 ${className}`}
+        {...props}
+      />
+    )
+  },
+)
 
 /** A so'm amount typed and shown with its thousands spaced out ("500 000"), handed back as a plain number. */
 export function MoneyInput({

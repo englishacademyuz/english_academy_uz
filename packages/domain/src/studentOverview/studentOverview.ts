@@ -1,7 +1,7 @@
 import { prisma } from '@tashkurgan/db'
 import { NotFoundError } from '@tashkurgan/shared'
 import { calculateAttendanceRate } from '../attendance/attendance'
-import { computeOutstanding } from '../payment/payment'
+import { computeOutstanding, getPaymentReminder } from '../payment/payment'
 import { sumPoints } from '../points/points'
 
 
@@ -16,7 +16,7 @@ export async function getStudentOverview(studentId: string) {
   const student = await prisma.student.findUnique({ where: { id: studentId } })
   if (!student) throw new NotFoundError('Student not found')
 
-  const [enrollments, telegramLinkCount, attendances, assessmentResults, quizAttempts, payments, pointTransactions] =
+  const [enrollments, telegramLinkCount, attendances, assessmentResults, quizAttempts, payments, pointTransactions, reminder] =
     await Promise.all([
       prisma.enrollment.findMany({
         where: { studentId },
@@ -51,6 +51,7 @@ export async function getStudentOverview(studentId: string) {
         include: { group: true },
         orderBy: { createdAt: 'desc' },
       }),
+      getPaymentReminder(studentId),
     ])
 
   // Every lesson the student's groups held while they were enrolled -- the attendance
@@ -94,6 +95,7 @@ export async function getStudentOverview(studentId: string) {
     payments: {
       list: payments,
       outstanding: computeOutstanding(payments),
+      reminder,
     },
     points: {
       total: sumPoints(pointTransactions),

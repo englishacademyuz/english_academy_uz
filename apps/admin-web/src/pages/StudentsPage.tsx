@@ -1,13 +1,15 @@
 import { useMemo, useState } from 'react'
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
+import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { Link } from 'react-router-dom'
 import { ArrowDown, ArrowUp, Cake, Plus, Search, Trophy, UserX, X } from 'lucide-react'
 import { students as studentsApi } from '../lib/api'
 import { ageFrom, initials, studentStatusLabel, studentStatusTone } from '../lib/format'
 import { levelStyles } from '../lib/levelColor'
-import { notifyError, notifySuccess } from '../lib/toast'
-import type { StudentListItem, StudentStatus } from '../lib/types'
-import { Badge, Button, Card, EmptyState, Field, Input, Modal, PageHeader, Select, Spinner } from '../components/ui'
+import type { Student, StudentListItem, StudentStatus } from '../lib/types'
+import { AssignGroupModal } from '../components/student/AssignGroupModal'
+import { StudentFormModal } from '../components/student/StudentFormModal'
+import { PaymentReminderButton } from '../components/shared/PaymentReminderButton'
+import { Badge, Button, Card, EmptyState, Input, PageHeader, Select, Spinner } from '../components/ui'
 
 const STATUSES: StudentStatus[] = ['ACTIVE', 'PAUSED', 'INACTIVE', 'COMPLETED', 'LEFT']
 
@@ -72,6 +74,8 @@ export function StudentsPage() {
   const [search, setSearch] = useState('')
   const [sort, setSort] = useState<Sort>({ key: 'name', dir: 'asc' })
   const [showCreate, setShowCreate] = useState(false)
+  // Set right after creation, so the new student can be put into a group straight away.
+  const [assigning, setAssigning] = useState<Student | null>(null)
   const queryClient = useQueryClient()
 
   // One fetch of everyone -- status counts, group options and filtering are all client-side.
@@ -214,6 +218,7 @@ export function StudentsPage() {
                   <SortHeader label="Reyting" sortKey="points" sort={sort} onSort={toggleSort} align="right" />
                   <SortHeader label="Davomat" sortKey="attendance" sort={sort} onSort={toggleSort} />
                   <SortHeader label="Qoldirgan" sortKey="absences" sort={sort} onSort={toggleSort} align="right" />
+                  <th className="px-3 py-3">Toʻlov</th>
                   <th className="px-3 py-3 pr-5 text-right">Holat</th>
                 </tr>
               </thead>
@@ -231,14 +236,17 @@ export function StudentsPage() {
       </Card>
 
       {showCreate && (
-        <CreateStudentModal
+        <StudentFormModal
           onClose={() => setShowCreate(false)}
-          onCreated={() => {
+          onSaved={(student) => {
             queryClient.invalidateQueries({ queryKey: ['students'] })
             setShowCreate(false)
+            setAssigning(student)
           }}
         />
       )}
+
+      {assigning && <AssignGroupModal student={assigning} onClose={() => setAssigning(null)} />}
     </div>
   )
 }
@@ -358,83 +366,16 @@ function StudentRow({ student }: { student: StudentListItem }) {
           {totals.ABSENT}
         </span>
       </td>
+      <td className="px-3 py-2.5">
+        {student.paymentReminder ? (
+          <PaymentReminderButton studentId={student.id} reminder={student.paymentReminder} size="sm" />
+        ) : (
+          <span className="text-xs text-slate-300 dark:text-slate-600">—</span>
+        )}
+      </td>
       <td className="px-3 py-2.5 pr-5 text-right">
         <Badge tone={studentStatusTone[student.status]}>{studentStatusLabel[student.status]}</Badge>
       </td>
     </tr>
-  )
-}
-
-function CreateStudentModal({ onClose, onCreated }: { onClose: () => void; onCreated: () => void }) {
-  const [firstName, setFirstName] = useState('')
-  const [lastName, setLastName] = useState('')
-  const [dob, setDob] = useState('')
-  const [phone, setPhone] = useState('')
-  const age = dob ? ageFrom(`${dob}T00:00:00`) : null
-
-  const createMutation = useMutation({
-    mutationFn: () => studentsApi.create({ firstName, lastName, dob, phone: phone || undefined }),
-    onSuccess: () => {
-      notifySuccess('Oʻquvchi yaratildi')
-      onCreated()
-    },
-    onError: (err) => notifyError(err, 'Oʻquvchi yaratib boʻlmadi'),
-  })
-
-  return (
-    <Modal title="Yangi oʻquvchi" onClose={onClose}>
-      <form
-        onSubmit={(e) => {
-          e.preventDefault()
-          createMutation.mutate()
-        }}
-        className="space-y-4"
-      >
-        <div className="grid grid-cols-2 gap-4">
-          <Field label="Ism">
-            <Input value={firstName} onChange={(e) => setFirstName(e.target.value)} required />
-          </Field>
-          <Field label="Familiya">
-            <Input value={lastName} onChange={(e) => setLastName(e.target.value)} required />
-          </Field>
-        </div>
-
-        <div className="grid grid-cols-[1fr_auto] items-end gap-3">
-          <Field label="Tugʻilgan sana">
-            <Input
-              type="date"
-              value={dob}
-              max={new Date().toISOString().slice(0, 10)}
-              onChange={(e) => setDob(e.target.value)}
-              required
-            />
-          </Field>
-          <div
-            className={`flex h-[38px] min-w-[88px] items-center justify-center gap-1.5 rounded-lg px-3 text-sm font-semibold ${
-              age !== null
-                ? 'bg-brand-50 text-brand-700 dark:bg-brand-500/10 dark:text-brand-300'
-                : 'bg-slate-100 text-slate-400 dark:bg-slate-800'
-            }`}
-            aria-live="polite"
-          >
-            <Cake className="h-4 w-4" />
-            {age !== null ? `${age} yosh` : 'Yosh'}
-          </div>
-        </div>
-
-        <Field label="Telefon (ixtiyoriy)">
-          <Input value={phone} onChange={(e) => setPhone(e.target.value)} placeholder="+998 90 123 45 67" />
-        </Field>
-
-        <div className="flex justify-end gap-2 pt-2">
-          <Button type="button" variant="secondary" onClick={onClose}>
-            Bekor qilish
-          </Button>
-          <Button type="submit" loading={createMutation.isPending}>
-            Oʻquvchi yaratish
-          </Button>
-        </div>
-      </form>
-    </Modal>
   )
 }

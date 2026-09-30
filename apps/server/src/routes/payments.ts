@@ -6,10 +6,19 @@ import {
   computeOutstanding,
   getGroupPaymentHistory,
   getGroupPaymentStatus,
+  getPaymentReminder,
+  markPaymentReminded,
   recordPayment,
+  studentChatIds,
+  type StudentPaymentReminder,
   updatePayment,
 } from '@tashkurgan/domain'
-import { NotFoundError } from '@tashkurgan/shared'
+import { NotFoundError, ValidationError } from '@tashkurgan/shared'
+
+export type PaymentReminderAnnouncement = StudentPaymentReminder & { studentName: string }
+
+/** Tells a student's Telegram chats a payment is coming up or overdue -- the bot in production, a no-op or spy in tests. */
+export type PaymentReminderNotifier = (chatIds: string[], reminder: PaymentReminderAnnouncement) => Promise<void>
 
 const studentParams = z.object({ id: z.string() })
 const paymentParams = z.object({ id: z.string() })
@@ -42,7 +51,9 @@ async function requireGroup(id: string) {
   return group
 }
 
-export const paymentRoutes: FastifyPluginAsync = async (app) => {
+export const paymentRoutes: FastifyPluginAsync<{ notifier?: PaymentReminderNotifier }> = async (app, opts) => {
+  const notifier: PaymentReminderNotifier = opts.notifier ?? (async () => {})
+
   app.get('/students/:id/payments', { preHandler: app.authenticate }, async (request) => {
     assertCan(request.actor!, { resource: 'payment', action: 'view' })
     const { id } = studentParams.parse(request.params)
@@ -89,5 +100,22 @@ export const paymentRoutes: FastifyPluginAsync = async (app) => {
     const { groupId } = groupParams.parse(request.params)
     await requireGroup(groupId)
     return getGroupPaymentHistory(groupId)
+  })
+
+  // The "remind about payment" button: shown from three days before the payment day until the
+  // month is paid. Sends in the background (a slow Telegram call mustn't fail the request).
+  app.post('/students/:id/payment-reminder', { preHandler: app.authenticate }, async (request) => {
+    assertCan(request.actor!, { resource: 'payment', action: 'manage' })
+    const { id } = studentParams.parse(request.params)
+    const student = await requireStudent(id)
+    const reminder = await getPaymentReminder(id)
+    if (!reminder) throw new ValidationError('Nothing is due for this student yet')
+
+    const chatIds = await studentChatIds(id)
+    notifier(chatIds, { ...reminder, studentName: `${student.firstName} ${student.lastName}` }).catch((err) =>
+      request.log.error({ err, studentId: id }, 'Payment reminder failed'),
+    )
+    const updated = await markPaymentReminded(id)
+    return { notifiedChats: chatIds.length, remindedAt: updated.paymentRemindedAt }
   })
 }

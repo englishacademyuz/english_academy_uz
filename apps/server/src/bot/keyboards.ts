@@ -31,3 +31,7 @@ export function quizStartKeyboard(miniAppUrl: string, quizId: string) {
 export function openMiniAppKeyboard(miniAppUrl: string) {
   return new InlineKeyboard().webApp('📚 Ilovani ochish', `${miniAppUrl}/lessons`)
 }
+
+export function openHomeKeyboard(miniAppUrl: string) {
+  return new InlineKeyboard().webApp('🏠 Ilovani ochish', miniAppUrl)
+}

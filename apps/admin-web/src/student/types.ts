@@ -6,6 +6,8 @@ export type GroupSummary = {
   /** The level's "#rrggbb" -- the Mini App paints the schedule and lesson dates in it. */
   levelColor: string
   teacher: string
+  /** Null when the center hasn't entered one -- the call button is hidden then. */
+  teacherPhone: string | null
   scheduleDays: string[]
   scheduleTime: string
 }
@@ -38,6 +40,16 @@ export type MiniHome = {
   monthProgress: MiniProgressSnapshot
   totalPoints: number
   groupRanking: MiniGroupRanking | null
+  payment: MiniPaymentReminder | null
+}
+
+/** A payment coming up in 3 days or less, or overdue -- `debtor` once 5 days past the payment day. */
+export type MiniPaymentReminder = {
+  stage: 'upcoming' | 'due' | 'overdue' | 'debtor'
+  dueDate: string
+  daysLeft: number
+  unpaidCycles: number
+  amount: number
 }
 
 export type MiniLessons = {
