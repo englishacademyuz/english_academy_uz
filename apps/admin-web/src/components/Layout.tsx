@@ -12,6 +12,7 @@ import {
 import { useAuth } from '../lib/auth'
 import { useTheme } from '../lib/theme'
 import { roleLabel } from '../lib/format'
+import { ChatLauncher } from './chat/ChatLauncher'
 
 const navItems = [
   { to: '/', label: 'Bosh sahifa', icon: LayoutDashboard, end: true },
@@ -92,6 +93,8 @@ export function Layout() {
           <Outlet />
         </div>
       </main>
+
+      <ChatLauncher />
     </div>
   )
 }

@@ -3,18 +3,22 @@ import { z } from 'zod'
 import { prisma, type AttendanceStatus } from '@tashkurgan/db'
 import {
   answerQuizQuestion,
+  familyUnreadCount,
   calculateAttendanceRate,
   getGroupLeaderboard,
   getPaymentReminder,
+  getFamilyThread,
   getProgress,
   listQuizzesForStudent,
   placesByPoints,
+  postFamilyMessage,
   startQuizAttempt,
   sumPoints,
   toPercentage,
   upcomingReschedules,
 } from '@tashkurgan/domain'
 import { NotFoundError } from '@tashkurgan/shared'
+import { telegramDisplayName } from '../telegram/initData'
 
 /**
  * The Telegram Mini App's API. Every route is scoped to `request.student`,
@@ -30,6 +34,7 @@ const pageQuery = z.object({ page: z.coerce.number().int().min(0).default(0) })
 const progressQuery = z.object({ kind: z.enum(['today', 'week', 'month']).default('month') })
 const monthQuery = z.object({ year: z.coerce.number().int(), month: z.coerce.number().int().min(1).max(12) })
 const answerBody = z.object({ optionId: z.string() })
+const chatMessageBody = z.object({ text: z.string() })
 
 const me = (request: FastifyRequest) => request.student!
 
@@ -70,7 +75,7 @@ export const miniAppRoutes: FastifyPluginAsync = async (app) => {
     const enrollment = await activeEnrollment(student.id)
     const now = new Date()
 
-    const [lastLesson, latestHomework, quizzes, progress, points, changes, ranking, payment] = await Promise.all([
+    const [lastLesson, latestHomework, quizzes, progress, points, changes, ranking, payment, unreadChat] = await Promise.all([
       enrollment
         ? prisma.lessonSession.findFirst({
             where: { groupId: enrollment.groupId, date: { lte: now } },
@@ -91,6 +96,7 @@ export const miniAppRoutes: FastifyPluginAsync = async (app) => {
       scheduleChanges(enrollment),
       groupRanking(enrollment, student.id),
       getPaymentReminder(student.id),
+      familyUnreadCount(student.id),
     ])
 
     return {
@@ -113,6 +119,8 @@ export const miniAppRoutes: FastifyPluginAsync = async (app) => {
         unpaidCycles: payment.unpaidCycles,
         amount: payment.amount,
       },
+      // Teacher answers not yet opened in the Mini App's chat.
+      unreadChat,
     }
   })
 
@@ -321,6 +329,32 @@ export const miniAppRoutes: FastifyPluginAsync = async (app) => {
     const { id } = idParams.parse(request.params)
     const { optionId } = answerBody.parse(request.body)
     return answerQuizQuestion(id, optionId, me(request).id)
+  })
+
+  // Oʻqituvchi bilan muloqot: the family's thread with the teacher. Opening it marks the teacher's answers seen.
+  app.get('/student/chat', async (request) => {
+    const student = me(request)
+    const [enrollment, messages] = await Promise.all([
+      activeEnrollment(student.id),
+      getFamilyThread(student.id, String(request.telegramUser!.id)),
+    ])
+    return {
+      teacher: enrollment ? { name: enrollment.group.teacher.fullName, phone: enrollment.group.teacher.phone } : null,
+      messages,
+    }
+  })
+
+  app.post('/student/chat/messages', async (request) => {
+    const student = me(request)
+    const { text } = chatMessageBody.parse(request.body)
+    const user = request.telegramUser!
+    const { message } = await postFamilyMessage({
+      studentId: student.id,
+      chatId: String(user.id),
+      senderName: telegramDisplayName(user),
+      text,
+    })
+    return { id: message.id, fromFamily: true, mine: true, senderName: message.senderName, text: message.text, createdAt: message.createdAt }
   })
 }
 

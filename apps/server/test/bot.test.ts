@@ -183,6 +183,51 @@ describe('telegram bot', () => {
     expect(webAppUrls(calls)).toContain(`${MINI_APP_URL}/lessons`)
   })
 
+  it('relays other text to the teacher, confirming only the first of a run', async () => {
+    const student = await prisma.student.create({
+      data: { firstName: 'Ali', lastName: 'K', dob: new Date('2012-01-01') },
+    })
+    await prisma.telegramLink.create({ data: { chatId: '666', studentId: student.id } })
+
+    const { bot, calls } = buildBot()
+    await bot.init()
+    await bot.handleUpdate(textUpdate(666, 'Assalomu alaykum, Ali bugun kelolmaydi'))
+    await bot.handleUpdate(textUpdate(666, 'Isitmasi bor'))
+
+    const messages = await prisma.chatMessage.findMany({ orderBy: { createdAt: 'asc' } })
+    expect(messages.map((m) => [m.sender, m.senderChatId, m.senderName, m.text])).toEqual([
+      ['FAMILY', '666', 'Test', 'Assalomu alaykum, Ali bugun kelolmaydi'],
+      ['FAMILY', '666', 'Test', 'Isitmasi bor'],
+    ])
+    expect(calls.filter((c) => c.method === 'setMessageReaction')).toHaveLength(2)
+    expect(calls.filter((c) => c.method === 'sendMessage' && String(c.payload.text).includes('yuborildi'))).toHaveLength(1)
+    expect(webAppUrls(calls)).toContain(`${MINI_APP_URL}/chat`)
+    // Relayed text doesn't bring up the menu.
+    expect(sentText(calls, 'Ali K')).toBe(false)
+  })
+
+  it('asks for text when a linked chat sends a photo', async () => {
+    const student = await prisma.student.create({
+      data: { firstName: 'Ali', lastName: 'K', dob: new Date('2012-01-01') },
+    })
+    await prisma.telegramLink.create({ data: { chatId: '667', studentId: student.id } })
+
+    const { bot, calls } = buildBot()
+    await bot.init()
+    await bot.handleUpdate({
+      update_id: nextUpdateId++,
+      message: {
+        message_id: nextUpdateId,
+        date: Math.floor(Date.now() / 1000),
+        chat: { id: 667, type: 'private' as const, first_name: 'Test' },
+        from: { id: 667, is_bot: false, first_name: 'Test' },
+        photo: [{ file_id: 'x', file_unique_id: 'x', width: 1, height: 1 }],
+      },
+    })
+    expect(sentText(calls, 'faqat matnli')).toBe(true)
+    expect(await prisma.chatMessage.count()).toBe(0)
+  })
+
   it('tells an unlinked chat to send its code on /start', async () => {
     const { bot, calls } = buildBot()
     await bot.init()

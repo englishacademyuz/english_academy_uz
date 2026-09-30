@@ -1,20 +1,30 @@
 import { Bot } from 'grammy'
 import type { UserFromGetMe } from 'grammy/types'
 import { prisma } from '@tashkurgan/db'
-import { looksLikeLinkingCode, redeemLinkingCode } from '@tashkurgan/domain'
+import { CHAT_MESSAGE_MAX_LENGTH, looksLikeLinkingCode, postFamilyMessage, redeemLinkingCode } from '@tashkurgan/domain'
 import { ConflictError, NotFoundError } from '@tashkurgan/shared'
 import type { QuizAnnouncement } from '../routes/quizzes'
 import type { PaymentReminderAnnouncement } from '../routes/payments'
 import type { AbsenceAnnouncement } from '../routes/absences'
 import type { LessonChangeAnnouncement } from '../routes/schedule'
+import type { StaffMessageAnnouncement } from '../routes/conversations'
+import { telegramDisplayName } from '../telegram/initData'
 import type { BotContext } from './types'
-import { miniAppMenuKeyboard, openHomeKeyboard, openMiniAppKeyboard, quizStartKeyboard } from './keyboards'
+import {
+  MENU_LABELS,
+  miniAppMenuKeyboard,
+  openChatKeyboard,
+  openHomeKeyboard,
+  openMiniAppKeyboard,
+  quizStartKeyboard,
+} from './keyboards'
 import * as fmt from './format'
 
 /**
- * The bot is for linking and notifications; everything a student (or parent)
- * browses -- lessons, homework, progress, attendance, quizzes -- is in the
- * Telegram Mini App at `miniAppUrl`.
+ * The bot is for linking, notifications and the family chat with the teacher
+ * (any other text a linked chat sends is a message to the teacher); everything
+ * a student (or parent) browses -- lessons, homework, progress, attendance,
+ * quizzes -- is in the Telegram Mini App at `miniAppUrl`.
  */
 export type BotOptions = {
   /** Lets tests skip the real getMe network call -- production always fetches it live. */
@@ -63,11 +73,26 @@ async function handleLinkingCode(ctx: BotContext, chatId: string, text: string, 
   await sendMenu(ctx, student, miniAppUrl)
 }
 
+/** Relays a linked chat's text to the teacher -- confirmed with a reaction, plus a line when a new run of messages starts. */
+async function handleFamilyMessage(ctx: BotContext, studentId: string, chatId: string, text: string, miniAppUrl?: string) {
+  const { startsTurn } = await postFamilyMessage({
+    studentId,
+    chatId,
+    senderName: ctx.from ? telegramDisplayName(ctx.from) : '',
+    text,
+  })
+  // Reactions are a newer Bot API feature -- a client that can't show one still gets the line below.
+  await ctx.react('👌').catch(() => {})
+  if (startsTurn) {
+    await ctx.reply(fmt.formatChatDelivered(), miniAppUrl ? { reply_markup: openChatKeyboard(miniAppUrl) } : undefined)
+  }
+}
+
 export function createBot(token: string, options: BotOptions = {}) {
   const { botInfo, miniAppUrl } = options
   const bot = new Bot<BotContext>(token, botInfo ? { botInfo } : undefined)
 
-  bot.command('start', async (ctx) => {
+  bot.command(['start', 'menu'], async (ctx) => {
     const student = await resolveStudent(String(ctx.chat.id))
     if (student) {
       await sendMenu(ctx, student, miniAppUrl)
@@ -90,8 +115,23 @@ export function createBot(token: string, options: BotOptions = {}) {
       return
     }
 
-    // Anything else -- including a tap on the old reply keyboard -- gets the Mini App menu.
-    await sendMenu(ctx, student, miniAppUrl)
+    // A tap on a button of the old reply keyboard brings up the Mini App menu.
+    if (MENU_LABELS.has(text)) {
+      await sendMenu(ctx, student, miniAppUrl)
+      return
+    }
+
+    // Anything else is a message to the teacher.
+    if (text.length > CHAT_MESSAGE_MAX_LENGTH) {
+      await ctx.reply(fmt.formatChatTooLong(CHAT_MESSAGE_MAX_LENGTH))
+      return
+    }
+    await handleFamilyMessage(ctx, student.id, chatId, text, miniAppUrl)
+  })
+
+  // Photos, voice notes, stickers … aren't relayed (yet) -- a linked chat is asked to write instead.
+  bot.on('message', async (ctx) => {
+    if (await resolveStudent(String(ctx.chat.id))) await ctx.reply(fmt.formatChatTextOnly())
   })
 
   // Buttons on messages from the old text-based bot (lesson lists, chat quizzes, …)
@@ -185,6 +225,26 @@ export async function announceAbsence(
       })
     } catch (err) {
       console.error(`Absence notice to chat ${chatId} failed:`, err)
+    }
+  }
+}
+
+/** Delivers a teacher's answer to every chat of the student; one failed chat doesn't stop the rest. */
+export async function announceStaffMessage(
+  bot: Bot<BotContext>,
+  miniAppUrl: string,
+  chatIds: string[],
+  message: StaffMessageAnnouncement,
+) {
+  const text = fmt.formatStaffMessage(message)
+  for (const chatId of chatIds) {
+    try {
+      await bot.api.sendMessage(chatId, text, {
+        parse_mode: 'HTML',
+        ...(miniAppUrl ? { reply_markup: openChatKeyboard(miniAppUrl) } : {}),
+      })
+    } catch (err) {
+      console.error(`Chat message to chat ${chatId} failed:`, err)
     }
   }
 }

@@ -57,7 +57,8 @@ export function formatMenu(studentName: string): string {
   return `👋 Xush kelibsiz!
 Siz <b>${escapeHtml(studentName)}</b> maʼlumotlarini koʻryapsiz.
 
-Kerakli boʻlimni oching:`
+Kerakli boʻlimni oching.
+💬 Oʻqituvchiga savolingiz boʻlsa, shu yerga yozing.`
 }
 
 export function formatMiniAppUnavailable(): string {
@@ -155,4 +156,29 @@ export function formatAbsenceNotice(absence: { studentName: string; groupName: s
     '',
     'Iltimos, sababini oʻqituvchiga yoki markazga maʼlum qiling.',
   ].join('\n')
+}
+
+/** A teacher's (or admin's) answer in the family chat, delivered to every chat linked to the student. */
+export function formatStaffMessage(message: { studentName: string; senderName: string; text: string }): string {
+  return [
+    '💬 <b>Oʻqituvchidan xabar</b>',
+    `👤 ${escapeHtml(message.senderName)} · Oʻquvchi: ${escapeHtml(message.studentName)}`,
+    '',
+    escapeHtml(message.text),
+    '',
+    '<i>Javob berish uchun shu yerga yozing.</i>',
+  ].join('\n')
+}
+
+/** Confirms the first of a run of family messages reached the teacher. */
+export function formatChatDelivered(): string {
+  return "✅ Xabaringiz oʻqituvchiga yuborildi. Javob shu chatga keladi.\n\nYana biror narsa qoʻshmoqchi boʻlsangiz, shu yerga yozavering."
+}
+
+export function formatChatTextOnly(): string {
+  return "Hozircha oʻqituvchiga faqat matnli xabar yuborish mumkin. Savolingizni yozib yuboring ✍️"
+}
+
+export function formatChatTooLong(max: number): string {
+  return `Xabar juda uzun. Iltimos, ${max} belgidan qisqaroq qilib yozing yoki bir necha qismga boʻlib yuboring.`
 }

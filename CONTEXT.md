@@ -23,7 +23,7 @@ A code an admin issues for one Student. Reusable until it expires (24h), so the 
 _Avoid_: Invite code, activation code
 
 **Mini App**:
-The student-facing app inside Telegram, where a Student (or a parent, seeing the same Student) views lessons, homework, progress, attendance and takes quizzes. The bot itself only links accounts and sends notifications — see [ADR-0004](./docs/adr/0004-telegram-mini-app-for-students.md).
+The student-facing app inside Telegram, where a Student (or a parent, seeing the same Student) views lessons, homework, progress, attendance and takes quizzes. The bot itself links accounts, sends notifications and carries the Conversation with the teacher — see [ADR-0004](./docs/adr/0004-telegram-mini-app-for-students.md) and [ADR-0005](./docs/adr/0005-family-conversation-per-student.md).
 _Avoid_: Student bot (for the browsing interface), web app
 
 **TelegramLink**:
@@ -119,6 +119,12 @@ _Avoid_: Invoice, dunning
 
 **Absence notice**:
 Shown on the students list while a Student's latest recorded lesson is one they were marked absent from. The group's Teacher (or an Admin) can send it to the Student's Telegram chats; it stays, marked as sent (`Attendance.absenceNotifiedAt`), until the Student attends a later lesson.
+
+### Communication
+
+**Conversation**:
+The one message thread between a Student's family and staff ("Oʻqituvchi bilan muloqot"). The family is every TelegramLink of the Student — in practice mostly parents — writing from the bot (any text that isn't a code) or the Mini App. Staff are the Teacher of one of the Student's current Groups, or an Admin; an answer goes to every linked chat. Unread is tracked per staff member.
+_Avoid_: Live chat (nothing is real-time — the panel checks every few seconds), support ticket
 
 ### Cross-Cutting
 

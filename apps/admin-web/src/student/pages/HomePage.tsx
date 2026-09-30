@@ -35,6 +35,7 @@ export function HomePage() {
     totalPoints,
     groupRanking,
     payment,
+    unreadChat,
   } = home.data
 
   return (
@@ -54,6 +55,8 @@ export function HomePage() {
       </header>
 
       {payment && <PaymentCard payment={payment} />}
+
+      {unreadChat > 0 && <NewChatMessageCard count={unreadChat} />}
 
       <PointsCard total={totalPoints} thisMonth={monthProgress.points} ranking={groupRanking} />
 
@@ -85,7 +88,28 @@ export function HomePage() {
 
       <MonthTiles progress={monthProgress} />
 
+      {unreadChat === 0 && <LinkRow to="/student/chat">💬 Oʻqituvchi bilan muloqot</LinkRow>}
+
     </div>
+  )
+}
+
+/** The teacher answered in the family chat -- shown until the chat is opened. */
+function NewChatMessageCard({ count }: { count: number }) {
+  return (
+    <Link to="/student/chat" className="flex items-center gap-4 rounded-[28px] bg-tg-grape p-[18px] text-white active:scale-[0.99]">
+      <span className="relative flex h-14 w-14 shrink-0 items-center justify-center rounded-[18px] bg-tg-grape-2 text-3xl" aria-hidden>
+        💬
+        <span className="absolute -right-1.5 -top-1.5 flex h-6 min-w-6 items-center justify-center rounded-full bg-tg-sun px-1.5 text-[13px] font-extrabold text-tg-ink">
+          {count}
+        </span>
+      </span>
+      <span className="flex min-w-0 grow flex-col gap-0.5">
+        <span className="text-sm font-extrabold uppercase text-tg-grape-soft">Yangi xabar</span>
+        <span className="font-tg-display text-[22px] font-semibold leading-tight">Oʻqituvchidan javob keldi</span>
+      </span>
+      <ChevronRight className="h-6 w-6 shrink-0" strokeWidth={2.5} />
+    </Link>
   )
 }
 

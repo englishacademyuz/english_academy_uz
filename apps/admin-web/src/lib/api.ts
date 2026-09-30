@@ -5,6 +5,10 @@ import type {
   AssessmentCategoryCadence,
   AssessmentType,
   AttendanceStatus,
+  ChatMessage,
+  ChatUnreadSummary,
+  ConversationListItem,
+  ConversationThread,
   Course,
   Enrollment,
   EnrollmentEndReason,
@@ -279,4 +283,14 @@ export const quizzes = {
   send: (id: string, deadline: string) =>
     post<{ id: string; notifiedChats: number }>(`/quizzes/${id}/send`, { deadline }),
   close: (id: string) => post<QuizDetail>(`/quizzes/${id}/close`),
+}
+
+export const conversations = {
+  list: () => get<ConversationListItem[]>('/conversations'),
+  unread: () => get<ChatUnreadSummary>('/conversations/unread'),
+  /** Opening a thread marks it read for the signed-in user. */
+  thread: (studentId: string) => get<ConversationThread>(`/students/${studentId}/conversation`),
+  /** Saves the message and delivers it to every Telegram chat linked to the student. */
+  send: (studentId: string, text: string) =>
+    post<ChatMessage & { deliveredChats: number }>(`/students/${studentId}/conversation/messages`, { text }),
 }

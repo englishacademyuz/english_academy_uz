@@ -84,6 +84,13 @@ export function ProfilePage() {
           {linkedAccounts} ta Telegram
         </ParentRow>
         <Link
+          to="/student/chat"
+          className="mt-2 flex items-center justify-between rounded-2xl bg-white px-4 py-3.5 text-base font-extrabold text-tg-blue-dark"
+        >
+          💬 Oʻqituvchi bilan muloqot
+          <ChevronRight className="h-[22px] w-[22px]" strokeWidth={2.5} />
+        </Link>
+        <Link
           to="/student/diary"
           className="mt-2 flex items-center justify-between rounded-2xl bg-white px-4 py-3.5 text-base font-extrabold text-tg-blue-dark"
         >

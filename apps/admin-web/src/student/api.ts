@@ -2,6 +2,8 @@ import { initData } from './telegram'
 import type {
   AttemptState,
   MiniAttendance,
+  MiniChat,
+  MiniChatMessage,
   MiniHome,
   MiniHomework,
   MiniLessonDetail,
@@ -63,6 +65,9 @@ export const miniApi = {
   profile: () => request<MiniProfile>('/student/profile'),
   quizzes: () => request<MiniQuiz[]>('/student/quizzes'),
   startQuiz: (id: string) => request<AttemptState>(`/student/quizzes/${id}/start`, { method: 'POST' }),
+  chat: () => request<MiniChat>('/student/chat'),
+  sendChat: (text: string) =>
+    request<MiniChatMessage>('/student/chat/messages', { method: 'POST', body: JSON.stringify({ text }) }),
   answer: (attemptId: string, optionId: string) =>
     request<AttemptState>(`/student/quiz-attempts/${attemptId}/answer`, {
       method: 'POST',

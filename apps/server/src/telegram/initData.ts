@@ -67,3 +67,9 @@ export function signTelegramInitData(fields: Record<string, string>, botToken: s
   params.set('hash', sign(dataCheckString(params, ['hash', 'signature']), botToken).toString('hex'))
   return params.toString()
 }
+
+/** How a Telegram account is named to staff in the family chat: "Dilnoza Karimova", else "@dilnoza". */
+export function telegramDisplayName(user: { first_name?: string; last_name?: string; username?: string }): string {
+  const name = [user.first_name, user.last_name].filter(Boolean).join(' ').trim()
+  return name || (user.username ? `@${user.username}` : '')
+}

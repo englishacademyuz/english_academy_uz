@@ -33,6 +33,9 @@ export type Permission =
   | { resource: 'payment'; action: 'manage' | 'view' }
   | { resource: 'pointTransaction'; action: 'view' }
   | { resource: 'pointTransaction'; action: 'manage'; ownerTeacherId: string }
+  // Reading and answering a student's family chat -- a Teacher only for students in one of
+  // their current groups (`ownerTeacherIds` are the teachers of the student's active groups).
+  | { resource: 'conversation'; action: 'manage'; ownerTeacherIds: string[] }
 
 export function can(actor: Actor, permission: Permission): boolean {
   if (actor.role === 'ADMIN') return true
@@ -57,6 +60,8 @@ export function can(actor: Actor, permission: Permission): boolean {
         return true
       case 'pointTransaction':
         return permission.action === 'view' || permission.ownerTeacherId === actor.teacherId
+      case 'conversation':
+        return !!actor.teacherId && permission.ownerTeacherIds.includes(actor.teacherId)
       case 'student':
       case 'teacher':
       case 'subject':

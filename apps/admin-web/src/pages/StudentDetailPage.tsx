@@ -1,12 +1,13 @@
 import { useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { useNavigate, useParams } from 'react-router-dom'
-import { KeyRound, Pencil, Trash2 } from 'lucide-react'
+import { KeyRound, MessageCircle, Pencil, Trash2 } from 'lucide-react'
 import { students as studentsApi } from '../lib/api'
 import { ageFrom, studentStatusLabel } from '../lib/format'
 import { notifyError, notifySuccess } from '../lib/toast'
 import type { StudentStatus } from '../lib/types'
 import { useAuth } from '../lib/auth'
+import { useChat } from '../lib/chat'
 import { Button, Card, ErrorBanner, PageHeader, Select, Spinner } from '../components/ui'
 import { GroupsCard } from '../components/student/GroupsCard'
 import { DiaryCard } from '../components/student/DiaryCard'
@@ -21,6 +22,7 @@ const STATUSES: StudentStatus[] = ['ACTIVE', 'PAUSED', 'INACTIVE', 'COMPLETED', 
 export function StudentDetailPage() {
   const { id } = useParams<{ id: string }>()
   const { actor } = useAuth()
+  const chat = useChat()
   const queryClient = useQueryClient()
   const navigate = useNavigate()
   const [code, setCode] = useState<string | null>(null)
@@ -67,6 +69,10 @@ export function StudentDetailPage() {
         description={[age !== null ? `${age} yosh` : null, student.phone].filter(Boolean).join(' · ')}
         actions={
           <div className="flex items-center gap-2">
+            {/* A teacher may only write to families of their own students -- the chat says so otherwise. */}
+            <Button variant="secondary" onClick={() => chat.open(student.id)}>
+              <MessageCircle className="h-4 w-4" /> Xabar yozish
+            </Button>
             {overview.payments.reminder && (
               <PaymentReminderButton studentId={student.id} reminder={overview.payments.reminder} />
             )}

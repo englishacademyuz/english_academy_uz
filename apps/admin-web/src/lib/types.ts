@@ -257,3 +257,48 @@ export type StudentListItem = Student & {
   paymentReminder: StudentPaymentReminder | null
   lastAbsence: StudentAbsence | null
 }
+
+/** The student a family chat is about, with their current groups -- the chat header's info card. */
+export type ChatStudent = {
+  id: string
+  firstName: string
+  lastName: string
+  dob: string
+  phone: string | null
+  status: StudentStatus
+  groups: Array<{ id: string; name: string; level: string; levelColor: string; teacher: string }>
+}
+
+export type ChatSender = 'FAMILY' | 'STAFF'
+
+export type ChatMessage = {
+  id: string
+  sender: ChatSender
+  /** A family message: the Telegram account's name. A staff one: the teacher's full name, or "Administrator". */
+  senderName: string
+  text: string
+  createdAt: string
+}
+
+export type ConversationListItem = {
+  studentId: string
+  student: ChatStudent
+  lastMessage: Omit<ChatMessage, 'id'> | null
+  lastMessageAt: string
+  /** Family messages this staff member hasn't opened yet. */
+  unread: number
+}
+
+export type ConversationThread = {
+  student: ChatStudent
+  linkedChats: number
+  /** Staff messages up to here have been opened by the family in the Mini App. */
+  familyReadAt: string | null
+  messages: ChatMessage[]
+}
+
+export type ChatUnreadSummary = {
+  conversations: number
+  messages: number
+  latest: { studentId: string; studentName: string; senderName: string; text: string; createdAt: string } | null
+}

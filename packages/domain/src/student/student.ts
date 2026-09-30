@@ -12,7 +12,7 @@ export async function deleteStudent(studentId: string) {
 
   const where = { studentId }
   await prisma.$transaction([
-    // Quiz answers go with their attempts (onDelete: Cascade); Telegram links and linking codes with the student.
+    // Quiz answers go with their attempts (onDelete: Cascade); Telegram links, linking codes and the family chat go with the student.
     prisma.quizAttempt.deleteMany({ where }),
     prisma.pointTransaction.deleteMany({ where }),
     prisma.payment.deleteMany({ where }),

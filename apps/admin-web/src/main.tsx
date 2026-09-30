@@ -4,6 +4,7 @@ import { BrowserRouter, Route, Routes } from 'react-router-dom'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { App } from './App'
 import { AuthProvider } from './lib/auth'
+import { ChatProvider } from './lib/chat'
 import { ThemeProvider } from './lib/theme'
 import './index.css'
 
@@ -44,7 +45,9 @@ if (/^\/student(\/|$)/.test(window.location.pathname)) {
         <ThemeProvider>
           <BrowserRouter>
             <AuthProvider>
-              <App />
+              <ChatProvider>
+                <App />
+              </ChatProvider>
             </AuthProvider>
           </BrowserRouter>
         </ThemeProvider>

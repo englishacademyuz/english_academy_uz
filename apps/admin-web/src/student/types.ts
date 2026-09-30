@@ -41,6 +41,8 @@ export type MiniHome = {
   totalPoints: number
   groupRanking: MiniGroupRanking | null
   payment: MiniPaymentReminder | null
+  /** Teacher answers in the family chat not yet opened here. */
+  unreadChat: number
 }
 
 /** A payment coming up in 3 days or less, or overdue -- `debtor` once 5 days past the payment day. */
@@ -141,3 +143,18 @@ export type MiniScheduleChange = {
 export type MiniRankRow = { name: string; points: number; place: number; isMe: boolean }
 
 export type MiniGroupRanking = { myPlace: number | null; myPoints: number; rows: MiniRankRow[] }
+
+/** One message of the family chat. `mine` is this Telegram account's own; other family messages come from the student's other linked chats. */
+export type MiniChatMessage = {
+  id: string
+  fromFamily: boolean
+  mine: boolean
+  senderName: string
+  text: string
+  createdAt: string
+}
+
+export type MiniChat = {
+  teacher: { name: string; phone: string | null } | null
+  messages: MiniChatMessage[]
+}

@@ -91,6 +91,13 @@ enum PaymentStatus {
   PAID
 }
 
+// Who wrote a chat message: someone in the student's family (any of their linked
+// Telegram chats -- the student or a parent) or a member of staff (Admin/Teacher).
+enum ChatSender {
+  FAMILY
+  STAFF
+}
+
 enum PointActivityType {
   HOMEWORK
   PARTICIPATION
@@ -112,6 +119,9 @@ model User {
 
   student Student?
   teacher Teacher?
+
+  chatMessages      ChatMessage[]
+  conversationReads ConversationRead[]
 
   @@map("users")
 }
@@ -141,6 +151,7 @@ model Student {
   assessmentResults AssessmentResult[]
   payments          Payment[]
   pointTransactions PointTransaction[]
+  conversation      Conversation?
 
   @@map("students")
 }
@@ -380,16 +391,16 @@ model HomeworkResult {
 // Present/Late credit fully, Absent credits nothing, Excused is removed from
 // the denominator entirely when computing attendance % (§51.1).
 model Attendance {
-  id              String           @id @default(cuid())
-  lessonSessionId String
-  lessonSession   LessonSession    @relation(fields: [lessonSessionId], references: [id])
-  studentId       String
-  student         Student          @relation(fields: [studentId], references: [id])
-  status          AttendanceStatus
+  id                String           @id @default(cuid())
+  lessonSessionId   String
+  lessonSession     LessonSession    @relation(fields: [lessonSessionId], references: [id])
+  studentId         String
+  student           Student          @relation(fields: [studentId], references: [id])
+  status            AttendanceStatus
   // When the student's chats were told they missed this lesson -- null until someone presses the button.
   absenceNotifiedAt DateTime?
-  createdAt       DateTime         @default(now())
-  updatedAt       DateTime         @updatedAt
+  createdAt         DateTime         @default(now())
+  updatedAt         DateTime         @updatedAt
 
   @@unique([lessonSessionId, studentId])
   @@map("attendances")
@@ -595,4 +606,58 @@ model LessonReschedule {
   @@unique([groupId, originalDate])
   @@index([newDate])
   @@map("lesson_reschedules")
+}
+
+// The one message thread between a Student's family (every Telegram chat
+// linked to the Student) and staff -- "O'qituvchi bilan muloqot". Created on
+// the first message from either side.
+model Conversation {
+  id                  String    @id @default(cuid())
+  studentId           String    @unique
+  student             Student   @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  lastMessageAt       DateTime  @default(now())
+  // The newest family message -- a conversation is unread for a staff member
+  // while this is later than their ConversationRead.readAt.
+  lastFamilyMessageAt DateTime?
+  // When the family last opened the thread in the Mini App (or wrote in it) --
+  // staff messages up to then are shown as seen.
+  familyReadAt        DateTime?
+  createdAt           DateTime  @default(now())
+
+  messages ChatMessage[]
+  reads    ConversationRead[]
+
+  @@index([lastMessageAt])
+  @@map("conversations")
+}
+
+model ChatMessage {
+  id             String       @id @default(cuid())
+  conversationId String
+  conversation   Conversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+  sender         ChatSender
+  text           String
+  // FAMILY: the Telegram chat it came from and that account's name.
+  // STAFF: the user who wrote it and their name (the teacher's full name, or "Administrator").
+  senderChatId   String?
+  senderUserId   String?
+  senderUser     User?        @relation(fields: [senderUserId], references: [id], onDelete: SetNull)
+  senderName     String
+  createdAt      DateTime     @default(now())
+
+  @@index([conversationId, createdAt])
+  @@map("chat_messages")
+}
+
+// How far one staff member has read a conversation. Per user, so an admin
+// reading a thread doesn't hide it from the group's teacher.
+model ConversationRead {
+  conversationId String
+  conversation   Conversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+  userId         String
+  user           User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  readAt         DateTime
+
+  @@id([conversationId, userId])
+  @@map("conversation_reads")
 }

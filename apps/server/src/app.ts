@@ -19,6 +19,7 @@ import { absenceRoutes, type AbsenceNotifier } from './routes/absences'
 import { pointRoutes } from './routes/points'
 import { quizRoutes, type QuizNotifier } from './routes/quizzes'
 import { miniAppRoutes } from './routes/miniApp'
+import { conversationRoutes, type ChatNotifier } from './routes/conversations'
 import { scheduleRoutes, type LessonChangeNotifier } from './routes/schedule'
 
 export type BuildAppOptions = {
@@ -30,6 +31,8 @@ export type BuildAppOptions = {
   paymentReminderNotifier?: PaymentReminderNotifier
   /** Tells a student's Telegram chats they missed a lesson; omitted (no bot) means the button sends nothing. */
   absenceNotifier?: AbsenceNotifier
+  /** Delivers staff answers in the family chat to the student's Telegram chats; omitted (no bot) means they're only saved. */
+  chatNotifier?: ChatNotifier
   /** Verifies Telegram Mini App init data; defaults to the configured bot token. */
   telegramBotToken?: string
 }
@@ -61,6 +64,7 @@ export async function buildApp(options: BuildAppOptions = {}) {
   await app.register(pointRoutes)
   await app.register(quizRoutes, { notifier: options.quizNotifier })
   await app.register(scheduleRoutes, { notifier: options.lessonChangeNotifier })
+  await app.register(conversationRoutes, { notifier: options.chatNotifier })
   // The Telegram Mini App's API -- its own auth (Telegram init data), not the admin cookie.
   await app.register(miniAppRoutes)
 

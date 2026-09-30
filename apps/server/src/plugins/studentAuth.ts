@@ -2,7 +2,7 @@ import fp from 'fastify-plugin'
 import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify'
 import { prisma, type Student } from '@tashkurgan/db'
 import { AppError, ForbiddenError, UnauthorizedError } from '@tashkurgan/shared'
-import { verifyTelegramInitData } from '../telegram/initData'
+import { verifyTelegramInitData, type TelegramInitUser } from '../telegram/initData'
 
 declare module 'fastify' {
   interface FastifyInstance {
@@ -11,6 +11,8 @@ declare module 'fastify' {
   interface FastifyRequest {
     /** The one student this Mini App session may see -- resolved server-side, never from client input. */
     student?: Student
+    /** The verified Telegram account making the request -- its id is the linked chat's id. */
+    telegramUser?: TelegramInitUser
   }
 }
 
@@ -38,5 +40,6 @@ export default fp<{ botToken?: string }>(async (app: FastifyInstance, opts) => {
     if (!link) throw new ForbiddenError('NOT_LINKED')
 
     request.student = link.student
+    request.telegramUser = verified.user
   })
 })
