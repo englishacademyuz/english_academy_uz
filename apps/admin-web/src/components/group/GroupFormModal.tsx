@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { AlertTriangle, Archive } from 'lucide-react'
+import { AlertTriangle, Archive, Camera } from 'lucide-react'
 import {
   groups as groupsApi,
   levels as levelsApi,
@@ -35,6 +35,7 @@ export function GroupFormModal({
   const [scheduleTime, setScheduleTime] = useState(group?.scheduleTime ?? '18:00')
   const [startDate, setStartDate] = useState(group ? toDateInputValue(group.startDate) : '')
   const [monthlyFee, setMonthlyFee] = useState(group?.monthlyFee ?? 0)
+  const [homeworkSubmissionEnabled, setHomeworkSubmissionEnabled] = useState(group?.homeworkSubmissionEnabled ?? false)
 
   const subjectsQuery = useQuery({ queryKey: ['subjects'], queryFn: subjectsApi.list })
   const levelsQuery = useQuery({ queryKey: ['levels'], queryFn: () => levelsApi.list() })
@@ -48,7 +49,16 @@ export function GroupFormModal({
 
   const saveMutation = useMutation({
     mutationFn: () => {
-      const data: GroupInput = { levelId, teacherId, name, scheduleDays, scheduleTime, startDate, monthlyFee }
+      const data: GroupInput = {
+        levelId,
+        teacherId,
+        name,
+        scheduleDays,
+        scheduleTime,
+        startDate,
+        monthlyFee,
+        homeworkSubmissionEnabled,
+      }
       return editing ? groupsApi.update(group.id, data) : groupsApi.create(data)
     },
     onSuccess: (saved) => {
@@ -165,6 +175,23 @@ export function GroupFormModal({
             Toʻlov oynasi shu narx bilan toʻldiriladi.
           </p>
         </div>
+
+        <label className="flex cursor-pointer items-start gap-3 rounded-lg border border-slate-200 p-3 hover:bg-slate-50 dark:border-slate-700 dark:hover:bg-slate-800/60">
+          <input
+            type="checkbox"
+            checked={homeworkSubmissionEnabled}
+            onChange={(e) => setHomeworkSubmissionEnabled(e.target.checked)}
+            className="mt-0.5 h-4 w-4 rounded border-slate-300 text-brand-600 focus:ring-brand-500"
+          />
+          <span className="min-w-0">
+            <span className="flex items-center gap-1.5 text-sm font-medium text-slate-800 dark:text-slate-200">
+              <Camera className="h-4 w-4 text-slate-400" /> Uyga vazifani rasm orqali topshirish
+            </span>
+            <span className="mt-0.5 block text-xs text-slate-500 dark:text-slate-400">
+              Oʻquvchilar vazifasini suratga olib, Telegram orqali yuboradi. Oʻqituvchi ularni «Uyga vazifalar» boʻlimida tekshiradi.
+            </span>
+          </span>
+        </label>
 
         {editing && (
           <p className="rounded-lg bg-slate-50 px-3 py-2 text-xs text-slate-500 dark:bg-slate-800/60 dark:text-slate-400">

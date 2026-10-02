@@ -1,8 +1,8 @@
 import { useMemo, useState } from 'react'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { Link } from 'react-router-dom'
-import { ArrowRight, Clock, Pencil, Plus, Trash2, Users } from 'lucide-react'
-import { groups as groupsApi } from '../lib/api'
+import { ArrowRight, Camera, Clock, Pencil, Plus, Trash2, Users } from 'lucide-react'
+import { groups as groupsApi, homeworkSubmissions as submissionsApi } from '../lib/api'
 import { useAuth } from '../lib/auth'
 import { dayLabel, initials } from '../lib/format'
 import { levelStyles } from '../lib/levelColor'
@@ -20,6 +20,7 @@ export function GroupsPage() {
   const [levelFilter, setLevelFilter] = useState<string | null>(null)
 
   const groupsQuery = useQuery({ queryKey: ['groups'], queryFn: groupsApi.list })
+  const unchecked = useQuery({ queryKey: ['homework-unchecked'], queryFn: submissionsApi.unchecked })
 
   // Each level present, in first-appearance order -- doubles as the color legend and a filter.
   const levels = useMemo(() => {
@@ -101,6 +102,7 @@ export function GroupsPage() {
             <GroupCard
               key={group.id}
               group={group}
+              uncheckedHomework={unchecked.data?.byGroup[group.id] ?? 0}
               onEdit={isAdmin ? () => setEditing(group) : undefined}
               onDelete={isAdmin ? () => setDeleting(group) : undefined}
             />
@@ -127,7 +129,18 @@ export function GroupsPage() {
   )
 }
 
-function GroupCard({ group, onEdit, onDelete }: { group: Group; onEdit?: () => void; onDelete?: () => void }) {
+function GroupCard({
+  group,
+  uncheckedHomework,
+  onEdit,
+  onDelete,
+}: {
+  group: Group
+  /** Homework photos waiting for the teacher. */
+  uncheckedHomework: number
+  onEdit?: () => void
+  onDelete?: () => void
+}) {
   const studentCount = group.enrollments?.length ?? 0
   const accent = levelStyles(group.level?.color)
 
@@ -153,9 +166,20 @@ function GroupCard({ group, onEdit, onDelete }: { group: Group; onEdit?: () => v
                 </span>
               )}
             </div>
-            <span className="inline-flex shrink-0 items-center gap-1.5 rounded-full bg-slate-100 px-2.5 py-1 text-xs font-semibold text-slate-600 dark:bg-slate-800 dark:text-slate-300">
-              <Users className="h-3.5 w-3.5" />
-              {studentCount}
+            <span className="flex shrink-0 items-center gap-1.5">
+              {uncheckedHomework > 0 && (
+                <span
+                  title="Tekshirilmagan uyga vazifalar"
+                  className="inline-flex items-center gap-1 rounded-full bg-amber-100 px-2.5 py-1 text-xs font-semibold text-amber-800 dark:bg-amber-500/15 dark:text-amber-300"
+                >
+                  <Camera className="h-3.5 w-3.5" />
+                  {uncheckedHomework}
+                </span>
+              )}
+              <span className="inline-flex items-center gap-1.5 rounded-full bg-slate-100 px-2.5 py-1 text-xs font-semibold text-slate-600 dark:bg-slate-800 dark:text-slate-300">
+                <Users className="h-3.5 w-3.5" />
+                {studentCount}
+              </span>
             </span>
           </div>
 

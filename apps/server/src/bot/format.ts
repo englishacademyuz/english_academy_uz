@@ -182,3 +182,38 @@ export function formatChatTextOnly(): string {
 export function formatChatTooLong(max: number): string {
   return `Xabar juda uzun. Iltimos, ${max} belgidan qisqaroq qilib yozing yoki bir necha qismga boʻlib yuboring.`
 }
+
+/** Sent once the photos a chat just sent are in -- an album gets one receipt, not one per photo. */
+export function formatHomeworkPhotosReceived(receipt: { date: Date; topic: string | null; photoCount: number }): string {
+  return [
+    '📸 <b>Uyga vazifa qabul qilindi</b>',
+    `📅 ${formatLessonDay(receipt.date)}${receipt.topic ? ` · ${escapeHtml(receipt.topic)}` : ''}`,
+    `🖼 Rasmlar: ${receipt.photoCount} ta`,
+    '',
+    'Ustoz tekshirgach, natija shu yerga keladi. Rasmlarni ilovada koʻrish yoki oʻchirish mumkin.',
+  ].join('\n')
+}
+
+export function formatNoOpenHomework(): string {
+  return "Hozir topshiriladigan uyga vazifa yoʻq 🙂\nRasm faqat ustoz bergan vazifa uchun qabul qilinadi."
+}
+
+export function formatTooManyHomeworkPhotos(max: number): string {
+  return `Bitta vazifaga koʻpi bilan ${max} ta rasm yuborish mumkin. Keraksizlarini ilovada oʻchirib, keyin qayta yuboring.`
+}
+
+export function formatHomeworkReview(review: {
+  studentName: string
+  date: Date
+  topic: string | null
+  status: 'CHECKED' | 'RETURNED'
+  comment: string | null
+}): string {
+  return [
+    review.status === 'CHECKED' ? '✅ <b>Uyga vazifa tekshirildi</b>' : '🔁 <b>Uyga vazifani qayta ishlash kerak</b>',
+    `Oʻquvchi: <b>${escapeHtml(review.studentName)}</b>`,
+    `📅 ${formatLessonDay(review.date)}${review.topic ? ` · ${escapeHtml(review.topic)}` : ''}`,
+    ...(review.comment ? ['', `💬 Ustoz: ${escapeHtml(review.comment)}`] : []),
+    ...(review.status === 'RETURNED' ? ['', 'Xatolarni tuzatib, rasmlarni qaytadan yuboring.'] : []),
+  ].join('\n')
+}

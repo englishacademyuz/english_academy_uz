@@ -2,7 +2,12 @@ import type { FastifyPluginAsync, FastifyRequest } from 'fastify'
 import { z } from 'zod'
 import { prisma, type AttendanceStatus } from '@tashkurgan/db'
 import {
+  addHomeworkPhoto,
   answerQuizQuestion,
+  assertCanAddHomeworkPhoto,
+  MAX_HOMEWORK_PHOTOS,
+  removeHomeworkPhoto,
+  submissionView,
   familyUnreadCount,
   calculateAttendanceRate,
   getGroupLeaderboard,
@@ -17,8 +22,10 @@ import {
   toPercentage,
   upcomingReschedules,
 } from '@tashkurgan/domain'
-import { NotFoundError } from '@tashkurgan/shared'
+import { AppError, NotFoundError, ValidationError } from '@tashkurgan/shared'
 import { telegramDisplayName } from '../telegram/initData'
+import { isSupportedImage, type HomeworkFileStore } from '../telegram/fileStore'
+import { homeworkPhotoCaption, sendHomeworkPhoto } from './homeworkSubmissions'
 
 /**
  * The Telegram Mini App's API. Every route is scoped to `request.student`,
@@ -35,6 +42,8 @@ const progressQuery = z.object({ kind: z.enum(['today', 'week', 'month']).defaul
 const monthQuery = z.object({ year: z.coerce.number().int(), month: z.coerce.number().int().min(1).max(12) })
 const answerBody = z.object({ optionId: z.string() })
 const chatMessageBody = z.object({ text: z.string() })
+/** A phone photo the app has shrunk is well under 1 MB; this leaves room for an unshrunk one. */
+const MAX_UPLOAD_BYTES = 10 * 1024 * 1024
 
 const me = (request: FastifyRequest) => request.student!
 
@@ -66,8 +75,12 @@ async function enrolledGroupIds(studentId: string) {
   return [...new Set(enrollments.map((e) => e.groupId))]
 }
 
-export const miniAppRoutes: FastifyPluginAsync = async (app) => {
+export const miniAppRoutes: FastifyPluginAsync<{ fileStore?: HomeworkFileStore }> = async (app, opts) => {
   app.addHook('preHandler', app.authenticateStudent)
+  // Homework photos are posted as the raw image bytes.
+  app.addContentTypeParser(['image/jpeg', 'image/png', 'image/webp'], { parseAs: 'buffer' }, (_request, body, done) =>
+    done(null, body),
+  )
 
   // Bosh sahifa: everything the home screen needs in one call.
   app.get('/student/home', async (request) => {
@@ -168,7 +181,11 @@ export const miniAppRoutes: FastifyPluginAsync = async (app) => {
     const groupIds = await enrolledGroupIds(student.id)
     const lesson = await prisma.lessonSession.findFirst({
       where: { id, groupId: { in: groupIds } },
-      include: { materials: true, homework: true, group: { select: { name: true } } },
+      include: {
+        materials: true,
+        homework: { include: { submissions: { where: { studentId: student.id }, include: { photos: true } } } },
+        group: { select: { name: true, homeworkSubmissionEnabled: true } },
+      },
     })
     // Same answer for "doesn't exist" and "not yours" -- nothing to probe.
     if (!lesson) throw new NotFoundError('Lesson not found')
@@ -180,7 +197,16 @@ export const miniAppRoutes: FastifyPluginAsync = async (app) => {
       // The teacher's explanation of the lesson ("Tushuntirish"), as the editor's HTML.
       notes: lesson.notes,
       materials: lesson.materials.map((m) => ({ id: m.id, type: m.type, content: m.content })),
-      homework: lesson.homework ? { instructions: lesson.homework.instructions, dueDate: lesson.homework.dueDate } : null,
+      homework: lesson.homework
+        ? {
+            instructions: lesson.homework.instructions,
+            dueDate: lesson.homework.dueDate,
+            submissionEnabled: lesson.group.homeworkSubmissionEnabled,
+            submission: lesson.homework.submissions[0]
+              ? submissionView(lesson.homework.submissions[0], lesson.homework.dueDate)
+              : null,
+          }
+        : null,
     }
   })
 
@@ -192,9 +218,93 @@ export const miniAppRoutes: FastifyPluginAsync = async (app) => {
       where: { groupId: enrollment.groupId, homework: { isNot: null } },
       orderBy: { date: 'desc' },
       take: 30,
-      select: { id: true, date: true, topic: true, homework: { select: { instructions: true, dueDate: true } } },
+      select: {
+        id: true,
+        date: true,
+        topic: true,
+        homework: {
+          select: {
+            instructions: true,
+            dueDate: true,
+            submissions: { where: { studentId: student.id }, include: { photos: { orderBy: { createdAt: 'asc' } } } },
+          },
+        },
+      },
     })
-    return lessons.map((l) => ({ lessonId: l.id, date: l.date, topic: l.topic, ...l.homework! }))
+    const submissionEnabled = enrollment.group.homeworkSubmissionEnabled
+    return lessons.map((l) => {
+      const { submissions, ...homework } = l.homework!
+      return {
+        lessonId: l.id,
+        date: l.date,
+        topic: l.topic,
+        ...homework,
+        submissionEnabled,
+        submission: submissions[0] ? submissionView(submissions[0], homework.dueDate) : null,
+      }
+    })
+  })
+
+  // Topshirish: one homework with the student's own photos for it.
+  app.get('/student/homework/:id', async (request) => {
+    const student = me(request)
+    const { id } = idParams.parse(request.params)
+    const groupIds = await enrolledGroupIds(student.id)
+    const lesson = await prisma.lessonSession.findFirst({
+      where: { id, groupId: { in: groupIds }, homework: { isNot: null } },
+      include: {
+        group: { select: { name: true, homeworkSubmissionEnabled: true } },
+        homework: {
+          include: {
+            submissions: { where: { studentId: student.id }, include: { photos: { orderBy: { createdAt: 'asc' } } } },
+          },
+        },
+      },
+    })
+    if (!lesson?.homework) throw new NotFoundError('Homework not found')
+    const submission = lesson.homework.submissions[0]
+    return {
+      lessonId: lesson.id,
+      date: lesson.date,
+      topic: lesson.topic,
+      group: lesson.group.name,
+      instructions: lesson.homework.instructions,
+      dueDate: lesson.homework.dueDate,
+      submissionEnabled: lesson.group.homeworkSubmissionEnabled,
+      maxPhotos: MAX_HOMEWORK_PHOTOS,
+      submission: submission ? submissionView(submission, lesson.homework.dueDate) : null,
+    }
+  })
+
+  // One photo per request (the app compresses it first), so a slow connection loses at most one.
+  app.post('/student/homework/:id/photos', { bodyLimit: MAX_UPLOAD_BYTES }, async (request) => {
+    const student = me(request)
+    const { id } = idParams.parse(request.params)
+    const body = request.body
+    if (!Buffer.isBuffer(body) || !isSupportedImage(body)) throw new ValidationError('Send a JPEG, PNG or WebP photo')
+    if (!opts.fileStore) throw new AppError('Photo uploads are not configured', 503)
+
+    const { lesson } = await assertCanAddHomeworkPhoto(student.id, id)
+    const stored = await opts.fileStore.upload(body, {
+      ownerChatId: String(request.telegramUser!.id),
+      caption: homeworkPhotoCaption(student, lesson.date, lesson.topic),
+    })
+    const submission = await addHomeworkPhoto(student.id, id, stored)
+    return submissionView(submission, submission.homework.dueDate)
+  })
+
+  app.delete('/student/homework-photos/:id', async (request) => {
+    const { id } = idParams.parse(request.params)
+    const submission = await removeHomeworkPhoto(me(request).id, id)
+    return { submission: submission && submissionView(submission, submission.homework.dueDate) }
+  })
+
+  app.get('/student/homework-photos/:id', async (request, reply) => {
+    const student = me(request)
+    const { id } = idParams.parse(request.params)
+    const photo = await prisma.homeworkPhoto.findFirst({ where: { id, submission: { studentId: student.id } } })
+    if (!photo) throw new NotFoundError('Photo not found')
+    return sendHomeworkPhoto(reply, opts.fileStore, photo.telegramFileId)
   })
 
   app.get('/student/progress', async (request) => {

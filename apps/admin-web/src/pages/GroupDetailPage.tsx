@@ -1,8 +1,8 @@
 import { useMemo, useState } from 'react'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { useNavigate, useParams, useSearchParams } from 'react-router-dom'
-import { BookOpen, Brain, Clock, Pencil, Trash2, Users } from 'lucide-react'
-import { groups as groupsApi } from '../lib/api'
+import { BookOpen, Brain, Camera, Clock, Pencil, Trash2, Users } from 'lucide-react'
+import { groups as groupsApi, homeworkSubmissions as submissionsApi } from '../lib/api'
 import { useAuth } from '../lib/auth'
 import { dayLabel } from '../lib/format'
 import { levelStyles } from '../lib/levelColor'
@@ -12,10 +12,11 @@ import { TodayLessonCard } from '../components/group/TodayLessonCard'
 import { RecentSessionsCard } from '../components/group/RecentSessionsCard'
 import { StudentsTab } from '../components/group/StudentsTab'
 import { QuizTab } from '../components/group/QuizTab'
+import { HomeworkTab } from '../components/homework/HomeworkTab'
 import { DeleteGroupModal, GroupFormModal, WEEKDAYS } from '../components/group/GroupFormModal'
 import { UpcomingChanges } from '../components/group/UpcomingChanges'
 
-type GroupViewTab = 'lesson' | 'students' | 'quizzes'
+type GroupViewTab = 'lesson' | 'students' | 'quizzes' | 'homework'
 
 export function GroupDetailPage() {
   const { id } = useParams<{ id: string }>()
@@ -43,6 +44,9 @@ export function GroupDetailPage() {
     queryFn: () => groupsApi.get(id!),
     enabled: !!id,
   })
+  const takesPhotos = !!groupQuery.data?.homeworkSubmissionEnabled
+  const unchecked = useQuery({ queryKey: ['homework-unchecked'], queryFn: submissionsApi.unchecked, enabled: takesPhotos })
+  const waiting = (id && unchecked.data?.byGroup[id]) || 0
 
   if (groupQuery.isLoading) return <Spinner />
   if (groupQuery.isError || !groupQuery.data) return <ErrorBanner message="Guruh topilmadi" />
@@ -115,6 +119,10 @@ export function GroupDetailPage() {
             { key: 'lesson' as const, label: 'Dars', icon: BookOpen },
             { key: 'students' as const, label: "Oʻquvchilar", icon: Users },
             { key: 'quizzes' as const, label: 'Testlar', icon: Brain },
+            // Only for groups that take homework as photos.
+            ...(takesPhotos
+              ? [{ key: 'homework' as const, label: waiting ? `Uyga vazifalar (${waiting})` : 'Uyga vazifalar', icon: Camera }]
+              : []),
           ]}
           active={tab}
           onChange={setTab}
@@ -128,6 +136,8 @@ export function GroupDetailPage() {
         </div>
       ) : tab === 'students' ? (
         <StudentsTab group={group} initialDate={deepLinkDate} />
+      ) : tab === 'homework' && takesPhotos ? (
+        <HomeworkTab group={group} />
       ) : (
         <QuizTab group={group} initialDate={deepLinkDate} />
       )}

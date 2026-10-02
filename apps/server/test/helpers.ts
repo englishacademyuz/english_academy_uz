@@ -15,6 +15,7 @@ export async function resetDb() {
   await prisma.assessmentResult.deleteMany()
   await prisma.assessment.deleteMany()
   await prisma.assessmentCategory.deleteMany()
+  await prisma.homeworkSubmission.deleteMany()
   await prisma.homeworkResult.deleteMany()
   await prisma.homework.deleteMany()
   await prisma.attendance.deleteMany()

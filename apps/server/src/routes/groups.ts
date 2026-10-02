@@ -12,6 +12,7 @@ const createSchema = z.object({
   scheduleTime: z.string().min(1),
   startDate: z.coerce.date(),
   monthlyFee: z.number().int().min(0).optional(),
+  homeworkSubmissionEnabled: z.boolean().optional(),
 })
 const updateSchema = createSchema.partial()
 

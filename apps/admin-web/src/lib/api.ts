@@ -16,6 +16,10 @@ import type {
   GroupLeaderboardEntry,
   GroupPaymentEntry,
   GroupPaymentHistory,
+  HomeworkFeed,
+  HomeworkSubmission,
+  HomeworkSubmissionStatus,
+  LessonHomeworkSubmissions,
   Level,
   LessonMaterialType,
   LessonReschedule,
@@ -138,6 +142,7 @@ export type GroupInput = {
   scheduleTime: string
   startDate: string
   monthlyFee?: number
+  homeworkSubmissionEnabled?: boolean
 }
 
 export const groups = {
@@ -283,6 +288,39 @@ export const quizzes = {
   send: (id: string, deadline: string) =>
     post<{ id: string; notifiedChats: number }>(`/quizzes/${id}/send`, { deadline }),
   close: (id: string) => post<QuizDetail>(`/quizzes/${id}/close`),
+}
+
+/** Object URLs of homework photos already fetched this session -- they never change. */
+const photoUrls = new Map<string, Promise<string>>()
+
+export const homeworkSubmissions = {
+  forLesson: (sessionId: string) => get<LessonHomeworkSubmissions>(`/sessions/${sessionId}/homework-submissions`),
+  forGroup: (
+    groupId: string,
+    params: { from?: string; to?: string; q?: string; status?: HomeworkSubmissionStatus; page?: number } = {},
+  ) => {
+    const query = new URLSearchParams()
+    for (const [key, value] of Object.entries(params)) if (value !== undefined && value !== '') query.set(key, String(value))
+    const qs = query.toString()
+    return get<HomeworkFeed>(`/groups/${groupId}/homework-submissions${qs ? `?${qs}` : ''}`)
+  },
+  /** Submissions waiting for a teacher, per group. */
+  unchecked: () => get<{ total: number; byGroup: Record<string, number> }>('/homework-submissions/unchecked'),
+  /** Checked, or sent back to redo -- the student's Telegram chats are told either way. */
+  review: (id: string, status: 'CHECKED' | 'RETURNED', comment?: string) =>
+    post<HomeworkSubmission>(`/homework-submissions/${id}/review`, { status, comment: comment ?? null }),
+  photoUrl: (photoId: string) => {
+    let url = photoUrls.get(photoId)
+    if (!url) {
+      url = fetch(`${BASE_URL}/homework-photos/${photoId}`, { credentials: 'include' }).then(async (res) => {
+        if (!res.ok) throw new ApiError(res.statusText, res.status)
+        return URL.createObjectURL(await res.blob())
+      })
+      url.catch(() => photoUrls.delete(photoId))
+      photoUrls.set(photoId, url)
+    }
+    return url
+  },
 }
 
 export const conversations = {

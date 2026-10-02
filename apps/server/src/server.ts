@@ -1,8 +1,11 @@
+import { Api } from 'grammy'
 import { finalizeExpiredAttempts } from '@tashkurgan/domain'
+import { telegramFileStore } from './telegram/fileStore'
 import { buildApp } from './app'
 import { config } from './config'
 import {
   announceAbsence,
+  announceHomeworkReview,
   announceLessonChange,
   announcePaymentReminder,
   announceQuiz,
@@ -14,7 +17,13 @@ import {
 // dev/this environment). Swapping to bot.api.setWebhook() + mounting
 // bot.webhookCallback() as a Fastify route is a small change later, per
 // docs/ARCHITECTURE.md §6 -- the handler logic itself doesn't change.
-const bot = config.telegramBotToken ? createBot(config.telegramBotToken, { miniAppUrl: config.miniAppUrl }) : null
+// Homework photos are kept on Telegram (see telegram/fileStore.ts), so the store needs the bot.
+const fileStore = config.telegramBotToken
+  ? telegramFileStore(new Api(config.telegramBotToken), config.telegramBotToken, config.telegramStorageChatId)
+  : undefined
+const bot = config.telegramBotToken
+  ? createBot(config.telegramBotToken, { miniAppUrl: config.miniAppUrl, fileStore })
+  : null
 
 const app = await buildApp({
   quizNotifier: bot ? (chatIds, quiz) => announceQuiz(bot, config.miniAppUrl, chatIds, quiz) : undefined,
@@ -26,6 +35,10 @@ const app = await buildApp({
     : undefined,
   absenceNotifier: bot ? (chatIds, absence) => announceAbsence(bot, config.miniAppUrl, chatIds, absence) : undefined,
   chatNotifier: bot ? (chatIds, message) => announceStaffMessage(bot, config.miniAppUrl, chatIds, message) : undefined,
+  homeworkReviewNotifier: bot
+    ? (chatIds, review) => announceHomeworkReview(bot, config.miniAppUrl, chatIds, review)
+    : undefined,
+  homeworkFileStore: fileStore,
 })
 
 app.listen({ port: config.port, host: '0.0.0.0' }).catch((err) => {

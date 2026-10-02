@@ -20,6 +20,9 @@ export const config = {
   // Optional: the server runs fine without a bot (e.g. under the test
   // suite's .env.test), it just doesn't start one.
   telegramBotToken: process.env.TELEGRAM_BOT_TOKEN,
+  // Optional: a private channel (bot as admin) that keeps a copy of every homework photo.
+  // Without it, photos uploaded in the Mini App are posted in the uploader's own chat with the bot.
+  telegramStorageChatId: process.env.TELEGRAM_STORAGE_CHAT_ID || undefined,
   // HTTPS base URL of the student Telegram Mini App (served by admin-web under /student).
   miniAppUrl: (
     process.env.MINI_APP_URL ?? 'https://tashkurganadmin-web-production.up.railway.app/student'

@@ -54,6 +54,14 @@ enum HomeworkResultStatus {
   NOT_COMPLETED
 }
 
+// A student's photos of their homework (only in groups that allow it): waiting
+// for the teacher, checked, or sent back to be redone and handed in again.
+enum HomeworkSubmissionStatus {
+  SUBMITTED
+  CHECKED
+  RETURNED
+}
+
 enum AttendanceStatus {
   PRESENT
   ABSENT
@@ -142,16 +150,17 @@ model Student {
   createdAt         DateTime      @default(now())
   updatedAt         DateTime      @updatedAt
 
-  enrollments       Enrollment[]
-  telegramLinks     TelegramLink[]
-  linkingCodes      LinkingCode[]
-  quizAttempts      QuizAttempt[]
-  attendances       Attendance[]
-  homeworkResults   HomeworkResult[]
-  assessmentResults AssessmentResult[]
-  payments          Payment[]
-  pointTransactions PointTransaction[]
-  conversation      Conversation?
+  enrollments         Enrollment[]
+  telegramLinks       TelegramLink[]
+  linkingCodes        LinkingCode[]
+  quizAttempts        QuizAttempt[]
+  attendances         Attendance[]
+  homeworkResults     HomeworkResult[]
+  homeworkSubmissions HomeworkSubmission[]
+  assessmentResults   AssessmentResult[]
+  payments            Payment[]
+  pointTransactions   PointTransaction[]
+  conversation        Conversation?
 
   @@map("students")
 }
@@ -268,24 +277,26 @@ model AssessmentCategory {
 }
 
 model Group {
-  id           String      @id @default(cuid())
-  levelId      String
-  level        Level       @relation(fields: [levelId], references: [id])
-  teacherId    String
-  teacher      Teacher     @relation(fields: [teacherId], references: [id])
-  name         String
-  scheduleDays String[]
-  scheduleTime String
-  startDate    DateTime
+  id                        String      @id @default(cuid())
+  levelId                   String
+  level                     Level       @relation(fields: [levelId], references: [id])
+  teacherId                 String
+  teacher                   Teacher     @relation(fields: [teacherId], references: [id])
+  name                      String
+  scheduleDays              String[]
+  scheduleTime              String
+  startDate                 DateTime
   // The monthly course fee, in so'm -- what a payment defaults to. 0 means it hasn't been set.
   // Payments fall due every month on startDate's day of the month.
-  monthlyFee   Int         @default(0)
-  status       GroupStatus @default(ACTIVE)
+  monthlyFee                Int         @default(0)
+  // Lets the group's students hand in homework as photos through Telegram (off for most groups).
+  homeworkSubmissionEnabled Boolean     @default(false)
+  status                    GroupStatus @default(ACTIVE)
   // Set when an admin deletes the group. It is archived, never removed: its
   // past lessons, marks and points stay as history (see archiveGroup).
-  archivedAt   DateTime?
-  createdAt    DateTime    @default(now())
-  updatedAt    DateTime    @updatedAt
+  archivedAt                DateTime?
+  createdAt                 DateTime    @default(now())
+  updatedAt                 DateTime    @updatedAt
 
   enrollments       Enrollment[]
   lessonSessions    LessonSession[]
@@ -354,9 +365,9 @@ model LessonMaterial {
   @@map("lesson_materials")
 }
 
-// The instructions a Teacher records against a LessonSession. The Student
-// never submits it through the platform (§16) -- HomeworkResult is entered
-// later, by the Teacher, typically during a subsequent session.
+// The instructions a Teacher records against a LessonSession. Usually checked
+// in class; in groups with `homeworkSubmissionEnabled`, students may also hand
+// it in as photos through Telegram (HomeworkSubmission).
 model Homework {
   id              String        @id @default(cuid())
   lessonSessionId String        @unique
@@ -365,9 +376,50 @@ model Homework {
   dueDate         DateTime?
   createdAt       DateTime      @default(now())
 
-  results HomeworkResult[]
+  results     HomeworkResult[]
+  submissions HomeworkSubmission[]
 
   @@map("homeworks")
+}
+
+// One student's photos for one Homework. The photos themselves live on
+// Telegram's servers -- only their file ids are stored here (see
+// apps/server/src/telegram/fileStore.ts).
+model HomeworkSubmission {
+  id             String                   @id @default(cuid())
+  homeworkId     String
+  homework       Homework                 @relation(fields: [homeworkId], references: [id], onDelete: Cascade)
+  studentId      String
+  student        Student                  @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  status         HomeworkSubmissionStatus @default(SUBMITTED)
+  // When a photo was last added -- "late" compares it with the homework's due date.
+  submittedAt    DateTime                 @default(now())
+  checkedAt      DateTime?
+  teacherComment String?
+  createdAt      DateTime                 @default(now())
+  updatedAt      DateTime                 @updatedAt
+
+  photos HomeworkPhoto[]
+
+  @@unique([homeworkId, studentId])
+  @@index([submittedAt])
+  @@map("homework_submissions")
+}
+
+model HomeworkPhoto {
+  id                   String             @id @default(cuid())
+  submissionId         String
+  submission           HomeworkSubmission @relation(fields: [submissionId], references: [id], onDelete: Cascade)
+  // Telegram's id for downloading the file again (see HomeworkSubmission).
+  telegramFileId       String
+  telegramFileUniqueId String
+  width                Int?
+  height               Int?
+  size                 Int?
+  createdAt            DateTime           @default(now())
+
+  @@index([submissionId])
+  @@map("homework_photos")
 }
 
 // A completion status is always required; `score` is optional and, when

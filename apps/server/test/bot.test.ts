@@ -1,7 +1,8 @@
 import { afterAll, beforeEach, describe, expect, it } from 'vitest'
 import { prisma } from '@tashkurgan/db'
-import { createBot } from '../src/bot/client'
-import { resetDb } from './helpers'
+import { createBot, type BotOptions } from '../src/bot/client'
+import type { HomeworkFileStore } from '../src/telegram/fileStore'
+import { resetDb, seedAcademicStructure } from './helpers'
 
 // A fake botInfo skips grammY's real getMe network call entirely -- this
 // suite never talks to Telegram; see buildBot()'s API transformer below.
@@ -25,8 +26,8 @@ const MINI_APP_URL = 'https://example.test/student'
 
 type CapturedCall = { method: string; payload: Record<string, unknown> }
 
-function buildBot() {
-  const bot = createBot('test-token', { botInfo: FAKE_BOT_INFO, miniAppUrl: MINI_APP_URL })
+function buildBot(options: Partial<BotOptions> = {}) {
+  const bot = createBot('test-token', { botInfo: FAKE_BOT_INFO, miniAppUrl: MINI_APP_URL, ...options })
   const calls: CapturedCall[] = []
   // The one true external dependency (the real Telegram API) is intercepted
   // here instead of mocked deeper in the handler code -- everything else
@@ -226,6 +227,70 @@ describe('telegram bot', () => {
     })
     expect(sentText(calls, 'faqat matnli')).toBe(true)
     expect(await prisma.chatMessage.count()).toBe(0)
+  })
+
+  function photoUpdate(chatId: number, fileId: string) {
+    return {
+      update_id: nextUpdateId++,
+      message: {
+        message_id: nextUpdateId,
+        date: Math.floor(Date.now() / 1000),
+        chat: { id: chatId, type: 'private' as const, first_name: 'Test' },
+        from: { id: chatId, is_bot: false, first_name: 'Test' },
+        photo: [
+          { file_id: `${fileId}-small`, file_unique_id: `${fileId}-s`, width: 90, height: 60 },
+          { file_id: fileId, file_unique_id: `${fileId}-u`, width: 1280, height: 960 },
+        ],
+      },
+    }
+  }
+
+  const keepingStore: HomeworkFileStore = {
+    upload: async () => {
+      throw new Error('not used by the bot')
+    },
+    keep: async (photo) => photo,
+    download: async () => {
+      throw new Error('not used by the bot')
+    },
+  }
+
+  it("hands photos in for the newest homework in groups that take them, with one receipt per album", async () => {
+    const { group, student } = await seedAcademicStructure()
+    await prisma.group.update({ where: { id: group.id }, data: { homeworkSubmissionEnabled: true } })
+    await prisma.telegramLink.create({ data: { chatId: '668', studentId: student.id } })
+    for (const [day, topic] of [['2026-09-20', 'Old'], ['2026-09-27', 'Newest']]) {
+      await prisma.lessonSession.create({
+        data: { groupId: group.id, teacherId: group.teacherId, date: new Date(day), topic, homework: { create: { instructions: 'Do it' } } },
+      })
+    }
+
+    const { bot, calls } = buildBot({ fileStore: keepingStore, homeworkReceiptDelayMs: 0 })
+    await bot.init()
+    await bot.handleUpdate(photoUpdate(668, 'photo-a'))
+    await bot.handleUpdate(photoUpdate(668, 'photo-b'))
+    await new Promise((resolve) => setTimeout(resolve, 50))
+
+    const submission = await prisma.homeworkSubmission.findFirstOrThrow({
+      include: { photos: true, homework: { include: { lessonSession: true } } },
+    })
+    expect(submission.homework.lessonSession.topic).toBe('Newest')
+    // The biggest size Telegram made of each photo is the one kept.
+    expect(submission.photos.map((p) => p.telegramFileId).sort()).toEqual(['photo-a', 'photo-b'])
+    const receipts = calls.filter((c) => c.method === 'sendMessage' && String(c.payload.text).includes('qabul qilindi'))
+    expect(receipts.length).toBeLessThanOrEqual(2)
+    expect(String(receipts.at(-1)!.payload.text)).toContain('2 ta')
+    expect(sentText(calls, 'faqat matnli')).toBe(false)
+  })
+
+  it('still asks for text when the group does not take homework photos', async () => {
+    const { student } = await seedAcademicStructure()
+    await prisma.telegramLink.create({ data: { chatId: '669', studentId: student.id } })
+    const { bot, calls } = buildBot({ fileStore: keepingStore, homeworkReceiptDelayMs: 0 })
+    await bot.init()
+    await bot.handleUpdate(photoUpdate(669, 'photo-c'))
+    expect(sentText(calls, 'faqat matnli')).toBe(true)
+    expect(await prisma.homeworkSubmission.count()).toBe(0)
   })
 
   it('tells an unlinked chat to send its code on /start', async () => {

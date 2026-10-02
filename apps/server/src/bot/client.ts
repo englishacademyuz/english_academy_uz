@@ -1,13 +1,24 @@
 import { Bot } from 'grammy'
 import type { UserFromGetMe } from 'grammy/types'
 import { prisma } from '@tashkurgan/db'
-import { CHAT_MESSAGE_MAX_LENGTH, looksLikeLinkingCode, postFamilyMessage, redeemLinkingCode } from '@tashkurgan/domain'
+import {
+  addHomeworkPhoto,
+  CHAT_MESSAGE_MAX_LENGTH,
+  latestOpenHomework,
+  looksLikeLinkingCode,
+  MAX_HOMEWORK_PHOTOS,
+  postFamilyMessage,
+  redeemLinkingCode,
+  type StoredPhoto,
+} from '@tashkurgan/domain'
 import { ConflictError, NotFoundError } from '@tashkurgan/shared'
 import type { QuizAnnouncement } from '../routes/quizzes'
 import type { PaymentReminderAnnouncement } from '../routes/payments'
 import type { AbsenceAnnouncement } from '../routes/absences'
 import type { LessonChangeAnnouncement } from '../routes/schedule'
 import type { StaffMessageAnnouncement } from '../routes/conversations'
+import { homeworkPhotoCaption, type HomeworkReviewAnnouncement } from '../routes/homeworkSubmissions'
+import { largestPhoto, type HomeworkFileStore } from '../telegram/fileStore'
 import { telegramDisplayName } from '../telegram/initData'
 import type { BotContext } from './types'
 import {
@@ -15,6 +26,7 @@ import {
   miniAppMenuKeyboard,
   openChatKeyboard,
   openHomeKeyboard,
+  openHomeworkKeyboard,
   openMiniAppKeyboard,
   quizStartKeyboard,
 } from './keyboards'
@@ -22,7 +34,8 @@ import * as fmt from './format'
 
 /**
  * The bot is for linking, notifications and the family chat with the teacher
- * (any other text a linked chat sends is a message to the teacher); everything
+ * (any other text a linked chat sends is a message to the teacher), plus homework
+ * photos in groups that take them (a photo goes to the newest open homework); everything
  * a student (or parent) browses -- lessons, homework, progress, attendance,
  * quizzes -- is in the Telegram Mini App at `miniAppUrl`.
  */
@@ -31,7 +44,14 @@ export type BotOptions = {
   botInfo?: UserFromGetMe
   /** HTTPS base URL of the student Mini App (e.g. https://…/student). */
   miniAppUrl?: string
+  /** Keeps homework photos sent to the chat; without it, photos are refused like other non-text messages. */
+  fileStore?: HomeworkFileStore
+  /** How long to wait for the rest of an album before confirming it (tests use 0). */
+  homeworkReceiptDelayMs?: number
 }
+
+/** Image files sent "as a file" (uncompressed) count as homework photos too. */
+const IMAGE_MIME_TYPES = new Set(['image/jpeg', 'image/png', 'image/webp'])
 
 /** The student a chat may view -- the only identity the bot has (student and parents alike). */
 async function resolveStudent(chatId: string) {
@@ -89,8 +109,62 @@ async function handleFamilyMessage(ctx: BotContext, studentId: string, chatId: s
 }
 
 export function createBot(token: string, options: BotOptions = {}) {
-  const { botInfo, miniAppUrl } = options
+  const { botInfo, miniAppUrl, fileStore, homeworkReceiptDelayMs = 1500 } = options
   const bot = new Bot<BotContext>(token, botInfo ? { botInfo } : undefined)
+
+  // One receipt per run of photos (an album arrives as one message per photo): each new photo
+  // pushes the receipt back a little, and it then reports the submission as it stands.
+  const pendingReceipts = new Map<string, ReturnType<typeof setTimeout>>()
+  function scheduleReceipt(chatId: string, send: () => Promise<unknown>) {
+    clearTimeout(pendingReceipts.get(chatId))
+    pendingReceipts.set(
+      chatId,
+      setTimeout(() => {
+        pendingReceipts.delete(chatId)
+        send().catch((err) => console.error('Homework receipt failed:', err))
+      }, homeworkReceiptDelayMs),
+    )
+  }
+
+  /** Attaches a photo a linked chat sent to the student's newest open homework. False when their group doesn't take photos. */
+  async function handleHomeworkPhoto(
+    ctx: BotContext,
+    student: { id: string; firstName: string; lastName: string },
+    photo: StoredPhoto,
+    kind: 'photo' | 'document',
+  ): Promise<boolean> {
+    if (!fileStore) return false
+    const chatId = String(ctx.chat!.id)
+    const enabled = await prisma.enrollment.count({
+      where: { studentId: student.id, status: 'ACTIVE', group: { homeworkSubmissionEnabled: true } },
+    })
+    if (!enabled) return false
+
+    const lesson = await latestOpenHomework(student.id)
+    if (!lesson) {
+      scheduleReceipt(chatId, () => ctx.reply(fmt.formatNoOpenHomework()))
+      return true
+    }
+    try {
+      const stored = await fileStore.keep(photo, homeworkPhotoCaption(student, lesson.date, lesson.topic), kind)
+      const submission = await addHomeworkPhoto(student.id, lesson.id, stored)
+      await ctx.react('👌').catch(() => {})
+      scheduleReceipt(chatId, async () => {
+        const photoCount = await prisma.homeworkPhoto.count({ where: { submissionId: submission.id } })
+        await ctx.reply(fmt.formatHomeworkPhotosReceived({ date: lesson.date, topic: lesson.topic, photoCount }), {
+          parse_mode: 'HTML',
+          ...(miniAppUrl ? { reply_markup: openHomeworkKeyboard(miniAppUrl, lesson.id) } : {}),
+        })
+      })
+    } catch (err) {
+      if (err instanceof ConflictError && err.message === 'TOO_MANY_PHOTOS') {
+        scheduleReceipt(chatId, () => ctx.reply(fmt.formatTooManyHomeworkPhotos(MAX_HOMEWORK_PHOTOS)))
+      } else {
+        throw err
+      }
+    }
+    return true
+  }
 
   bot.command(['start', 'menu'], async (ctx) => {
     const student = await resolveStudent(String(ctx.chat.id))
@@ -129,7 +203,21 @@ export function createBot(token: string, options: BotOptions = {}) {
     await handleFamilyMessage(ctx, student.id, chatId, text, miniAppUrl)
   })
 
-  // Photos, voice notes, stickers … aren't relayed (yet) -- a linked chat is asked to write instead.
+  // A photo (or an image sent as a file) is homework, in groups that take it.
+  bot.on(['message:photo', 'message:document'], async (ctx, next) => {
+    const student = await resolveStudent(String(ctx.chat.id))
+    if (!student) return next()
+    const { photo, document } = ctx.message
+    if (photo?.length) {
+      if (await handleHomeworkPhoto(ctx, student, largestPhoto(photo), 'photo')) return
+    } else if (document && IMAGE_MIME_TYPES.has(document.mime_type ?? '')) {
+      const stored = { fileId: document.file_id, fileUniqueId: document.file_unique_id, size: document.file_size ?? null }
+      if (await handleHomeworkPhoto(ctx, student, stored, 'document')) return
+    }
+    return next()
+  })
+
+  // Voice notes, stickers … (and photos, where homework isn't handed in) aren't relayed -- a linked chat is asked to write instead.
   bot.on('message', async (ctx) => {
     if (await resolveStudent(String(ctx.chat.id))) await ctx.reply(fmt.formatChatTextOnly())
   })
@@ -245,6 +333,26 @@ export async function announceStaffMessage(
       })
     } catch (err) {
       console.error(`Chat message to chat ${chatId} failed:`, err)
+    }
+  }
+}
+
+/** Tells every chat of the student their homework photos were checked or sent back; one failed chat doesn't stop the rest. */
+export async function announceHomeworkReview(
+  bot: Bot<BotContext>,
+  miniAppUrl: string,
+  chatIds: string[],
+  review: HomeworkReviewAnnouncement,
+) {
+  const text = fmt.formatHomeworkReview(review)
+  for (const chatId of chatIds) {
+    try {
+      await bot.api.sendMessage(chatId, text, {
+        parse_mode: 'HTML',
+        ...(miniAppUrl ? { reply_markup: openHomeworkKeyboard(miniAppUrl, review.lessonId) } : {}),
+      })
+    } catch (err) {
+      console.error(`Homework review notice to chat ${chatId} failed:`, err)
     }
   }
 }

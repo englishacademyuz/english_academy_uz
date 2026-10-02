@@ -9,6 +9,7 @@ import { HomePage } from './pages/HomePage'
 import { LessonsPage } from './pages/LessonsPage'
 import { LessonDetailPage } from './pages/LessonDetailPage'
 import { HomeworkPage } from './pages/HomeworkPage'
+import { HomeworkSubmitPage } from './pages/HomeworkSubmitPage'
 import { DiaryPage } from './pages/DiaryPage'
 import { ProfilePage } from './pages/ProfilePage'
 import { QuizzesPage } from './pages/QuizzesPage'
@@ -159,6 +160,7 @@ export function StudentApp() {
         <Route path="lessons" element={<LessonsPage />} />
         <Route path="lessons/:id" element={<LessonDetailPage />} />
         <Route path="homework" element={<HomeworkPage />} />
+        <Route path="homework/:id" element={<HomeworkSubmitPage />} />
         <Route path="diary" element={<DiaryPage />} />
         {/* Older links (bot messages) pointed at the separate progress/attendance screens Kundalik replaced. */}
         <Route path="progress" element={<Navigate to="/student/diary" replace />} />

@@ -6,10 +6,12 @@ import type {
   MiniChatMessage,
   MiniHome,
   MiniHomework,
+  MiniHomeworkDetail,
   MiniLessonDetail,
   MiniLessons,
   MiniProfile,
   MiniQuiz,
+  MiniSubmission,
   MiniYearMonth,
 } from './types'
 
@@ -34,12 +36,14 @@ export class MiniApiError extends Error {
  * Every call carries the raw Telegram init data; the server verifies its
  * signature and decides which student this is. No student id is ever sent.
  */
-async function request<T>(path: string, init?: RequestInit): Promise<T> {
+async function send(path: string, init?: RequestInit): Promise<Response> {
+  const body = init?.body
   const res = await fetch(`${BASE_URL}${path}`, {
     ...init,
     headers: {
       authorization: `tma ${initData()}`,
-      ...(init?.body ? { 'content-type': 'application/json' } : {}),
+      // A photo goes up as its own bytes; everything else is JSON.
+      ...(body instanceof Blob ? { 'content-type': body.type } : body ? { 'content-type': 'application/json' } : {}),
     },
   })
   if (!res.ok) {
@@ -52,14 +56,35 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
     }
     throw new MiniApiError(message, res.status)
   }
-  return (await res.json()) as T
+  return res
 }
+
+async function request<T>(path: string, init?: RequestInit): Promise<T> {
+  return (await (await send(path, init)).json()) as T
+}
+
+/** Object URLs of homework photos already fetched -- an image tag can't send the Telegram auth header itself. */
+const photoUrls = new Map<string, Promise<string>>()
 
 export const miniApi = {
   home: () => request<MiniHome>('/student/home'),
   lessons: (page: number) => request<MiniLessons>(`/student/lessons?page=${page}`),
   lesson: (id: string) => request<MiniLessonDetail>(`/student/lessons/${id}`),
   homework: () => request<MiniHomework[]>('/student/homework'),
+  homeworkDetail: (lessonId: string) => request<MiniHomeworkDetail>(`/student/homework/${lessonId}`),
+  uploadHomeworkPhoto: (lessonId: string, photo: Blob) =>
+    request<MiniSubmission>(`/student/homework/${lessonId}/photos`, { method: 'POST', body: photo }),
+  deleteHomeworkPhoto: (photoId: string) =>
+    request<{ submission: MiniSubmission | null }>(`/student/homework-photos/${photoId}`, { method: 'DELETE' }),
+  homeworkPhotoUrl: (photoId: string) => {
+    let url = photoUrls.get(photoId)
+    if (!url) {
+      url = send(`/student/homework-photos/${photoId}`).then(async (res) => URL.createObjectURL(await res.blob()))
+      url.catch(() => photoUrls.delete(photoId))
+      photoUrls.set(photoId, url)
+    }
+    return url
+  },
   attendance: (year: number, month: number) => request<MiniAttendance>(`/student/attendance?year=${year}&month=${month}`),
   attendanceYear: () => request<{ months: MiniYearMonth[] }>('/student/attendance/year'),
   profile: () => request<MiniProfile>('/student/profile'),

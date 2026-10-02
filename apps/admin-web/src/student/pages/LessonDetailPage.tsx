@@ -1,6 +1,6 @@
 import { useState, type ReactNode } from 'react'
 import { useQuery } from '@tanstack/react-query'
-import { useParams } from 'react-router-dom'
+import { Link, useParams } from 'react-router-dom'
 import { ExternalLink, FileSpreadsheet, HardDrive, Link2, Presentation, X } from 'lucide-react'
 import { MaterialViewer, materialLook } from '../../components/shared/MaterialPreview'
 import { RichText } from '../../components/shared/RichText'
@@ -64,7 +64,7 @@ export function LessonDetailPage() {
       </Section>
 
       {homework ? (
-        <Homework homework={homework} />
+        <Homework homework={homework} lessonId={lesson.data.id} />
       ) : (
         <p className="rounded-[22px] bg-tg-sand px-4 py-5 text-center text-[15px] font-bold text-tg-muted">
           Bu darsda uyga vazifa berilmagan
@@ -138,7 +138,8 @@ function Materials({ materials }: { materials: Material[] }) {
   )
 }
 
-function Homework({ homework }: { homework: NonNullable<MiniLessonDetail['homework']> }) {
+function Homework({ homework, lessonId }: { homework: NonNullable<MiniLessonDetail['homework']>; lessonId: string }) {
+  const submission = homework.submission
   return (
     <section className="flex flex-col items-center gap-3.5 rounded-[30px] border-[3px] border-tg-sun bg-tg-sun-soft px-[18px] py-[22px] text-center">
       <HomeworkScene />
@@ -153,11 +154,27 @@ function Homework({ homework }: { homework: NonNullable<MiniLessonDetail['homewo
         <span className="text-[13px] font-extrabold text-tg-muted">USTOZ YOZDI</span>
         <RichText value={homework.instructions} variant="tg" />
       </div>
-      {/* Homework is checked by the teacher in class (CONTEXT.md: HomeworkResult), so there's no "done" button here. */}
-      <div className="flex w-full items-center justify-center gap-2 rounded-[18px] border-[3px] border-tg-leaf bg-tg-leaf-soft px-3 py-3.5 text-base font-extrabold text-tg-leaf-dark">
-        <CheckIcon size={22} />
-        Ustoz darsda tekshiradi
-      </div>
+      {homework.submissionEnabled ? (
+        // This group hands homework in as photos -- the hand-in screen has the camera.
+        <Link
+          to={`/student/homework/${lessonId}`}
+          className="flex min-h-14 w-full items-center justify-center gap-2 rounded-[18px] bg-tg-blue px-4 text-lg font-extrabold text-white active:scale-[0.99]"
+        >
+          {!submission
+            ? '📷 Vazifani topshirish'
+            : submission.status === 'CHECKED'
+              ? '⭐ Tekshirildi — koʻrish'
+              : submission.status === 'RETURNED'
+                ? '🔁 Qayta topshirish'
+                : `✅ Topshirildi · ${submission.photos.length} rasm`}
+        </Link>
+      ) : (
+        // Otherwise it's checked by the teacher in class (CONTEXT.md: HomeworkResult), so there's no "done" button here.
+        <div className="flex w-full items-center justify-center gap-2 rounded-[18px] border-[3px] border-tg-leaf bg-tg-leaf-soft px-3 py-3.5 text-base font-extrabold text-tg-leaf-dark">
+          <CheckIcon size={22} />
+          Ustoz darsda tekshiradi
+        </div>
+      )}
     </section>
   )
 }

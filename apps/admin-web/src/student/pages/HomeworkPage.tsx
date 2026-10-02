@@ -6,8 +6,29 @@ import { HomeworkTile } from '../components/art'
 import { DayBadge, Empty, ErrorState, Loading, Screen, Section } from '../components/kit'
 import { weekdayDate } from '../format'
 import { richTextToPlain } from '../../lib/richText'
+import type { MiniHomework } from '../types'
 
-/** Uyga vazifalar: what to do, per lesson. It's checked in class and graded in Kundalik, so no status here. */
+/** Where a homework row leads: its hand-in screen where photos are taken, else its lesson. */
+const homeworkLink = (h: MiniHomework) => (h.submissionEnabled ? `/student/homework/${h.lessonId}` : `/student/lessons/${h.lessonId}`)
+
+/** The hand-in state of one homework, for groups that take photos. */
+function SubmissionChip({ homework }: { homework: MiniHomework }) {
+  if (!homework.submissionEnabled) return null
+  const s = homework.submission
+  const look = !s
+    ? { cls: 'bg-tg-sand text-tg-muted', text: '📷 Topshirilmagan' }
+    : s.status === 'CHECKED'
+      ? { cls: 'bg-tg-blue-soft text-tg-blue-dark', text: '⭐ Tekshirildi' }
+      : s.status === 'RETURNED'
+        ? { cls: 'bg-tg-cherry-soft text-tg-cherry', text: '🔁 Qayta ishlash' }
+        : { cls: 'bg-tg-leaf-soft text-tg-leaf-dark', text: `✅ Topshirildi · ${s.photos.length} rasm` }
+  return <span className={`self-start rounded-full px-2.5 py-1 text-[13px] font-extrabold ${look.cls}`}>{look.text}</span>
+}
+
+/**
+ * Uyga vazifalar: what to do, per lesson. Usually checked in class and graded in Kundalik; in
+ * groups that take photos, each row also shows whether it's been handed in.
+ */
 export function HomeworkPage() {
   const homework = useQuery({ queryKey: ['mini', 'homework'], queryFn: miniApi.homework })
   const back = { to: '/student/lessons', label: 'Darslar' }
@@ -23,13 +44,17 @@ export function HomeworkPage() {
 
   const [latest, ...older] = homework.data
   return (
-    <Screen back={back} title="Uyga vazifalar" subtitle="Ustoz darsda tekshiradi, baho Kundalikda chiqadi">
+    <Screen
+      back={back}
+      title="Uyga vazifalar"
+      subtitle={latest?.submissionEnabled ? "Vazifani suratga olib, shu yerdan topshiring" : "Ustoz darsda tekshiradi, baho Kundalikda chiqadi"}
+    >
       {!latest ? (
         <Empty icon={<span className="text-4xl">🎉</span>} title="Hozircha uyga vazifa berilmagan" />
       ) : (
         <>
           <Link
-            to={`/student/lessons/${latest.lessonId}`}
+            to={homeworkLink(latest)}
             className="flex items-center gap-4 rounded-[28px] border-[3px] border-tg-sun bg-tg-sun-soft p-[18px] active:scale-[0.99]"
           >
             <HomeworkTile size={72} />
@@ -39,6 +64,7 @@ export function HomeworkPage() {
               <span className="text-sm font-bold text-tg-sun-body">
                 {latest.dueDate ? `${weekdayDate(new Date(latest.dueDate))} gacha` : latest.topic || weekdayDate(new Date(latest.date))}
               </span>
+              <SubmissionChip homework={latest} />
             </div>
             <ChevronRight className="h-6 w-6 shrink-0" strokeWidth={2.5} />
           </Link>
@@ -49,13 +75,14 @@ export function HomeworkPage() {
                 {older.map((h) => (
                   <Link
                     key={h.lessonId}
-                    to={`/student/lessons/${h.lessonId}`}
+                    to={homeworkLink(h)}
                     className="flex items-center gap-3 rounded-[22px] border-2 border-tg-line bg-white p-3.5 active:scale-[0.99]"
                   >
                     <DayBadge date={new Date(h.date)} />
                     <div className="flex min-w-0 grow flex-col gap-0.5">
                       {h.topic && <span className="truncate text-[13px] font-extrabold uppercase text-tg-muted">{h.topic}</span>}
                       <span className="line-clamp-2 text-[15px] font-bold">{richTextToPlain(h.instructions)}</span>
+                      <SubmissionChip homework={h} />
                     </div>
                     <ChevronRight className="h-5 w-5 shrink-0 text-tg-faint" strokeWidth={2.5} />
                   </Link>

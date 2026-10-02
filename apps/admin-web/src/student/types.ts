@@ -68,10 +68,35 @@ export type MiniLessonDetail = {
   group: string
   notes: string | null
   materials: Array<{ id: string; type: LessonMaterialType; content: string }>
-  homework: { instructions: string; dueDate: string | null } | null
+  homework:
+    | { instructions: string; dueDate: string | null; submissionEnabled: boolean; submission: MiniSubmission | null }
+    | null
 }
 
-export type MiniHomework = { lessonId: string; date: string; topic: string | null; instructions: string; dueDate: string | null }
+/** The student's photos of one homework: waiting for the teacher, checked, or sent back to redo. */
+export type MiniSubmission = {
+  id: string
+  status: 'SUBMITTED' | 'CHECKED' | 'RETURNED'
+  submittedAt: string
+  checkedAt: string | null
+  teacherComment: string | null
+  /** Handed in after the due date -- still accepted. */
+  late: boolean
+  photos: Array<{ id: string; width: number | null; height: number | null }>
+}
+
+export type MiniHomework = {
+  lessonId: string
+  date: string
+  topic: string | null
+  instructions: string
+  dueDate: string | null
+  /** The group takes homework as photos -- otherwise it's only checked in class. */
+  submissionEnabled: boolean
+  submission: MiniSubmission | null
+}
+
+export type MiniHomeworkDetail = MiniHomework & { group: string; maxPhotos: number }
 
 export type MiniMark = {
   id: string

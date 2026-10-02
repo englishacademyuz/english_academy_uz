@@ -58,6 +58,8 @@ export type Group = {
   startDate: string
   /** Monthly course fee in so'm; 0 = not set. */
   monthlyFee: number
+  /** Students may hand in homework as photos through Telegram. */
+  homeworkSubmissionEnabled: boolean
   status: string
   archivedAt?: string | null
   level?: Level
@@ -79,6 +81,38 @@ export type Enrollment = {
 }
 
 export type LessonMaterial = { id: string; type: LessonMaterialType; content: string }
+
+export type HomeworkSubmissionStatus = 'SUBMITTED' | 'CHECKED' | 'RETURNED'
+
+/** One student's photos of one homework, as the teacher reviews them. */
+export type HomeworkSubmission = {
+  id: string
+  status: HomeworkSubmissionStatus
+  submittedAt: string
+  checkedAt: string | null
+  teacherComment: string | null
+  /** Handed in after the due date. */
+  late: boolean
+  photos: Array<{ id: string; width: number | null; height: number | null }>
+}
+
+export type SubmissionStudent = { id: string; firstName: string; lastName: string }
+
+/** One lesson's homework with every student of the group then. */
+export type LessonHomeworkSubmissions = {
+  lessonId: string
+  date: string
+  topic: string | null
+  homework: { instructions: string; dueDate: string | null } | null
+  students: Array<{ student: SubmissionStudent; submission: HomeworkSubmission | null }>
+}
+
+export type HomeworkFeedItem = HomeworkSubmission & {
+  student: SubmissionStudent
+  lesson: { id: string; date: string; topic: string | null }
+}
+
+export type HomeworkFeed = { items: HomeworkFeedItem[]; hasMore: boolean; uncheckedCount: number }
 export type Homework = { id: string; instructions: string; dueDate: string | null }
 export type Attendance = { id: string; studentId: string; status: AttendanceStatus }
 
