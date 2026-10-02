@@ -693,7 +693,7 @@ function CategoryAddForm({
       </div>
 
       <div className="space-y-2 rounded-xl bg-slate-50 p-3 dark:bg-slate-800/50">
-        <div className="grid grid-cols-2 gap-3">
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
           <div>
             <FormLabel>Maksimal baho</FormLabel>
             <Input

@@ -56,7 +56,7 @@ export function StudentFormModal({
         }}
         className="space-y-4"
       >
-        <div className="grid grid-cols-2 gap-4">
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
           <Field label="Ism">
             <Input value={firstName} onChange={(e) => setFirstName(e.target.value)} required />
           </Field>
@@ -65,7 +65,7 @@ export function StudentFormModal({
           </Field>
         </div>
 
-        <div className="grid grid-cols-2 gap-4">
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
           <Field label="Yoshi">
             <Input
               type="number"

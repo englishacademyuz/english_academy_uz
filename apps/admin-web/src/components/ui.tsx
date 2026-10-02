@@ -31,10 +31,10 @@ export function PageHeader({
   return (
     <div className="mb-6 flex flex-wrap items-start justify-between gap-4">
       <div>
-        <h1 className="text-2xl font-semibold tracking-tight text-slate-900 dark:text-slate-100">{title}</h1>
+        <h1 className="text-xl font-semibold tracking-tight text-slate-900 sm:text-2xl dark:text-slate-100">{title}</h1>
         {description && <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">{description}</p>}
       </div>
-      {actions && <div className="flex shrink-0 gap-2">{actions}</div>}
+      {actions && <div className="flex flex-wrap items-center gap-2">{actions}</div>}
     </div>
   )
 }
@@ -268,12 +268,12 @@ export function PageTabs<T extends string>({
 }) {
   return (
     <div className="border-b border-slate-200 dark:border-slate-800">
-      <nav className="-mb-px flex gap-6">
+      <nav className="-mb-px flex gap-5 overflow-x-auto sm:gap-6">
         {tabs.map((tab) => (
           <button
             key={tab.key}
             onClick={() => onChange(tab.key)}
-            className={`inline-flex items-center gap-1.5 border-b-2 px-0.5 pb-3 text-sm font-medium transition-colors ${
+            className={`inline-flex shrink-0 items-center gap-1.5 whitespace-nowrap border-b-2 px-0.5 pb-3 text-sm font-medium transition-colors ${
               active === tab.key
                 ? 'border-brand-600 text-brand-600 dark:border-brand-400 dark:text-brand-400'
                 : 'border-transparent text-slate-500 hover:border-slate-300 hover:text-slate-700 dark:text-slate-400 dark:hover:border-slate-600 dark:hover:text-slate-300'
@@ -327,11 +327,11 @@ export function Modal({
   size?: 'md' | 'lg'
 }) {
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/40 px-4 dark:bg-slate-950/60">
+    <div className="fixed inset-0 z-50 flex items-end justify-center bg-slate-900/40 sm:items-center sm:px-4 dark:bg-slate-950/60">
       <div
-        className={`max-h-[92vh] w-full overflow-y-auto rounded-xl bg-white p-6 shadow-xl dark:bg-slate-900 ${size === 'lg' ? 'max-w-xl' : 'max-w-md'}`}
+        className={`max-h-[92dvh] w-full overflow-y-auto rounded-t-2xl bg-white p-5 shadow-xl sm:rounded-xl sm:p-6 dark:bg-slate-900 ${size === 'lg' ? 'max-w-xl' : 'max-w-md'}`}
       >
-        <div className="mb-4 flex items-center justify-between">
+        <div className="mb-4 flex items-center justify-between gap-3">
           <h2 className="min-w-0 text-lg font-semibold text-slate-900 dark:text-slate-100">{title}</h2>
           <button
             onClick={onClose}

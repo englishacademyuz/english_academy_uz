@@ -98,7 +98,7 @@ export function WeeklyTimetable({ groups }: { groups: Group[] }) {
           <Button variant="secondary" onClick={() => setWeekOffset((w) => w - 1)} aria-label="Oldingi hafta">
             <ChevronLeft className="h-4 w-4" />
           </Button>
-          <span className="min-w-[150px] text-center text-xs font-medium text-slate-500 dark:text-slate-400">{rangeLabel}</span>
+          <span className="min-w-[8.5rem] text-center text-xs font-medium text-slate-500 dark:text-slate-400">{rangeLabel}</span>
           <Button variant="secondary" onClick={() => setWeekOffset((w) => w + 1)} aria-label="Keyingi hafta">
             <ChevronRight className="h-4 w-4" />
           </Button>
@@ -110,94 +110,97 @@ export function WeeklyTimetable({ groups }: { groups: Group[] }) {
         </div>
       </div>
 
-      <div className="grid grid-cols-7 gap-2">
-        {days.map((day) => {
-          const highlighted = isSameDay(day.date, today)
-          const past = day.key < todayKey
-          const isTarget = dragOver === day.key
-          return (
-            <div
-              key={day.key}
-              onDragOver={(e) => {
-                if (past || !e.dataTransfer.types.includes(DRAG_TYPE)) return
-                e.preventDefault()
-                e.dataTransfer.dropEffect = 'move'
-                if (dragOver !== day.key) setDragOver(day.key)
-              }}
-              onDragLeave={(e) => {
-                if (!e.currentTarget.contains(e.relatedTarget as Node)) setDragOver(null)
-              }}
-              onDrop={(e) => onDrop(e, day.key)}
-              className={`min-w-0 rounded-lg p-2 transition-all ${
-                isTarget
-                  ? 'bg-brand-50 ring-2 ring-brand-400 ring-offset-1 dark:bg-brand-500/10 dark:ring-offset-slate-900'
-                  : highlighted
-                    ? 'bg-brand-50 ring-1 ring-inset ring-brand-200 dark:bg-brand-500/10 dark:ring-brand-500/30'
-                    : 'bg-slate-50 dark:bg-slate-800/40'
-              } ${dragging && past ? 'opacity-40' : ''}`}
-            >
-              <p
-                className={`mb-2 text-center text-xs font-semibold ${
-                  highlighted ? 'text-brand-700 dark:text-brand-300' : 'text-slate-500 dark:text-slate-400'
-                }`}
+      {/* Seven columns stop being readable on a phone -- there the week scrolls sideways instead. */}
+      <div className="-mx-5 overflow-x-auto px-5 pb-1">
+        <div className="grid min-w-[52rem] grid-cols-7 gap-2 lg:min-w-0">
+          {days.map((day) => {
+            const highlighted = isSameDay(day.date, today)
+            const past = day.key < todayKey
+            const isTarget = dragOver === day.key
+            return (
+              <div
+                key={day.key}
+                onDragOver={(e) => {
+                  if (past || !e.dataTransfer.types.includes(DRAG_TYPE)) return
+                  e.preventDefault()
+                  e.dataTransfer.dropEffect = 'move'
+                  if (dragOver !== day.key) setDragOver(day.key)
+                }}
+                onDragLeave={(e) => {
+                  if (!e.currentTarget.contains(e.relatedTarget as Node)) setDragOver(null)
+                }}
+                onDrop={(e) => onDrop(e, day.key)}
+                className={`min-w-0 rounded-lg p-2 transition-all ${
+                  isTarget
+                    ? 'bg-brand-50 ring-2 ring-brand-400 ring-offset-1 dark:bg-brand-500/10 dark:ring-offset-slate-900'
+                    : highlighted
+                      ? 'bg-brand-50 ring-1 ring-inset ring-brand-200 dark:bg-brand-500/10 dark:ring-brand-500/30'
+                      : 'bg-slate-50 dark:bg-slate-800/40'
+                } ${dragging && past ? 'opacity-40' : ''}`}
               >
-                {dayLabel[weekdayCode(day.date)]} · {formatDayMonth(day.date)}
-              </p>
-
-              <div className="space-y-1.5">
-                {day.lessons.length === 0 && day.movedAway.length === 0 ? (
-                  <p className="py-4 text-center text-xs text-slate-300 dark:text-slate-600">
-                    {dragging && !past ? 'Shu yerga tashlang' : '—'}
-                  </p>
-                ) : (
-                  <>
-                    {day.lessons.map((occurrence) => {
-                      const originalKey = originalKeyOf(occurrence, day.key)
-                      return (
-                        <LessonCard
-                          key={`${occurrence.group.id}-${originalKey}`}
-                          occurrence={occurrence}
-                          movable={canMove(originalKey, occurrence.reschedule)}
-                          onOpen={() => navigate(`/groups/${occurrence.group.id}?date=${day.key}`)}
-                          onMove={() =>
-                            setEditing({ group: occurrence.group, originalDate: originalKey, existing: occurrence.reschedule })
-                          }
-                          onDragStart={(e) => {
-                            const payload: DragPayload = {
-                              groupId: occurrence.group.id,
-                              originalDate: originalKey,
-                              rescheduleId: occurrence.reschedule?.id,
+                <p
+                  className={`mb-2 text-center text-xs font-semibold ${
+                    highlighted ? 'text-brand-700 dark:text-brand-300' : 'text-slate-500 dark:text-slate-400'
+                  }`}
+                >
+                  {dayLabel[weekdayCode(day.date)]} · {formatDayMonth(day.date)}
+                </p>
+  
+                <div className="space-y-1.5">
+                  {day.lessons.length === 0 && day.movedAway.length === 0 ? (
+                    <p className="py-4 text-center text-xs text-slate-300 dark:text-slate-600">
+                      {dragging && !past ? 'Shu yerga tashlang' : '—'}
+                    </p>
+                  ) : (
+                    <>
+                      {day.lessons.map((occurrence) => {
+                        const originalKey = originalKeyOf(occurrence, day.key)
+                        return (
+                          <LessonCard
+                            key={`${occurrence.group.id}-${originalKey}`}
+                            occurrence={occurrence}
+                            movable={canMove(originalKey, occurrence.reschedule)}
+                            onOpen={() => navigate(`/groups/${occurrence.group.id}?date=${day.key}`)}
+                            onMove={() =>
+                              setEditing({ group: occurrence.group, originalDate: originalKey, existing: occurrence.reschedule })
                             }
-                            e.dataTransfer.setData(DRAG_TYPE, JSON.stringify(payload))
-                            e.dataTransfer.effectAllowed = 'move'
-                            setDragging(true)
-                          }}
-                          onDragEnd={() => {
-                            setDragging(false)
-                            setDragOver(null)
-                          }}
+                            onDragStart={(e) => {
+                              const payload: DragPayload = {
+                                groupId: occurrence.group.id,
+                                originalDate: originalKey,
+                                rescheduleId: occurrence.reschedule?.id,
+                              }
+                              e.dataTransfer.setData(DRAG_TYPE, JSON.stringify(payload))
+                              e.dataTransfer.effectAllowed = 'move'
+                              setDragging(true)
+                            }}
+                            onDragEnd={() => {
+                              setDragging(false)
+                              setDragOver(null)
+                            }}
+                          />
+                        )
+                      })}
+                      {day.movedAway.map((ghost) => (
+                        <MovedAwayCard
+                          key={ghost.reschedule.id}
+                          ghost={ghost}
+                          onOpen={() =>
+                            setEditing({
+                              group: ghost.group,
+                              originalDate: dayKeyOf(ghost.reschedule.originalDate),
+                              existing: ghost.reschedule,
+                            })
+                          }
                         />
-                      )
-                    })}
-                    {day.movedAway.map((ghost) => (
-                      <MovedAwayCard
-                        key={ghost.reschedule.id}
-                        ghost={ghost}
-                        onOpen={() =>
-                          setEditing({
-                            group: ghost.group,
-                            originalDate: dayKeyOf(ghost.reschedule.originalDate),
-                            existing: ghost.reschedule,
-                          })
-                        }
-                      />
-                    ))}
-                  </>
-                )}
+                      ))}
+                    </>
+                  )}
+                </div>
               </div>
-            </div>
-          )
-        })}
+            )
+          })}
+        </div>
       </div>
 
       {legend.length > 0 && (
@@ -271,11 +274,11 @@ function LessonCard({
                 onMove()
               }}
               title="Darsni koʻchirish"
-              className="rounded p-0.5 text-slate-400 opacity-0 transition-opacity hover:bg-white hover:text-slate-700 group-hover/card:opacity-100 dark:hover:bg-slate-800 dark:hover:text-slate-200"
+              className="rounded p-0.5 text-slate-400 opacity-0 transition-opacity hover:bg-white hover:text-slate-700 group-hover/card:opacity-100 pointer-coarse:opacity-100 dark:hover:bg-slate-800 dark:hover:text-slate-200"
             >
               <CalendarClock className="h-3.5 w-3.5" />
             </button>
-            <GripVertical className="h-3.5 w-3.5 text-slate-300 opacity-0 group-hover/card:opacity-100 dark:text-slate-600" />
+            <GripVertical className="h-3.5 w-3.5 text-slate-300 opacity-0 group-hover/card:opacity-100 pointer-coarse:hidden dark:text-slate-600" />
           </span>
         )}
       </div>

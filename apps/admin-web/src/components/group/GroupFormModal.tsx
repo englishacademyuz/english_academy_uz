@@ -89,7 +89,7 @@ export function GroupFormModal({
           <Input value={name} onChange={(e) => setName(e.target.value)} required placeholder="Oʻrta daraja 02" />
         </Field>
 
-        <div className="grid grid-cols-2 gap-3">
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
           <Field label="Fan">
             <Select value={subjectId} onChange={(e) => setSubjectId(e.target.value)}>
               <option value="">Barcha fanlar</option>
@@ -155,7 +155,7 @@ export function GroupFormModal({
           </div>
         </div>
 
-        <div className="grid grid-cols-2 gap-3">
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
           <Field label="Vaqt">
             <Input type="time" value={scheduleTime} onChange={(e) => setScheduleTime(e.target.value)} required />
           </Field>

@@ -61,7 +61,7 @@ export function ChatLauncher() {
         onClick={() => chat.open()}
         aria-label={count > 0 ? `Xabarlar, ${count} ta oʻqilmagan` : 'Xabarlar'}
         title="Ota-onalar bilan muloqot"
-        className="fixed bottom-6 right-6 z-40 flex h-14 w-14 items-center justify-center rounded-full bg-brand-600 text-white shadow-lg shadow-brand-600/30 transition hover:scale-105 hover:bg-brand-700 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-600"
+        className="fixed bottom-4 right-4 z-40 flex h-14 w-14 sm:bottom-6 sm:right-6 items-center justify-center rounded-full bg-brand-600 text-white shadow-lg shadow-brand-600/30 transition hover:scale-105 hover:bg-brand-700 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-600"
       >
         <MessageCircle className="h-6 w-6" />
         {count > 0 && (

@@ -35,12 +35,13 @@ export function StudentsTab({ group, initialDate }: { group: Group; initialDate?
 
   return (
     <Card className="overflow-hidden p-0">
-      <div className="grid grid-cols-[370px_1fr]" style={BAND_VARS}>
+      {/* The roster narrows on smaller screens so the active view keeps room; names truncate. */}
+      <div className="grid grid-cols-[9.5rem_1fr] sm:grid-cols-[15rem_1fr] lg:grid-cols-[370px_1fr]" style={BAND_VARS}>
         <RosterColumn roster={roster} onAddStudent={() => setShowAddStudent(true)} />
 
         <div className="flex min-w-0 flex-col">
           <div
-            className="flex shrink-0 items-center overflow-x-auto border-b border-slate-100 px-5 dark:border-slate-800"
+            className="flex shrink-0 items-center overflow-x-auto border-b border-slate-100 px-3 sm:px-5 dark:border-slate-800"
             style={{ height: 'var(--tabbar-h)' }}
           >
             {/* min-w-max keeps Tabs' own flex-wrap from kicking in -- this band scrolls

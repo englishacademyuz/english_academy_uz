@@ -360,7 +360,7 @@ function AddMarkingModal({
           <Input value={title} onChange={(e) => setTitle(e.target.value)} required placeholder="3-nazorat ishi" />
         </Field>
 
-        <div className="grid grid-cols-2 gap-4">
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
           <Field label="Turi">
             <Select value={type} onChange={(e) => setType(e.target.value as AssessmentType)}>
               {TYPES.map((t) => (

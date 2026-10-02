@@ -13,14 +13,14 @@ export function RosterColumn({ roster, onAddStudent }: { roster: Enrollment[]; o
   const avatarAccents = useMemo(() => buildAccentMap(roster.map((e) => e.studentId)), [roster])
 
   return (
-    <div className="flex shrink-0 flex-col border-r border-slate-100 dark:border-slate-800">
+    <div className="flex min-w-0 shrink-0 flex-col border-r border-slate-100 dark:border-slate-800">
       <div
-        className="flex shrink-0 items-center justify-between gap-2 px-5"
+        className="flex shrink-0 items-center justify-between gap-2 px-3 sm:px-5"
         style={{ height: 'var(--tabbar-h)' }}
       >
-        <div className="flex items-center gap-2">
-          <h2 className="text-sm font-semibold text-slate-900 dark:text-slate-100">Guruh oʻquvchilari</h2>
-          <span className="inline-flex h-5 min-w-5 items-center justify-center rounded-full bg-brand-100 px-1.5 text-xs font-semibold text-brand-700 dark:bg-brand-500/15 dark:text-brand-300">
+        <div className="flex min-w-0 items-center gap-2">
+          <h2 className="truncate text-sm font-semibold text-slate-900 dark:text-slate-100">Guruh oʻquvchilari</h2>
+          <span className="inline-flex h-5 min-w-5 shrink-0 items-center justify-center rounded-full bg-brand-100 px-1.5 text-xs font-semibold text-brand-700 dark:bg-brand-500/15 dark:text-brand-300">
             {roster.length}
           </span>
         </div>
@@ -35,7 +35,7 @@ export function RosterColumn({ roster, onAddStudent }: { roster: Enrollment[]; o
       </div>
 
       <div
-        className="flex shrink-0 items-end border-y border-slate-100 px-5 pb-2 dark:border-slate-800"
+        className="flex shrink-0 items-end border-y border-slate-100 px-3 pb-2 sm:px-5 dark:border-slate-800"
         style={{ height: 'var(--colhead-h)' }}
       >
         <span className="text-[11px] font-semibold uppercase tracking-wide text-slate-400 dark:text-slate-500">
@@ -45,7 +45,7 @@ export function RosterColumn({ roster, onAddStudent }: { roster: Enrollment[]; o
 
       {roster.length === 0 ? (
         <div
-          className="flex shrink-0 items-center px-5 text-sm text-slate-400 dark:text-slate-500"
+          className="flex shrink-0 items-center px-3 text-sm text-slate-400 sm:px-5 dark:text-slate-500"
           style={{ height: 'var(--row-h)' }}
         >
           Guruhda oʻquvchi yoʻq
@@ -57,11 +57,11 @@ export function RosterColumn({ roster, onAddStudent }: { roster: Enrollment[]; o
           return (
             <div
               key={enrollment.id}
-              className="flex shrink-0 items-center gap-3 border-b border-slate-100 px-5 dark:border-slate-800"
+              className="flex shrink-0 items-center gap-3 border-b border-slate-100 px-3 sm:px-5 dark:border-slate-800"
               style={{ height: 'var(--row-h)' }}
             >
               <span
-                className={`flex h-7 w-7 shrink-0 items-center justify-center rounded-full text-[11px] font-semibold ${accent?.avatar ?? 'bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-300'}`}
+                className={`hidden h-7 w-7 shrink-0 items-center justify-center rounded-full text-[11px] font-semibold sm:flex ${accent?.avatar ?? 'bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-300'}`}
               >
                 {initials(fullName)}
               </span>

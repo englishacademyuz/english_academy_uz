@@ -56,12 +56,12 @@ export function GroupDetailPage() {
 
   return (
     <div>
-      <div className="relative mb-6 overflow-hidden rounded-xl border border-slate-200 bg-white p-5 shadow-sm dark:border-slate-800 dark:bg-slate-900">
+      <div className="relative mb-6 overflow-hidden rounded-xl border border-slate-200 bg-white p-4 shadow-sm sm:p-5 dark:border-slate-800 dark:bg-slate-900">
         <span className="absolute inset-y-0 left-0 w-1.5" style={accent.fill} />
         <div className="flex flex-wrap items-start justify-between gap-4 pl-2">
           <div className="min-w-0">
             <div className="flex flex-wrap items-center gap-2">
-              <h1 className="text-2xl font-semibold tracking-tight text-slate-900 dark:text-slate-100">{group.name}</h1>
+              <h1 className="text-xl font-semibold tracking-tight text-slate-900 sm:text-2xl dark:text-slate-100">{group.name}</h1>
               {group.level && (
                 <span className="inline-flex items-center gap-1.5 rounded-full px-2.5 py-0.5 text-xs font-semibold" style={accent.soft}>
                   <span className="h-1.5 w-1.5 rounded-full" style={accent.fill} />

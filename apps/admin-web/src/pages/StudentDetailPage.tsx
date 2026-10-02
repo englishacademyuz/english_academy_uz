@@ -68,7 +68,7 @@ export function StudentDetailPage() {
         title={`${student.firstName} ${student.lastName}`}
         description={[age !== null ? `${age} yosh` : null, student.phone].filter(Boolean).join(' · ')}
         actions={
-          <div className="flex items-center gap-2">
+          <div className="flex flex-wrap items-center gap-2">
             {/* A teacher may only write to families of their own students -- the chat says so otherwise. */}
             <Button variant="secondary" onClick={() => chat.open(student.id)}>
               <MessageCircle className="h-4 w-4" /> Xabar yozish
