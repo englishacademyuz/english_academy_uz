@@ -1,12 +1,14 @@
-import { lazy, Suspense, useEffect, useState } from 'react'
+import { lazy, Suspense, useEffect, useMemo, useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { CheckCircle2 } from 'lucide-react'
-import { sessions as sessionsApi } from '../../lib/api'
+import { reschedules as reschedulesApi, sessions as sessionsApi } from '../../lib/api'
 import { toDateInputValue, todayInputValue } from '../../lib/format'
 import { notifyError, notifySuccess } from '../../lib/toast'
 import type { Group } from '../../lib/types'
 import { MaterialsEditor, type MaterialDraft } from '../shared/MaterialsEditor'
+import { HomeworkImagesEditor, type HomeworkImageDraft } from '../homework/HomeworkImages'
 import { isRichTextEmpty } from '../../lib/richText'
+import { dateFromKey, dayKeyOf, nextLessonKey } from '../../lib/schedule'
 import { Button, Card, Field, Input } from '../ui'
 
 // The editor (TipTap) is heavy and only needed here -- load it with the lesson form, not the whole panel.
@@ -23,6 +25,8 @@ export function TodayLessonCard({ group, initialDate }: { group: Group; initialD
   const [topic, setTopic] = useState('')
   const [notes, setNotes] = useState('')
   const [homeworkInstructions, setHomeworkInstructions] = useState('')
+  const [homeworkImages, setHomeworkImages] = useState<HomeworkImageDraft[]>([])
+  const [uploadingImages, setUploadingImages] = useState(false)
   const [materials, setMaterials] = useState<MaterialDraft[]>([])
   const [savedAt, setSavedAt] = useState<number | null>(null)
 
@@ -33,16 +37,37 @@ export function TodayLessonCard({ group, initialDate }: { group: Group; initialD
 
   const existingSession = sessionQuery.data?.[0]
 
+  // A picture task is due by the group's next lesson unless the teacher picks another day.
+  const lookAhead = useMemo(() => {
+    const end = dateFromKey(date)
+    end.setDate(end.getDate() + 36)
+    return toDateInputValue(end)
+  }, [date])
+  const reschedulesQuery = useQuery({
+    queryKey: ['reschedules', date, lookAhead],
+    queryFn: () => reschedulesApi.list(date, lookAhead),
+  })
+  const nextLesson = nextLessonKey(group, reschedulesQuery.data ?? [], date)
+
   useEffect(() => {
     if (existingSession) {
       setTopic(existingSession.topic ?? '')
       setNotes(existingSession.notes ?? '')
       setHomeworkInstructions(existingSession.homework?.instructions ?? '')
+      setHomeworkImages(
+        existingSession.homework?.images.map((i) => ({
+          id: i.id,
+          title: i.title ?? '',
+          caption: i.caption ?? '',
+          dueDate: i.dueDate ? dayKeyOf(i.dueDate) : '',
+        })) ?? [],
+      )
       setMaterials(existingSession.materials.map((m) => ({ type: m.type, content: m.content })))
     } else {
       setTopic('')
       setNotes('')
       setHomeworkInstructions('')
+      setHomeworkImages([])
       setMaterials([])
     }
   }, [existingSession])
@@ -56,7 +81,19 @@ export function TodayLessonCard({ group, initialDate }: { group: Group; initialD
         notes: isRichTextEmpty(notes) ? '' : notes,
         // Always sent, so removing every source actually clears them.
         materials,
-        homework: isRichTextEmpty(homeworkInstructions) ? undefined : { instructions: homeworkInstructions },
+        // Pictures alone are homework too; the list is always sent, so removing one removes it.
+        homework:
+          isRichTextEmpty(homeworkInstructions) && homeworkImages.length === 0
+            ? undefined
+            : {
+                instructions: isRichTextEmpty(homeworkInstructions) ? '' : homeworkInstructions,
+                images: homeworkImages.map((i) => ({
+                  id: i.id,
+                  title: i.title.trim() || null,
+                  caption: i.caption.trim() || null,
+                  dueDate: i.dueDate || null,
+                })),
+              },
       }),
     onSuccess: () => {
       notifySuccess('Dars saqlandi')
@@ -115,6 +152,15 @@ export function TodayLessonCard({ group, initialDate }: { group: Group; initialD
               placeholder="Ish daftari, 5-bob, 4–7-mashqlar — yoki «Lugʻat» tugmasi bilan soʻzlar jadvali"
             />
           </Suspense>
+          <div className="mt-3">
+            <HomeworkImagesEditor
+              groupId={group.id}
+              value={homeworkImages}
+              onChange={setHomeworkImages}
+              defaultDueDate={nextLesson}
+              onBusyChange={setUploadingImages}
+            />
+          </div>
         </div>
 
         <div>
@@ -128,8 +174,8 @@ export function TodayLessonCard({ group, initialDate }: { group: Group; initialD
               <CheckCircle2 className="h-4 w-4" /> Saqlandi
             </span>
           )}
-          <Button type="submit" loading={saveMutation.isPending} className="ml-auto">
-            Darsni saqlash
+          <Button type="submit" loading={saveMutation.isPending} disabled={uploadingImages} className="ml-auto">
+            {uploadingImages ? 'Rasmlar yuklanmoqda…' : 'Darsni saqlash'}
           </Button>
         </div>
       </form>

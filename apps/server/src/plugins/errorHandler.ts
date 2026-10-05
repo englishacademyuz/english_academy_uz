@@ -1,11 +1,17 @@
 import fp from 'fastify-plugin'
 import type { FastifyError, FastifyInstance } from 'fastify'
+import { ZodError } from 'zod'
 import { AppError } from '@tashkurgan/shared'
 
 export default fp(async (app: FastifyInstance) => {
   app.setErrorHandler((error: FastifyError, _request, reply) => {
     if (error instanceof AppError) {
       reply.status(error.statusCode).send({ error: error.message })
+      return
+    }
+    // A request body or query that doesn't fit its schema is the caller's mistake.
+    if (error instanceof ZodError) {
+      reply.status(400).send({ error: error.issues.map((i) => i.message).join('; ') })
       return
     }
     if (error.validation) {

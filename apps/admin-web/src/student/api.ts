@@ -65,6 +65,8 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
 
 /** Object URLs of homework photos already fetched -- an image tag can't send the Telegram auth header itself. */
 const photoUrls = new Map<string, Promise<string>>()
+/** The same for the pictures a teacher gives with homework. */
+const imageUrls = new Map<string, Promise<string>>()
 
 export const miniApi = {
   home: () => request<MiniHome>('/student/home'),
@@ -82,6 +84,15 @@ export const miniApi = {
       url = send(`/student/homework-photos/${photoId}`).then(async (res) => URL.createObjectURL(await res.blob()))
       url.catch(() => photoUrls.delete(photoId))
       photoUrls.set(photoId, url)
+    }
+    return url
+  },
+  homeworkImageUrl: (imageId: string) => {
+    let url = imageUrls.get(imageId)
+    if (!url) {
+      url = send(`/student/homework-images/${imageId}`).then(async (res) => URL.createObjectURL(await res.blob()))
+      url.catch(() => imageUrls.delete(imageId))
+      imageUrls.set(imageId, url)
     }
     return url
   },

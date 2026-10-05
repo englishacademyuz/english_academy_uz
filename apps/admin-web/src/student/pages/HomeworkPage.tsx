@@ -3,6 +3,7 @@ import { Link } from 'react-router-dom'
 import { ChevronRight } from 'lucide-react'
 import { miniApi } from '../api'
 import { HomeworkTile } from '../components/art'
+import { homeworkDueDate, homeworkPreviewText } from '../components/HomeworkImages'
 import { DayBadge, Empty, ErrorState, Loading, Screen, Section } from '../components/kit'
 import { weekdayDate } from '../format'
 import { richTextToPlain } from '../../lib/richText'
@@ -25,6 +26,16 @@ function SubmissionChip({ homework }: { homework: MiniHomework }) {
   return <span className={`self-start rounded-full px-2.5 py-1 text-[13px] font-extrabold ${look.cls}`}>{look.text}</span>
 }
 
+/** The teacher added pictures to this homework. */
+function ImagesChip({ count }: { count: number }) {
+  if (count === 0) return null
+  return (
+    <span className="self-start rounded-full bg-tg-grape-soft px-2.5 py-1 text-[13px] font-extrabold text-tg-grape">
+      🖼 {count} ta rasmli vazifa
+    </span>
+  )
+}
+
 /**
  * Uyga vazifalar: what to do, per lesson. Usually checked in class and graded in Kundalik; in
  * groups that take photos, each row also shows whether it's been handed in.
@@ -43,6 +54,7 @@ export function HomeworkPage() {
   }
 
   const [latest, ...older] = homework.data
+  const latestDue = latest ? homeworkDueDate(latest.dueDate, latest.images) : null
   return (
     <Screen
       back={back}
@@ -60,10 +72,11 @@ export function HomeworkPage() {
             <HomeworkTile size={72} />
             <div className="flex min-w-0 grow flex-col gap-1">
               <span className="text-sm font-extrabold text-tg-sun-ink">ENG SOʻNGGI</span>
-              <span className="line-clamp-4 font-tg-display text-xl font-semibold leading-snug">{richTextToPlain(latest.instructions)}</span>
+              <span className="line-clamp-4 font-tg-display text-xl font-semibold leading-snug">{homeworkPreviewText(richTextToPlain(latest.instructions), latest.images)}</span>
               <span className="text-sm font-bold text-tg-sun-body">
-                {latest.dueDate ? `${weekdayDate(new Date(latest.dueDate))} gacha` : latest.topic || weekdayDate(new Date(latest.date))}
+                {latestDue ? `${weekdayDate(new Date(latestDue))} gacha` : latest.topic || weekdayDate(new Date(latest.date))}
               </span>
+              <ImagesChip count={latest.images.length} />
               <SubmissionChip homework={latest} />
             </div>
             <ChevronRight className="h-6 w-6 shrink-0" strokeWidth={2.5} />
@@ -81,7 +94,8 @@ export function HomeworkPage() {
                     <DayBadge date={new Date(h.date)} />
                     <div className="flex min-w-0 grow flex-col gap-0.5">
                       {h.topic && <span className="truncate text-[13px] font-extrabold uppercase text-tg-muted">{h.topic}</span>}
-                      <span className="line-clamp-2 text-[15px] font-bold">{richTextToPlain(h.instructions)}</span>
+                      <span className="line-clamp-2 text-[15px] font-bold">{homeworkPreviewText(richTextToPlain(h.instructions), h.images)}</span>
+                      <ImagesChip count={h.images.length} />
                       <SubmissionChip homework={h} />
                     </div>
                     <ChevronRight className="h-5 w-5 shrink-0 text-tg-faint" strokeWidth={2.5} />

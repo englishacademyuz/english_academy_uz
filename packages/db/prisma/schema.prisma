@@ -303,6 +303,7 @@ model Group {
   assessments       Assessment[]
   pointTransactions PointTransaction[]
   reschedules       LessonReschedule[]
+  homeworkImages    HomeworkImage[]
 
   @@map("groups")
 }
@@ -378,8 +379,38 @@ model Homework {
 
   results     HomeworkResult[]
   submissions HomeworkSubmission[]
+  images      HomeworkImage[]
 
   @@map("homeworks")
+}
+
+// A picture the teacher hands out with a Homework -- a worksheet, a page of the
+// book. Each one is a task of its own: an optional title ("Listening",
+// "Vocabulary"), caption and deadline. Stored on Telegram like HomeworkPhoto
+// (only file ids here). It is uploaded before the lesson is saved, so it starts
+// with no `homeworkId` (`groupId` says whose it is meanwhile) and the lesson
+// save attaches it.
+model HomeworkImage {
+  id                   String    @id @default(cuid())
+  groupId              String
+  group                Group     @relation(fields: [groupId], references: [id], onDelete: Cascade)
+  homeworkId           String?
+  homework             Homework? @relation(fields: [homeworkId], references: [id], onDelete: Cascade)
+  title                String?
+  caption              String?
+  // When this task is due -- a calendar day, like Homework.dueDate.
+  dueDate              DateTime?
+  // Where it sits among the homework's images, from 0.
+  position             Int       @default(0)
+  telegramFileId       String
+  telegramFileUniqueId String
+  width                Int?
+  height               Int?
+  size                 Int?
+  createdAt            DateTime  @default(now())
+
+  @@index([homeworkId])
+  @@map("homework_images")
 }
 
 // One student's photos for one Homework. The photos themselves live on

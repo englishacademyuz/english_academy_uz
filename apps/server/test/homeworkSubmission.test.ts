@@ -12,7 +12,7 @@ const JPEG = Buffer.concat([Buffer.from([0xff, 0xd8, 0xff, 0xe0]), Buffer.alloc(
 /** Telegram, faked: uploads are kept in memory under made-up file ids. */
 function fakeFileStore() {
   const files = new Map<string, Buffer>()
-  const uploads: Array<{ ownerChatId: string; caption: string }> = []
+  const uploads: Array<{ ownerChatId?: string; caption: string }> = []
   const store: HomeworkFileStore = {
     async upload(photo, options) {
       const fileId = `file-${files.size + 1}`

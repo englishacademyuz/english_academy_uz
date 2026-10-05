@@ -1,7 +1,15 @@
 import type { FastifyPluginAsync } from 'fastify'
 import { z } from 'zod'
 import { prisma } from '@tashkurgan/db'
-import { assertCan, recordLessonSession, recordHomeworkResults } from '@tashkurgan/domain'
+import {
+  HOMEWORK_WITH_IMAGES,
+  MAX_HOMEWORK_IMAGES,
+  MAX_HOMEWORK_IMAGE_CAPTION,
+  MAX_HOMEWORK_IMAGE_TITLE,
+  assertCan,
+  recordLessonSession,
+  recordHomeworkResults,
+} from '@tashkurgan/domain'
 import { NotFoundError } from '@tashkurgan/shared'
 
 const materialSchema = z.object({
@@ -15,7 +23,26 @@ const recordSessionSchema = z.object({
   notes: z.string().optional(),
   materials: z.array(materialSchema).optional(),
   homework: z
-    .object({ instructions: z.string().min(1), dueDate: z.coerce.date().optional() })
+    .object({
+      instructions: z.string().default(''),
+      dueDate: z.coerce.date().optional(),
+      // Pictures uploaded first (POST /groups/:groupId/homework-images), listed in order.
+      images: z
+        .array(
+          z.object({
+            id: z.string(),
+            title: z.string().max(MAX_HOMEWORK_IMAGE_TITLE).nullable().optional(),
+            caption: z.string().max(MAX_HOMEWORK_IMAGE_CAPTION).nullable().optional(),
+            dueDate: z.coerce.date().nullable().optional(),
+          }),
+        )
+        .max(MAX_HOMEWORK_IMAGES)
+        .optional(),
+    })
+    // Homework may be only pictures, but not nothing at all.
+    .refine((hw) => hw.instructions.trim() !== '' || (hw.images?.length ?? 0) > 0, {
+      message: 'Homework needs instructions or at least one image',
+    })
     .optional(),
   attendance: z
     .array(z.object({ studentId: z.string(), status: z.enum(['PRESENT', 'ABSENT', 'LATE', 'EXCUSED']) }))
@@ -93,7 +120,7 @@ export const lessonSessionRoutes: FastifyPluginAsync = async (app) => {
             ? { date: { ...(from ? { gte: from } : {}), ...(to ? { lt: to } : {}) } }
             : {}),
       },
-      include: { materials: true, homework: true, attendances: true },
+      include: { materials: true, homework: HOMEWORK_WITH_IMAGES, attendances: true },
       orderBy: { date: 'desc' },
     })
   })
@@ -102,7 +129,7 @@ export const lessonSessionRoutes: FastifyPluginAsync = async (app) => {
     const { id } = sessionIdParams.parse(request.params)
     const session = await prisma.lessonSession.findUnique({
       where: { id },
-      include: { materials: true, homework: true, attendances: true, group: true },
+      include: { materials: true, homework: HOMEWORK_WITH_IMAGES, attendances: true, group: true },
     })
     if (!session) throw new NotFoundError('Session not found')
 

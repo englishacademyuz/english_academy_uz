@@ -35,7 +35,14 @@ export type MiniHome = {
   group: GroupSummary | null
   scheduleChanges: MiniScheduleChange[]
   lastLesson: { id: string; date: string; topic: string | null } | null
-  latestHomework: { lessonId: string; date: string; topic: string | null; instructions: string; dueDate: string | null } | null
+  latestHomework: {
+    lessonId: string
+    date: string
+    topic: string | null
+    instructions: string
+    dueDate: string | null
+    images: MiniHomeworkImage[]
+  } | null
   openQuizzes: MiniQuiz[]
   monthProgress: MiniProgressSnapshot
   totalPoints: number
@@ -69,8 +76,24 @@ export type MiniLessonDetail = {
   notes: string | null
   materials: Array<{ id: string; type: LessonMaterialType; content: string }>
   homework:
-    | { instructions: string; dueDate: string | null; submissionEnabled: boolean; submission: MiniSubmission | null }
+    | {
+        instructions: string
+        dueDate: string | null
+        images: MiniHomeworkImage[]
+        submissionEnabled: boolean
+        submission: MiniSubmission | null
+      }
     | null
+}
+
+/** A picture the teacher gave with homework -- a task of its own, with a title, caption and deadline. */
+export type MiniHomeworkImage = {
+  id: string
+  title: string | null
+  caption: string | null
+  dueDate: string | null
+  width: number | null
+  height: number | null
 }
 
 /** The student's photos of one homework: waiting for the teacher, checked, or sent back to redo. */
@@ -91,6 +114,7 @@ export type MiniHomework = {
   topic: string | null
   instructions: string
   dueDate: string | null
+  images: MiniHomeworkImage[]
   /** The group takes homework as photos -- otherwise it's only checked in class. */
   submissionEnabled: boolean
   submission: MiniSubmission | null

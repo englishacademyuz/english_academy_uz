@@ -7,6 +7,7 @@ import { notifyError, notifySuccess } from '../../lib/toast'
 import type { Group, LessonSession } from '../../lib/types'
 import { MaterialGallery, materialLook } from '../shared/MaterialPreview'
 import { MaterialsEditor, type MaterialDraft } from '../shared/MaterialsEditor'
+import { HomeworkImageGallery } from '../homework/HomeworkImages'
 import { RichText } from '../shared/RichText'
 import { isRichTextEmpty } from '../../lib/richText'
 import { Button, Card, EmptyState, Spinner } from '../ui'
@@ -140,7 +141,17 @@ function LessonSources({ session }: { session: LessonSession }) {
       {session.materials.length > 0 && (
         <MaterialGallery materials={session.materials} />
       )}
-      {session.homework && <LessonText title="Uy vazifasi" value={session.homework.instructions} />}
+      {session.homework && (
+        <section className="rounded-lg bg-white p-3 ring-1 ring-slate-200 dark:bg-slate-900 dark:ring-slate-700">
+          <h4 className="mb-1.5 text-[11px] font-semibold uppercase tracking-wide text-slate-400 dark:text-slate-500">Uy vazifasi</h4>
+          {!isRichTextEmpty(session.homework.instructions) && <RichText value={session.homework.instructions} />}
+          {session.homework.images.length > 0 && (
+            <div className={isRichTextEmpty(session.homework.instructions) ? '' : 'mt-3'}>
+              <HomeworkImageGallery images={session.homework.images} />
+            </div>
+          )}
+        </section>
+      )}
     </div>
   )
 }

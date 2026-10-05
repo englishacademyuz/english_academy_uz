@@ -22,6 +22,7 @@ import { miniAppRoutes } from './routes/miniApp'
 import { conversationRoutes, type ChatNotifier } from './routes/conversations'
 import { scheduleRoutes, type LessonChangeNotifier } from './routes/schedule'
 import { homeworkSubmissionRoutes, type HomeworkReviewNotifier } from './routes/homeworkSubmissions'
+import { homeworkImageRoutes } from './routes/homeworkImages'
 import type { HomeworkFileStore } from './telegram/fileStore'
 
 export type BuildAppOptions = {
@@ -37,7 +38,7 @@ export type BuildAppOptions = {
   chatNotifier?: ChatNotifier
   /** Tells a student's Telegram chats their homework photos were checked; omitted (no bot) means reviews are only saved. */
   homeworkReviewNotifier?: HomeworkReviewNotifier
-  /** Keeps homework photos on Telegram; omitted (no bot) means photos can't be uploaded or viewed. */
+  /** Keeps homework photos and pictures on Telegram; omitted (no bot) means they can't be uploaded or viewed. */
   homeworkFileStore?: HomeworkFileStore
   /** Verifies Telegram Mini App init data; defaults to the configured bot token. */
   telegramBotToken?: string
@@ -75,6 +76,7 @@ export async function buildApp(options: BuildAppOptions = {}) {
     fileStore: options.homeworkFileStore,
     notifier: options.homeworkReviewNotifier,
   })
+  await app.register(homeworkImageRoutes, { fileStore: options.homeworkFileStore })
   // The Telegram Mini App's API -- its own auth (Telegram init data), not the admin cookie.
   await app.register(miniAppRoutes, { fileStore: options.homeworkFileStore })
 

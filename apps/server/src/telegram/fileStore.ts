@@ -1,6 +1,7 @@
 import { InputFile, type Api } from 'grammy'
 import type { PhotoSize } from 'grammy/types'
 import type { StoredPhoto } from '@tashkurgan/domain'
+import { AppError } from '@tashkurgan/shared'
 
 /**
  * Where homework photos live: on Telegram's servers, not ours. The database keeps only each
@@ -12,8 +13,11 @@ import type { StoredPhoto } from '@tashkurgan/domain'
  * to browse submissions by hand. Without it, Mini App uploads land in the uploader's own chat.
  */
 export type HomeworkFileStore = {
-  /** Puts a photo uploaded from the Mini App on Telegram. */
-  upload(photo: Buffer, options: { ownerChatId: string; caption: string }): Promise<StoredPhoto>
+  /**
+   * Puts an uploaded photo on Telegram: in the storage chat, else in `ownerChatId` (the uploader's
+   * own chat with the bot). With neither -- a teacher's upload without a storage chat -- it fails.
+   */
+  upload(photo: Buffer, options: { ownerChatId?: string; caption: string }): Promise<StoredPhoto>
   /**
    * Keeps a photo someone already sent the bot -- copied to the storage chat when there is one.
    * `kind` is how it was sent: as a photo, or as an image file (uncompressed).
@@ -64,7 +68,9 @@ export function telegramFileStore(api: Api, token: string, storageChatId?: strin
 
   return {
     async upload(photo, { ownerChatId, caption }) {
-      const message = await api.sendPhoto(storageChatId ?? ownerChatId, new InputFile(photo, 'homework.jpg'), {
+      const chatId = storageChatId ?? ownerChatId
+      if (!chatId) throw new AppError('Set TELEGRAM_STORAGE_CHAT_ID to upload images', 503)
+      const message = await api.sendPhoto(chatId, new InputFile(photo, 'homework.jpg'), {
         caption,
         disable_notification: true,
       })

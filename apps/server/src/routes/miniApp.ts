@@ -5,6 +5,7 @@ import {
   addHomeworkPhoto,
   answerQuizQuestion,
   assertCanAddHomeworkPhoto,
+  HOMEWORK_WITH_IMAGES,
   MAX_HOMEWORK_PHOTOS,
   removeHomeworkPhoto,
   submissionView,
@@ -100,7 +101,12 @@ export const miniAppRoutes: FastifyPluginAsync<{ fileStore?: HomeworkFileStore }
         ? prisma.lessonSession.findFirst({
             where: { groupId: enrollment.groupId, homework: { isNot: null } },
             orderBy: { date: 'desc' },
-            select: { id: true, date: true, topic: true, homework: { select: { instructions: true, dueDate: true } } },
+            select: {
+              id: true,
+              date: true,
+              topic: true,
+              homework: { select: { instructions: true, dueDate: true, images: HOMEWORK_WITH_IMAGES.include.images } },
+            },
           })
         : null,
       listQuizzesForStudent(student.id, now),
@@ -183,7 +189,12 @@ export const miniAppRoutes: FastifyPluginAsync<{ fileStore?: HomeworkFileStore }
       where: { id, groupId: { in: groupIds } },
       include: {
         materials: true,
-        homework: { include: { submissions: { where: { studentId: student.id }, include: { photos: true } } } },
+        homework: {
+          include: {
+            ...HOMEWORK_WITH_IMAGES.include,
+            submissions: { where: { studentId: student.id }, include: { photos: true } },
+          },
+        },
         group: { select: { name: true, homeworkSubmissionEnabled: true } },
       },
     })
@@ -201,6 +212,7 @@ export const miniAppRoutes: FastifyPluginAsync<{ fileStore?: HomeworkFileStore }
         ? {
             instructions: lesson.homework.instructions,
             dueDate: lesson.homework.dueDate,
+            images: lesson.homework.images,
             submissionEnabled: lesson.group.homeworkSubmissionEnabled,
             submission: lesson.homework.submissions[0]
               ? submissionView(lesson.homework.submissions[0], lesson.homework.dueDate)
@@ -226,6 +238,7 @@ export const miniAppRoutes: FastifyPluginAsync<{ fileStore?: HomeworkFileStore }
           select: {
             instructions: true,
             dueDate: true,
+            images: HOMEWORK_WITH_IMAGES.include.images,
             submissions: { where: { studentId: student.id }, include: { photos: { orderBy: { createdAt: 'asc' } } } },
           },
         },
@@ -256,6 +269,7 @@ export const miniAppRoutes: FastifyPluginAsync<{ fileStore?: HomeworkFileStore }
         group: { select: { name: true, homeworkSubmissionEnabled: true } },
         homework: {
           include: {
+            ...HOMEWORK_WITH_IMAGES.include,
             submissions: { where: { studentId: student.id }, include: { photos: { orderBy: { createdAt: 'asc' } } } },
           },
         },
@@ -270,6 +284,7 @@ export const miniAppRoutes: FastifyPluginAsync<{ fileStore?: HomeworkFileStore }
       group: lesson.group.name,
       instructions: lesson.homework.instructions,
       dueDate: lesson.homework.dueDate,
+      images: lesson.homework.images,
       submissionEnabled: lesson.group.homeworkSubmissionEnabled,
       maxPhotos: MAX_HOMEWORK_PHOTOS,
       submission: submission ? submissionView(submission, lesson.homework.dueDate) : null,
@@ -305,6 +320,18 @@ export const miniAppRoutes: FastifyPluginAsync<{ fileStore?: HomeworkFileStore }
     const photo = await prisma.homeworkPhoto.findFirst({ where: { id, submission: { studentId: student.id } } })
     if (!photo) throw new NotFoundError('Photo not found')
     return sendHomeworkPhoto(reply, opts.fileStore, photo.telegramFileId)
+  })
+
+  // A picture the teacher gave with homework -- for any group the student is or was in.
+  app.get('/student/homework-images/:id', async (request, reply) => {
+    const { id } = idParams.parse(request.params)
+    const groupIds = await enrolledGroupIds(me(request).id)
+    const image = await prisma.homeworkImage.findFirst({
+      where: { id, groupId: { in: groupIds }, homeworkId: { not: null } },
+      select: { telegramFileId: true },
+    })
+    if (!image) throw new NotFoundError('Image not found')
+    return sendHomeworkPhoto(reply, opts.fileStore, image.telegramFileId)
   })
 
   app.get('/student/progress', async (request) => {

@@ -113,7 +113,17 @@ export type HomeworkFeedItem = HomeworkSubmission & {
 }
 
 export type HomeworkFeed = { items: HomeworkFeedItem[]; hasMore: boolean; uncheckedCount: number }
-export type Homework = { id: string; instructions: string; dueDate: string | null }
+/** A picture the teacher hands out with homework -- a task of its own, with a title, caption and deadline. */
+export type HomeworkImage = {
+  id: string
+  title: string | null
+  caption: string | null
+  dueDate: string | null
+  width: number | null
+  height: number | null
+}
+
+export type Homework = { id: string; instructions: string; dueDate: string | null; images: HomeworkImage[] }
 export type Attendance = { id: string; studentId: string; status: AttendanceStatus }
 
 export type LessonSession = {

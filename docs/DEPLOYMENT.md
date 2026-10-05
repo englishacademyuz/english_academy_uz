@@ -27,8 +27,9 @@ and its client-side routes resolve).
      - `JWT_SECRET` = a long random string (**not** the `.env.example`
        placeholder — e.g. `openssl rand -hex 32`)
      - `TELEGRAM_BOT_TOKEN` = your bot's token from BotFather
-     - `TELEGRAM_STORAGE_CHAT_ID` (optional, recommended) = the id of a private
-       channel that keeps a copy of every homework photo (ADR-0006). Create a
+     - `TELEGRAM_STORAGE_CHAT_ID` (recommended; needed for teachers to add
+       pictures to homework) = the id of a private channel that keeps a copy of
+       every homework photo and picture (ADR-0006). Create a
        private channel, add the bot as an admin with "Post messages", post
        anything in it, and read the channel id (it starts with `-100`) from
        `https://api.telegram.org/bot<token>/getUpdates` or a bot like @RawDataBot.

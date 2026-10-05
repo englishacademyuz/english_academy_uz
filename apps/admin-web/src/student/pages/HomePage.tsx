@@ -7,6 +7,7 @@ import { toDateInputValue } from '../../lib/format'
 import { miniApi } from '../api'
 import { richTextToPlain } from '../../lib/richText'
 import { ClockIcon, CupTile, GradeFace, HomeworkTile, MEDAL, TrophyIcon, isPodium, type Podium } from '../components/art'
+import { homeworkDueDate, homeworkPreviewText } from '../components/HomeworkImages'
 import { ErrorState, LinkRow, Loading, Screen, SectionTitle } from '../components/kit'
 import { ScheduleChanges, nextLesson, relativeDay } from '../components/schedule'
 import { GRADE, MONTHS, averageOf, capitalize, firstName, formatDateTime, gradeOf, initialsOf, weekdayDate } from '../format'
@@ -424,7 +425,8 @@ function InfoTile({ label, value, big }: { label: string; value: string; big?: b
 }
 
 function HomeworkCard({ homework }: { homework: NonNullable<MiniHome['latestHomework']> }) {
-  const due = homework.dueDate ? `${weekdayDate(new Date(homework.dueDate))} gacha` : `${weekdayDate(new Date(homework.date))} darsidan`
+  const dueDate = homeworkDueDate(homework.dueDate, homework.images)
+  const due = dueDate ? `${weekdayDate(new Date(dueDate))} gacha` : `${weekdayDate(new Date(homework.date))} darsidan`
   return (
     <Link
       to={`/student/lessons/${homework.lessonId}`}
@@ -433,7 +435,7 @@ function HomeworkCard({ homework }: { homework: NonNullable<MiniHome['latestHome
       <HomeworkTile />
       <div className="flex min-w-0 grow flex-col gap-1">
         <span className="text-sm font-extrabold text-tg-sun-ink">UYGA VAZIFA</span>
-        <span className="line-clamp-3 font-tg-display text-[22px] font-semibold leading-[1.15]">{richTextToPlain(homework.instructions)}</span>
+        <span className="line-clamp-3 font-tg-display text-[22px] font-semibold leading-[1.15]">{homeworkPreviewText(richTextToPlain(homework.instructions), homework.images)}</span>
         <span className="text-sm font-bold text-tg-sun-body">{due}</span>
       </div>
       <ChevronRight className="h-6 w-6 shrink-0" strokeWidth={2.5} />

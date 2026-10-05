@@ -4,8 +4,10 @@ import { useParams } from 'react-router-dom'
 import { Camera, ImagePlus, Loader2, RotateCw, X } from 'lucide-react'
 import { RichText } from '../../components/shared/RichText'
 import { shrinkPhoto } from '../../lib/image'
+import { isRichTextEmpty } from '../../lib/richText'
 import { MiniApiError, miniApi } from '../api'
 import { CheckIcon, ClockIcon } from '../components/art'
+import { HomeworkImages } from '../components/HomeworkImages'
 import { ErrorState, Loading, Screen, Section } from '../components/kit'
 import { formatDateTime, weekdayDate, weekdayDayMonth } from '../format'
 import { haptic } from '../telegram'
@@ -104,7 +106,7 @@ export function HomeworkSubmitPage() {
     )
   }
 
-  const { date, topic, group, instructions, dueDate, submissionEnabled, submission, maxPhotos } = homework.data
+  const { date, topic, group, instructions, dueDate, images, submissionEnabled, submission, maxPhotos } = homework.data
   const photos = submission?.photos ?? []
   const room = maxPhotos - photos.length - pending.length
   const canAdd = submissionEnabled && submission?.status !== 'CHECKED' && room > 0
@@ -121,9 +123,12 @@ export function HomeworkSubmitPage() {
             </span>
           )}
         </div>
-        <div className="rounded-[18px] bg-white px-4 py-3">
-          <RichText value={instructions} variant="tg" />
-        </div>
+        {!isRichTextEmpty(instructions) && (
+          <div className="rounded-[18px] bg-white px-4 py-3">
+            <RichText value={instructions} variant="tg" />
+          </div>
+        )}
+        <HomeworkImages images={images} />
       </section>
 
       {!submissionEnabled ? (

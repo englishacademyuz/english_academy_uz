@@ -1,9 +1,11 @@
 import { prisma, type AttendanceStatus, type LessonMaterialType } from '@tashkurgan/db'
 import { NotFoundError } from '@tashkurgan/shared'
+import { HOMEWORK_WITH_IMAGES, attachHomeworkImages, type HomeworkImageInput } from '../homework/homeworkImage'
 
 type MaterialInput = { type: LessonMaterialType; content: string }
 type AttendanceInput = { studentId: string; status: AttendanceStatus }
-type HomeworkInput = { instructions: string; dueDate?: Date }
+/** `images` given means "exactly these, in this order"; omitted leaves the pictures as they are. */
+type HomeworkInput = { instructions: string; dueDate?: Date; images?: HomeworkImageInput[] }
 
 export type RecordLessonSessionInput = {
   groupId: string
@@ -49,7 +51,7 @@ export async function recordLessonSession(input: RecordLessonSessionInput) {
     }
 
     if (input.homework) {
-      await tx.homework.upsert({
+      const homework = await tx.homework.upsert({
         where: { lessonSessionId: session.id },
         update: { instructions: input.homework.instructions, dueDate: input.homework.dueDate },
         create: {
@@ -58,6 +60,7 @@ export async function recordLessonSession(input: RecordLessonSessionInput) {
           dueDate: input.homework.dueDate,
         },
       })
+      if (input.homework.images) await attachHomeworkImages(tx, homework.id, input.groupId, input.homework.images)
     }
 
     if (input.attendance) {
@@ -74,7 +77,7 @@ export async function recordLessonSession(input: RecordLessonSessionInput) {
 
     return tx.lessonSession.findUniqueOrThrow({
       where: { id: session.id },
-      include: { materials: true, homework: true, attendances: true },
+      include: { materials: true, homework: HOMEWORK_WITH_IMAGES, attendances: true },
     })
   })
 }

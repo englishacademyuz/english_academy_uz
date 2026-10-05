@@ -8,6 +8,7 @@ import { isRichTextEmpty } from '../../lib/richText'
 import { docKind, parseHttpUrl, type DocKind } from '../../lib/materials'
 import { miniApi } from '../api'
 import { CheckIcon, ClockIcon, DocIcon, HomeworkScene, PlayIcon } from '../components/art'
+import { HomeworkImages } from '../components/HomeworkImages'
 import { ErrorState, Loading, Screen, Section } from '../components/kit'
 import { weekdayDate, weekdayDayMonth } from '../format'
 import type { MiniLessonDetail } from '../types'
@@ -150,10 +151,13 @@ function Homework({ homework, lessonId }: { homework: NonNullable<MiniLessonDeta
           {weekdayDate(new Date(homework.dueDate))} gacha
         </div>
       )}
-      <div className="flex w-full flex-col gap-1.5 rounded-[20px] bg-white px-4 py-3.5 text-left">
-        <span className="text-[13px] font-extrabold text-tg-muted">USTOZ YOZDI</span>
-        <RichText value={homework.instructions} variant="tg" />
-      </div>
+      {!isRichTextEmpty(homework.instructions) && (
+        <div className="flex w-full flex-col gap-1.5 rounded-[20px] bg-white px-4 py-3.5 text-left">
+          <span className="text-[13px] font-extrabold text-tg-muted">USTOZ YOZDI</span>
+          <RichText value={homework.instructions} variant="tg" />
+        </div>
+      )}
+      <HomeworkImages images={homework.images} />
       {homework.submissionEnabled ? (
         // This group hands homework in as photos -- the hand-in screen has the camera.
         <Link

@@ -17,6 +17,7 @@ import type {
   GroupPaymentEntry,
   GroupPaymentHistory,
   HomeworkFeed,
+  HomeworkImage,
   HomeworkSubmission,
   HomeworkSubmissionStatus,
   LessonHomeworkSubmissions,
@@ -195,7 +196,12 @@ export const sessions = {
       topic?: string
       notes?: string
       materials?: Array<{ type: LessonMaterialType; content: string }>
-      homework?: { instructions: string; dueDate?: string }
+      // `images` lists the homework's pictures in order; leaving it out keeps them as they are.
+      homework?: {
+        instructions: string
+        dueDate?: string
+        images?: Array<{ id: string; title: string | null; caption: string | null; dueDate: string | null }>
+      }
       attendance?: Array<{ studentId: string; status: AttendanceStatus }>
     },
   ) => post<LessonSession>(`/groups/${groupId}/sessions`, data),
@@ -318,6 +324,38 @@ export const homeworkSubmissions = {
       })
       url.catch(() => photoUrls.delete(photoId))
       photoUrls.set(photoId, url)
+    }
+    return url
+  },
+}
+
+/** Object URLs of homework pictures already fetched this session -- they never change. */
+const imageUrls = new Map<string, Promise<string>>()
+
+/** Pictures a teacher hands out with homework: uploaded one at a time, attached by saving the lesson. */
+export const homeworkImages = {
+  upload: async (groupId: string, image: Blob) => {
+    const res = await fetch(`${BASE_URL}/groups/${groupId}/homework-images`, {
+      method: 'POST',
+      credentials: 'include',
+      headers: { 'Content-Type': image.type || 'image/jpeg' },
+      body: image,
+    })
+    if (!res.ok) {
+      const body = (await res.json().catch(() => null)) as { error?: string } | null
+      throw new ApiError(body?.error ?? res.statusText, res.status)
+    }
+    return (await res.json()) as HomeworkImage
+  },
+  url: (imageId: string) => {
+    let url = imageUrls.get(imageId)
+    if (!url) {
+      url = fetch(`${BASE_URL}/homework-images/${imageId}`, { credentials: 'include' }).then(async (res) => {
+        if (!res.ok) throw new ApiError(res.statusText, res.status)
+        return URL.createObjectURL(await res.blob())
+      })
+      url.catch(() => imageUrls.delete(imageId))
+      imageUrls.set(imageId, url)
     }
     return url
   },
