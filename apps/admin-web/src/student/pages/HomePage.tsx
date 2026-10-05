@@ -42,7 +42,7 @@ export function HomePage() {
     <div className="flex flex-col gap-[18px] px-[18px] pb-8 pt-5">
       <header className="flex items-center justify-between gap-3">
         <div className="flex min-w-0 flex-col gap-0.5">
-          <span className="text-[13px] font-bold text-tg-muted">Toshqoʻrgʻon Academy</span>
+          <span className="text-[13px] font-bold text-tg-muted">Umid Edu</span>
           <h1 className="truncate font-tg-display text-[32px] font-semibold leading-[1.1]">Salom, {student.firstName}!</h1>
         </div>
         <Link

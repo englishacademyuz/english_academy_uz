@@ -32,7 +32,7 @@ export function LoginPage() {
           <div className="mb-3 flex h-12 w-12 items-center justify-center rounded-xl bg-brand-600 text-white">
             <GraduationCap className="h-6 w-6" />
           </div>
-          <h1 className="text-xl font-semibold text-slate-900 dark:text-slate-100">Tashkurgan Academy</h1>
+          <h1 className="text-xl font-semibold text-slate-900 dark:text-slate-100">UMID EDU</h1>
           <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">Boshqaruv paneliga kiring</p>
         </div>
 

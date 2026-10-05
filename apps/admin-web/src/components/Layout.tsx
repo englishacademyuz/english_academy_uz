@@ -133,10 +133,10 @@ function Brand() {
   return (
     <div className="flex items-center gap-2">
       <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-brand-600 text-sm font-bold text-white">
-        TA
+        UE
       </div>
       <div>
-        <p className="text-sm font-semibold text-slate-900 dark:text-slate-100">Tashkurgan Academy</p>
+        <p className="text-sm font-semibold tracking-wide text-slate-900 dark:text-slate-100">UMID EDU</p>
         <p className="text-xs text-slate-400 dark:text-slate-500">Boshqaruv paneli</p>
       </div>
     </div>

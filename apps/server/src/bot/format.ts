@@ -1,6 +1,6 @@
 // Text for the notifications-only bot. Everything a student browses lives in the Mini App.
 export function formatWelcome(): string {
-  return "Assalomu alaykum! 👋\nTashkurgan Academy botiga xush kelibsiz.\n\nDavom etish uchun administrator bergan oʻquvchi kodini yuboring. Oʻquvchi ham, ota-onasi ham bir xil koddan foydalanadi."
+  return "Assalomu alaykum! 👋\nUMID EDU botiga xush kelibsiz.\n\nDavom etish uchun administrator bergan oʻquvchi kodini yuboring. Oʻquvchi ham, ota-onasi ham bir xil koddan foydalanadi."
 }
 
 export function formatCodeNotFound(): string {

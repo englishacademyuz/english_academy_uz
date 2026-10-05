@@ -129,7 +129,7 @@ export function StudentApp() {
       <FullScreenMessage
         icon="📱"
         title="Ilovani Telegram orqali oching"
-        text="Bu sahifa Toshqoʻrgʻon Academy botining ichida ishlaydi. Botni oching va «Ilova» tugmasini bosing."
+        text="Bu sahifa Umid Edu botining ichida ishlaydi. Botni oching va «Ilova» tugmasini bosing."
       />
     )
   }

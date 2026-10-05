@@ -9,8 +9,10 @@ export const config = {
   databaseUrl: required('DATABASE_URL'),
   jwtSecret: required('JWT_SECRET'),
   nodeEnv: process.env.NODE_ENV ?? 'development',
-  // The production admin-web origin is always allowed; WEB_ORIGIN adds more.
+  // The production admin-web origins are always allowed (the old domain too, until nothing uses
+  // it); WEB_ORIGIN adds more.
   webOrigin: [
+    'https://umid-edu.up.railway.app',
     'https://tashkurganadmin-web-production.up.railway.app',
     ...(process.env.WEB_ORIGIN?.split(',').map((o) => o.trim()).filter(Boolean) ?? [
       'http://localhost:5173',
@@ -25,6 +27,6 @@ export const config = {
   telegramStorageChatId: process.env.TELEGRAM_STORAGE_CHAT_ID || undefined,
   // HTTPS base URL of the student Telegram Mini App (served by admin-web under /student).
   miniAppUrl: (
-    process.env.MINI_APP_URL ?? 'https://tashkurganadmin-web-production.up.railway.app/student'
+    process.env.MINI_APP_URL ?? 'https://umid-edu.up.railway.app/student'
   ).replace(/\/+$/, ''),
 }
