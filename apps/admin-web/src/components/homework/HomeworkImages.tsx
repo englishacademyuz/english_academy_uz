@@ -93,9 +93,11 @@ export function HomeworkImagesEditor({
         setError(
           err instanceof ApiError && err.statusCode === 503
             ? 'Rasm saqlash sozlanmagan (TELEGRAM_STORAGE_CHAT_ID)'
-            : err instanceof TypeError
-              ? 'Internet aloqasini tekshiring'
-              : 'Rasmni yuklab boʻlmadi',
+            : err instanceof ApiError && err.statusCode === 502
+              ? `Rasmni yuklab boʻlmadi — ${err.message}`
+              : err instanceof TypeError
+                ? 'Internet aloqasini tekshiring'
+                : 'Rasmni yuklab boʻlmadi',
         )
         const failed = item
         setPending((list) => list.map((p) => (p.key === failed.key ? { ...p, failed: true } : p)))

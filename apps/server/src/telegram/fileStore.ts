@@ -1,4 +1,4 @@
-import { InputFile, type Api } from 'grammy'
+import { GrammyError, InputFile, type Api } from 'grammy'
 import type { PhotoSize } from 'grammy/types'
 import type { StoredPhoto } from '@tashkurgan/domain'
 import { AppError } from '@tashkurgan/shared'
@@ -63,6 +63,19 @@ class ByteCache {
   }
 }
 
+/**
+ * Telegram turning a request down (the bot isn't in the storage channel, a file id from another
+ * bot) is a setup problem, not a crash -- answered as a 502 that says what Telegram said.
+ */
+async function askTelegram<T>(call: () => Promise<T>): Promise<T> {
+  try {
+    return await call()
+  } catch (err) {
+    if (err instanceof GrammyError) throw new AppError(`Telegram: ${err.description}`, 502)
+    throw err
+  }
+}
+
 export function telegramFileStore(api: Api, token: string, storageChatId?: string): HomeworkFileStore {
   const cache = new ByteCache(40 * 1024 * 1024)
 
@@ -70,10 +83,9 @@ export function telegramFileStore(api: Api, token: string, storageChatId?: strin
     async upload(photo, { ownerChatId, caption }) {
       const chatId = storageChatId ?? ownerChatId
       if (!chatId) throw new AppError('Set TELEGRAM_STORAGE_CHAT_ID to upload images', 503)
-      const message = await api.sendPhoto(chatId, new InputFile(photo, 'homework.jpg'), {
-        caption,
-        disable_notification: true,
-      })
+      const message = await askTelegram(() =>
+        api.sendPhoto(chatId, new InputFile(photo, 'homework.jpg'), { caption, disable_notification: true }),
+      )
       return largestPhoto(message.photo)
     },
 
@@ -89,7 +101,7 @@ export function telegramFileStore(api: Api, token: string, storageChatId?: strin
       const cached = cache.get(fileId)
       if (cached) return cached
       // Download links expire after an hour, so each one is asked for fresh.
-      const file = await api.getFile(fileId)
+      const file = await askTelegram(() => api.getFile(fileId))
       if (!file.file_path) throw new Error('Telegram returned no file path')
       const res = await fetch(`https://api.telegram.org/file/bot${token}/${file.file_path}`)
       if (!res.ok) throw new Error(`Telegram file download failed: ${res.status}`)
