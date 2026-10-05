@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { Link } from 'react-router-dom'
 import { ChevronRight } from 'lucide-react'
@@ -7,7 +7,8 @@ import { toDateInputValue } from '../../lib/format'
 import { miniApi } from '../api'
 import { richTextToPlain } from '../../lib/richText'
 import { ClockIcon, CupTile, GradeFace, HomeworkTile, MEDAL, TrophyIcon, isPodium, type Podium } from '../components/art'
-import { homeworkDueDate, homeworkPreviewText } from '../components/HomeworkImages'
+import { homeworkPreviewText } from '../components/HomeworkImages'
+import { deadlineLabel, homeworkDeadline, timeLeft, urgencyOf, useNow, type HomeworkDeadline } from '../deadline'
 import { ErrorState, LinkRow, Loading, Screen, SectionTitle } from '../components/kit'
 import { ScheduleChanges, nextLesson, relativeDay } from '../components/schedule'
 import { GRADE, MONTHS, averageOf, capitalize, firstName, formatDateTime, gradeOf, initialsOf, weekdayDate } from '../format'
@@ -15,6 +16,7 @@ import type { GroupSummary, MiniGroupRanking, MiniHome, MiniPaymentReminder, Min
 
 export function HomePage() {
   const home = useQuery({ queryKey: ['mini', 'home'], queryFn: miniApi.home })
+  const now = useNow()
 
   if (home.isLoading) return <Loading />
   if (home.error || !home.data) {
@@ -39,6 +41,11 @@ export function HomePage() {
     unreadChat,
   } = home.data
 
+  // Homework due within a day and not handed in jumps to the top, in red.
+  const deadline = latestHomework ? homeworkDeadline(latestHomework.dueDate, latestHomework.images, now) : null
+  const urgency = deadline ? urgencyOf(deadline.at, now) : null
+  const hurry = !!latestHomework && !latestHomework.handedIn && (urgency === 'soon' || urgency === 'hot')
+
   return (
     <div className="flex flex-col gap-[18px] px-[18px] pb-8 pt-5">
       <header className="flex items-center justify-between gap-3">
@@ -56,6 +63,8 @@ export function HomePage() {
       </header>
 
       {payment && <PaymentCard payment={payment} />}
+
+      {hurry && latestHomework && deadline && <UrgentHomeworkCard homework={latestHomework} deadline={deadline} now={now} />}
 
       {unreadChat > 0 && <NewChatMessageCard count={unreadChat} />}
 
@@ -85,7 +94,7 @@ export function HomePage() {
         </Link>
       ))}
 
-      {latestHomework && <HomeworkCard homework={latestHomework} />}
+      {latestHomework && !hurry && <HomeworkCard homework={latestHomework} deadline={deadline} now={now} />}
 
       <MonthTiles progress={monthProgress} />
 
@@ -338,16 +347,6 @@ function PodiumView({ rows }: { rows: MiniGroupRanking['rows'] }) {
   )
 }
 
-/** Ticks once a second -- only the countdown needs it. */
-function useNow() {
-  const [now, setNow] = useState(() => new Date())
-  useEffect(() => {
-    const timer = setInterval(() => setNow(new Date()), 1000)
-    return () => clearInterval(timer)
-  }, [])
-  return now
-}
-
 const pad = (n: number) => String(n).padStart(2, '0')
 
 /** Two big tiles, in the largest units that fit: days·hours, hours·minutes, or minutes·seconds. */
@@ -370,7 +369,8 @@ function Countdown({
   changes: MiniScheduleChange[]
   lastLesson: MiniHome['lastLesson']
 }) {
-  const now = useNow()
+  // Ticks once a second -- the countdown shows seconds in its last minutes.
+  const now = useNow(1000)
   const next = nextLesson(group, changes, now)
   if (!next) return null
 
@@ -424,9 +424,50 @@ function InfoTile({ label, value, big }: { label: string; value: string; big?: b
   )
 }
 
-function HomeworkCard({ homework }: { homework: NonNullable<MiniHome['latestHomework']> }) {
-  const dueDate = homeworkDueDate(homework.dueDate, homework.images)
-  const due = dueDate ? `${weekdayDate(new Date(dueDate))} gacha` : `${weekdayDate(new Date(homework.date))} darsidan`
+type HomeHomework = NonNullable<MiniHome['latestHomework']>
+
+/**
+ * Less than a day left and not handed in: a red card at the top of the home screen with a
+ * pulsing dot and the time left, so it can't be missed.
+ */
+function UrgentHomeworkCard({ homework, deadline, now }: { homework: HomeHomework; deadline: HomeworkDeadline; now: Date }) {
+  const hot = urgencyOf(deadline.at, now) === 'hot'
+  return (
+    <Link
+      to={`/student/lessons/${homework.lessonId}`}
+      className={`flex flex-col gap-3.5 rounded-[28px] bg-tg-cherry p-[18px] text-white active:scale-[0.99] ${hot ? 'ring-4 ring-tg-cherry-soft' : ''}`}
+    >
+      <div className="flex items-center gap-2">
+        <span className="relative flex h-3 w-3 shrink-0">
+          <span className="absolute inset-0 animate-ping rounded-full bg-white/70" />
+          <span className="relative h-3 w-3 rounded-full bg-white" />
+        </span>
+        <span className="text-sm font-extrabold uppercase text-tg-cherry-soft">
+          {hot ? 'Vaqt tugayapti!' : 'Vazifa muddati yaqin'}
+        </span>
+      </div>
+      <div className="flex items-center gap-4">
+        <HomeworkTile />
+        <div className="flex min-w-0 grow flex-col gap-1">
+          <span className="line-clamp-2 font-tg-display text-[22px] font-semibold leading-[1.15]">
+            {deadline.task ?? homeworkPreviewText(richTextToPlain(homework.instructions), homework.images)}
+          </span>
+          <span className="text-sm font-bold text-tg-cherry-soft">{deadlineLabel(deadline.at, now)}</span>
+        </div>
+      </div>
+      <div className="flex items-center justify-between gap-3 rounded-[18px] bg-white/15 px-4 py-3">
+        <span className="flex items-center gap-2 text-[15px] font-extrabold">
+          <ClockIcon size={20} strokeWidth={2.6} /> Qoldi
+        </span>
+        <span className="font-tg-display text-[28px] font-bold leading-none tabular-nums">{timeLeft(deadline.at, now)}</span>
+      </div>
+      <span className="rounded-2xl bg-white p-3.5 text-center text-[17px] font-extrabold text-tg-cherry">Hozir bajarish</span>
+    </Link>
+  )
+}
+
+function HomeworkCard({ homework, deadline, now }: { homework: HomeHomework; deadline: HomeworkDeadline | null; now: Date }) {
+  const due = deadline ? deadlineLabel(deadline.at, now) : `${weekdayDate(new Date(homework.date))} darsidan`
   return (
     <Link
       to={`/student/lessons/${homework.lessonId}`}

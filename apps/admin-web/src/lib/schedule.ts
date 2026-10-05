@@ -65,14 +65,19 @@ export function lessonsOnDay(groups: Group[], reschedules: LessonReschedule[], d
 
 /**
  * The group's first lesson after the day `afterKey` (a yyyy-mm-dd key), with reschedules
- * applied -- the default deadline for homework set that day. Looks up to five weeks ahead;
- * null when the group has no lesson in that time.
+ * applied: its day key and start time ("HH:MM") -- the default deadline for homework set that
+ * day. Looks up to five weeks ahead; null when the group has no lesson in that time.
  */
-export function nextLessonKey(group: Group, reschedules: LessonReschedule[], afterKey: string): string | null {
+export function nextLessonAfter(
+  group: Group,
+  reschedules: LessonReschedule[],
+  afterKey: string,
+): { day: string; time: string } | null {
   const day = dateFromKey(afterKey)
   for (let i = 0; i < 35; i++) {
     day.setDate(day.getDate() + 1)
-    if (lessonsOnDay([group], reschedules, day).lessons.length > 0) return toDateInputValue(day)
+    const [first] = lessonsOnDay([group], reschedules, day).lessons
+    if (first) return { day: toDateInputValue(day), time: first.time }
   }
   return null
 }

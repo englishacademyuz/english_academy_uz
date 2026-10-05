@@ -2,13 +2,13 @@ import { lazy, Suspense, useEffect, useMemo, useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { CheckCircle2 } from 'lucide-react'
 import { reschedules as reschedulesApi, sessions as sessionsApi } from '../../lib/api'
-import { toDateInputValue, todayInputValue } from '../../lib/format'
+import { toDateInputValue, toDateTimeInputValue, todayInputValue } from '../../lib/format'
 import { notifyError, notifySuccess } from '../../lib/toast'
 import type { Group } from '../../lib/types'
 import { MaterialsEditor, type MaterialDraft } from '../shared/MaterialsEditor'
 import { HomeworkImagesEditor, type HomeworkImageDraft } from '../homework/HomeworkImages'
 import { isRichTextEmpty } from '../../lib/richText'
-import { dateFromKey, dayKeyOf, nextLessonKey } from '../../lib/schedule'
+import { dateFromKey, nextLessonAfter } from '../../lib/schedule'
 import { Button, Card, Field, Input } from '../ui'
 
 // The editor (TipTap) is heavy and only needed here -- load it with the lesson form, not the whole panel.
@@ -37,7 +37,7 @@ export function TodayLessonCard({ group, initialDate }: { group: Group; initialD
 
   const existingSession = sessionQuery.data?.[0]
 
-  // A picture task is due by the group's next lesson unless the teacher picks another day.
+  // A picture task is due when the group's next lesson starts, unless the teacher picks another time.
   const lookAhead = useMemo(() => {
     const end = dateFromKey(date)
     end.setDate(end.getDate() + 36)
@@ -47,7 +47,8 @@ export function TodayLessonCard({ group, initialDate }: { group: Group; initialD
     queryKey: ['reschedules', date, lookAhead],
     queryFn: () => reschedulesApi.list(date, lookAhead),
   })
-  const nextLesson = nextLessonKey(group, reschedulesQuery.data ?? [], date)
+  const nextLesson = nextLessonAfter(group, reschedulesQuery.data ?? [], date)
+  const nextLessonStart = nextLesson ? `${nextLesson.day}T${nextLesson.time}` : null
 
   useEffect(() => {
     if (existingSession) {
@@ -59,7 +60,7 @@ export function TodayLessonCard({ group, initialDate }: { group: Group; initialD
           id: i.id,
           title: i.title ?? '',
           caption: i.caption ?? '',
-          dueDate: i.dueDate ? dayKeyOf(i.dueDate) : '',
+          dueDate: i.dueDate ? toDateTimeInputValue(i.dueDate) : '',
         })) ?? [],
       )
       setMaterials(existingSession.materials.map((m) => ({ type: m.type, content: m.content })))
@@ -91,7 +92,7 @@ export function TodayLessonCard({ group, initialDate }: { group: Group; initialD
                   id: i.id,
                   title: i.title.trim() || null,
                   caption: i.caption.trim() || null,
-                  dueDate: i.dueDate || null,
+                  dueDate: i.dueDate ? new Date(i.dueDate).toISOString() : null,
                 })),
               },
       }),
@@ -157,7 +158,7 @@ export function TodayLessonCard({ group, initialDate }: { group: Group; initialD
               groupId={group.id}
               value={homeworkImages}
               onChange={setHomeworkImages}
-              defaultDueDate={nextLesson}
+              defaultDueDate={nextLessonStart}
               onBusyChange={setUploadingImages}
             />
           </div>

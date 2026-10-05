@@ -1,10 +1,10 @@
 import { useEffect, useRef, useState } from 'react'
 import { ChevronLeft, ChevronRight, ImageIcon, Loader2, X } from 'lucide-react'
 import { miniApi } from '../api'
-import { weekdayDate } from '../format'
+import { deadlineLabel } from '../deadline'
 import { haptic } from '../telegram'
 import type { MiniHomeworkImage } from '../types'
-import { ClockIcon } from './art'
+import { DeadlineBar } from './Deadline'
 
 /** The task's name when the teacher gave it none. */
 const taskLabel = (image: MiniHomeworkImage, index: number) => image.title?.trim() || `${index + 1}-vazifa`
@@ -39,29 +39,10 @@ function aspectOf(image: MiniHomeworkImage) {
   return String(Math.min(Math.max(image.width / image.height, 3 / 4), 16 / 9))
 }
 
-/** "Chor, 8-oktabr gacha", plus how close it is when it's today or tomorrow. */
-function DueChip({ dueDate }: { dueDate: string }) {
-  const due = new Date(dueDate)
-  const today = new Date()
-  today.setHours(0, 0, 0, 0)
-  const dueDay = new Date(due.getFullYear(), due.getMonth(), due.getDate())
-  const days = Math.round((dueDay.getTime() - today.getTime()) / 86_400_000)
-  const urgent = days <= 1
-  return (
-    <span
-      className={`flex shrink-0 items-center gap-1 rounded-full px-2.5 py-1 text-[13px] font-extrabold ${
-        days < 0 ? 'bg-tg-sand text-tg-muted' : urgent ? 'bg-tg-cherry-soft text-tg-cherry' : 'bg-tg-sun-soft text-tg-sun-ink'
-      }`}
-    >
-      <ClockIcon size={15} strokeWidth={2.6} />
-      {days === 0 ? 'Bugun' : days === 1 ? 'Ertaga' : `${weekdayDate(due)} gacha`}
-    </span>
-  )
-}
-
 /**
  * The picture tasks the teacher gave with homework -- each one a homework of its own: a numbered
- * card with its title ("Listening", "Vocabulary"), deadline, the picture and what to do.
+ * card with its title ("Listening", "Vocabulary"), deadline (day and time, turning red as it
+ * nears), the picture and what to do.
  * Tapping a picture opens it full-screen, where the student can swipe through all of them.
  */
 export function HomeworkImages({ images }: { images: MiniHomeworkImage[] }) {
@@ -79,8 +60,8 @@ export function HomeworkImages({ images }: { images: MiniHomeworkImage[] }) {
             <span className="min-w-0 grow truncate font-tg-display text-[19px] font-semibold leading-tight text-tg-ink">
               {taskLabel(image, i)}
             </span>
-            {image.dueDate && <DueChip dueDate={image.dueDate} />}
           </header>
+          {image.dueDate && <DeadlineBar due={new Date(image.dueDate)} />}
           <button
             type="button"
             onClick={() => {
@@ -143,7 +124,7 @@ function ImageViewer({
           <span className="text-[13px] font-bold text-white/60">
             {images.length > 1 && `${index + 1} / ${images.length}`}
             {images.length > 1 && image.dueDate && ' · '}
-            {image.dueDate && `${weekdayDate(new Date(image.dueDate))} gacha`}
+            {image.dueDate && deadlineLabel(new Date(image.dueDate), new Date())}
           </span>
         </div>
         <button type="button" onClick={onClose} aria-label="Yopish" className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl bg-white/15">
@@ -205,11 +186,4 @@ export function homeworkPreviewText(instructionsPlain: string, images: MiniHomew
   const titles = images.map((image) => image.title?.trim()).filter(Boolean)
   if (titles.length) return `📷 ${titles.join(', ')}`
   return images.length === 1 ? '📷 Rasmdagi vazifa' : `📷 ${images.length} ta rasmli vazifa`
-}
-
-/** When a homework is due: its own deadline, else the soonest one among its picture tasks. */
-export function homeworkDueDate(dueDate: string | null, images: MiniHomeworkImage[]): string | null {
-  if (dueDate) return dueDate
-  const dates = images.map((image) => image.dueDate).filter((d): d is string => !!d)
-  return dates.length ? dates.reduce((a, b) => (a < b ? a : b)) : null
 }

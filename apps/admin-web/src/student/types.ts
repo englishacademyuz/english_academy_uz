@@ -42,6 +42,8 @@ export type MiniHome = {
     instructions: string
     dueDate: string | null
     images: MiniHomeworkImage[]
+    /** The student handed in photos and they weren't sent back -- no need to hurry them. */
+    handedIn: boolean
   } | null
   openQuizzes: MiniQuiz[]
   monthProgress: MiniProgressSnapshot

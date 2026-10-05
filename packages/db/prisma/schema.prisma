@@ -398,7 +398,7 @@ model HomeworkImage {
   homework             Homework? @relation(fields: [homeworkId], references: [id], onDelete: Cascade)
   title                String?
   caption              String?
-  // When this task is due -- a calendar day, like Homework.dueDate.
+  // The moment this task is due (day and time) -- unlike Homework.dueDate, a calendar day.
   dueDate              DateTime?
   // Where it sits among the homework's images, from 0.
   position             Int       @default(0)

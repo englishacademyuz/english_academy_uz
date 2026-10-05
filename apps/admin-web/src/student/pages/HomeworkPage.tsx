@@ -3,8 +3,10 @@ import { Link } from 'react-router-dom'
 import { ChevronRight } from 'lucide-react'
 import { miniApi } from '../api'
 import { HomeworkTile } from '../components/art'
-import { homeworkDueDate, homeworkPreviewText } from '../components/HomeworkImages'
+import { DeadlineChip } from '../components/Deadline'
+import { homeworkPreviewText } from '../components/HomeworkImages'
 import { DayBadge, Empty, ErrorState, Loading, Screen, Section } from '../components/kit'
+import { deadlineLabel, homeworkDeadline, timeLeft, urgencyOf, useNow } from '../deadline'
 import { weekdayDate } from '../format'
 import { richTextToPlain } from '../../lib/richText'
 import type { MiniHomework } from '../types'
@@ -26,6 +28,9 @@ function SubmissionChip({ homework }: { homework: MiniHomework }) {
   return <span className={`self-start rounded-full px-2.5 py-1 text-[13px] font-extrabold ${look.cls}`}>{look.text}</span>
 }
 
+/** Photos handed in and not sent back -- the deadline no longer needs to shout. */
+const handedIn = (h: MiniHomework) => !!h.submission && h.submission.status !== 'RETURNED'
+
 /** The teacher added pictures to this homework. */
 function ImagesChip({ count }: { count: number }) {
   if (count === 0) return null
@@ -42,6 +47,7 @@ function ImagesChip({ count }: { count: number }) {
  */
 export function HomeworkPage() {
   const homework = useQuery({ queryKey: ['mini', 'homework'], queryFn: miniApi.homework })
+  const now = useNow()
   const back = { to: '/student/lessons', label: 'Darslar' }
 
   if (homework.isLoading) return <Loading />
@@ -54,7 +60,10 @@ export function HomeworkPage() {
   }
 
   const [latest, ...older] = homework.data
-  const latestDue = latest ? homeworkDueDate(latest.dueDate, latest.images) : null
+  const latestDue = latest ? homeworkDeadline(latest.dueDate, latest.images, now) : null
+  const urgency = latestDue ? urgencyOf(latestDue.at, now) : null
+  // Less than a day left and not handed in: the card turns red and counts down.
+  const hurry = !!latest && !handedIn(latest) && (urgency === 'soon' || urgency === 'hot')
   return (
     <Screen
       back={back}
@@ -67,15 +76,30 @@ export function HomeworkPage() {
         <>
           <Link
             to={homeworkLink(latest)}
-            className="flex items-center gap-4 rounded-[28px] border-[3px] border-tg-sun bg-tg-sun-soft p-[18px] active:scale-[0.99]"
+            className={`flex items-center gap-4 rounded-[28px] border-[3px] p-[18px] active:scale-[0.99] ${
+              hurry ? 'border-tg-cherry bg-tg-cherry-soft' : 'border-tg-sun bg-tg-sun-soft'
+            }`}
           >
             <HomeworkTile size={72} />
             <div className="flex min-w-0 grow flex-col gap-1">
-              <span className="text-sm font-extrabold text-tg-sun-ink">ENG SOʻNGGI</span>
-              <span className="line-clamp-4 font-tg-display text-xl font-semibold leading-snug">{homeworkPreviewText(richTextToPlain(latest.instructions), latest.images)}</span>
-              <span className="text-sm font-bold text-tg-sun-body">
-                {latestDue ? `${weekdayDate(new Date(latestDue))} gacha` : latest.topic || weekdayDate(new Date(latest.date))}
+              <span className={`flex items-center gap-1.5 text-sm font-extrabold ${hurry ? 'text-tg-cherry' : 'text-tg-sun-ink'}`}>
+                {hurry && (
+                  <span className="relative flex h-2.5 w-2.5 shrink-0">
+                    <span className="absolute inset-0 animate-ping rounded-full bg-tg-cherry/60" />
+                    <span className="relative h-2.5 w-2.5 rounded-full bg-tg-cherry" />
+                  </span>
+                )}
+                {hurry ? 'MUDDAT YAQIN' : 'ENG SOʻNGGI'}
               </span>
+              <span className="line-clamp-4 font-tg-display text-xl font-semibold leading-snug">{homeworkPreviewText(richTextToPlain(latest.instructions), latest.images)}</span>
+              <span className={`text-sm font-bold ${hurry ? 'text-tg-cherry' : 'text-tg-sun-body'}`}>
+                {latestDue ? deadlineLabel(latestDue.at, now) : latest.topic || weekdayDate(new Date(latest.date))}
+              </span>
+              {hurry && latestDue && (
+                <span className="self-start rounded-full bg-tg-cherry px-3 py-1 font-tg-display text-lg font-bold tabular-nums text-white">
+                  ⏰ {timeLeft(latestDue.at, now)} qoldi
+                </span>
+              )}
               <ImagesChip count={latest.images.length} />
               <SubmissionChip homework={latest} />
             </div>
@@ -85,7 +109,9 @@ export function HomeworkPage() {
           {older.length > 0 && (
             <Section title="Oldingi vazifalar">
               <div className="flex flex-col gap-2.5">
-                {older.map((h) => (
+                {older.map((h) => {
+                  const due = handedIn(h) ? null : homeworkDeadline(h.dueDate, h.images, now)
+                  return (
                   <Link
                     key={h.lessonId}
                     to={homeworkLink(h)}
@@ -95,12 +121,14 @@ export function HomeworkPage() {
                     <div className="flex min-w-0 grow flex-col gap-0.5">
                       {h.topic && <span className="truncate text-[13px] font-extrabold uppercase text-tg-muted">{h.topic}</span>}
                       <span className="line-clamp-2 text-[15px] font-bold">{homeworkPreviewText(richTextToPlain(h.instructions), h.images)}</span>
+                      {due && <DeadlineChip due={due.at} />}
                       <ImagesChip count={h.images.length} />
                       <SubmissionChip homework={h} />
                     </div>
                     <ChevronRight className="h-5 w-5 shrink-0 text-tg-faint" strokeWidth={2.5} />
                   </Link>
-                ))}
+                  )
+                })}
               </div>
             </Section>
           )}

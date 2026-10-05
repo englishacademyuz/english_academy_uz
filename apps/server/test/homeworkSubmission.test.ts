@@ -107,6 +107,8 @@ describe('homework photo submissions', () => {
 
   it('stores uploads on Telegram and shows the student their own photos', async () => {
     const { lesson } = await seedLesson()
+    const homeBefore = await app.inject({ method: 'GET', url: '/student/home', headers: miniAppAuth(700) })
+    expect(homeBefore.json().latestHomework).toMatchObject({ handedIn: false })
 
     const first = await upload(lesson.id)
     expect(first.statusCode).toBe(200)
@@ -114,6 +116,9 @@ describe('homework photo submissions', () => {
     // Without a storage chat the photo goes to the uploader's own chat, captioned with whose it is.
     expect(uploads[0]).toMatchObject({ ownerChatId: '700', caption: expect.stringContaining('Ali K') })
     await upload(lesson.id)
+    // Handed in: the home screen stops hurrying them.
+    const homeAfter = await app.inject({ method: 'GET', url: '/student/home', headers: miniAppAuth(700) })
+    expect(homeAfter.json().latestHomework).toMatchObject({ handedIn: true })
 
     const one = await app.inject({ method: 'GET', url: `/student/homework/${lesson.id}`, headers: miniAppAuth(700) })
     expect(one.json()).toMatchObject({ submissionEnabled: true, maxPhotos: 10, submission: { status: 'SUBMITTED' } })

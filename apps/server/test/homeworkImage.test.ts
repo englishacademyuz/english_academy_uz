@@ -71,7 +71,7 @@ describe('homework images from the teacher', () => {
       payload: { date: '2026-10-05', topic: 'Past Simple', homework },
     })
 
-  it('attaches uploaded pictures with titles, captions and deadlines, in order, when the lesson is saved', async () => {
+  it('attaches uploaded pictures with titles, captions and deadlines (day and time), in order, when the lesson is saved', async () => {
     const { group, cookie } = await seed()
     const first = await uploadImage(group.id, cookie)
     const second = await uploadImage(group.id, cookie)
@@ -83,7 +83,7 @@ describe('homework images from the teacher', () => {
     const saved = await saveLesson(group.id, cookie, {
       instructions: '<p>Look at the pictures</p>',
       images: [
-        { id: second.json().id, title: ' Listening ', caption: '  Page 12  ', dueDate: '2026-10-07' },
+        { id: second.json().id, title: ' Listening ', caption: '  Page 12  ', dueDate: '2026-10-07T13:00:00.000Z' },
         { id: first.json().id, title: '', caption: '', dueDate: null },
       ],
     })
@@ -93,7 +93,7 @@ describe('homework images from the teacher', () => {
         id: second.json().id,
         title: 'Listening',
         caption: 'Page 12',
-        dueDate: '2026-10-07T00:00:00.000Z',
+        dueDate: '2026-10-07T13:00:00.000Z',
         width: 1200,
         height: 900,
       },

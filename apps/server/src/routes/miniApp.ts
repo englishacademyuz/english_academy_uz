@@ -105,7 +105,14 @@ export const miniAppRoutes: FastifyPluginAsync<{ fileStore?: HomeworkFileStore }
               id: true,
               date: true,
               topic: true,
-              homework: { select: { instructions: true, dueDate: true, images: HOMEWORK_WITH_IMAGES.include.images } },
+              homework: {
+                select: {
+                  instructions: true,
+                  dueDate: true,
+                  images: HOMEWORK_WITH_IMAGES.include.images,
+                  submissions: { where: { studentId: student.id }, select: { status: true } },
+                },
+              },
             },
           })
         : null,
@@ -124,7 +131,16 @@ export const miniAppRoutes: FastifyPluginAsync<{ fileStore?: HomeworkFileStore }
       scheduleChanges: changes,
       lastLesson,
       latestHomework: latestHomework?.homework
-        ? { lessonId: latestHomework.id, date: latestHomework.date, topic: latestHomework.topic, ...latestHomework.homework }
+        ? {
+            lessonId: latestHomework.id,
+            date: latestHomework.date,
+            topic: latestHomework.topic,
+            instructions: latestHomework.homework.instructions,
+            dueDate: latestHomework.homework.dueDate,
+            images: latestHomework.homework.images,
+            // Photos handed in and not sent back -- nothing left to hurry for.
+            handedIn: latestHomework.homework.submissions.some((s) => s.status !== 'RETURNED'),
+          }
         : null,
       openQuizzes: quizzes.filter((q) => q.isOpen && !q.attempt?.completed),
       monthProgress: progress,

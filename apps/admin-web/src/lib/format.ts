@@ -66,6 +66,11 @@ export function toDateInputValue(value: string | Date): string {
   return `${year}-${month}-${day}`
 }
 
+/** A `datetime-local` input's value ("yyyy-mm-ddTHH:MM") for a moment, in the browser's local time. */
+export function toDateTimeInputValue(value: string | Date): string {
+  return `${toDateInputValue(value)}T${formatTime(value)}`
+}
+
 export function todayInputValue(): string {
   return toDateInputValue(new Date())
 }

@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState, type CSSProperties } from 'react'
 import { CalendarClock, ChevronLeft, ChevronRight, ImagePlus, Loader2, RotateCw, X } from 'lucide-react'
 import { ApiError, homeworkImages as imagesApi } from '../../lib/api'
-import { formatDate } from '../../lib/format'
+import { formatDate, formatTime } from '../../lib/format'
 import { shrinkPhoto } from '../../lib/image'
 import type { HomeworkImage } from '../../lib/types'
 import { Input, Textarea } from '../ui'
@@ -11,7 +11,8 @@ export const MAX_HOMEWORK_IMAGES = 5
 
 /**
  * A picture as the lesson form holds it. Each picture is a task of its own: a title
- * ("Listening", "Vocabulary"), a caption and a deadline (yyyy-mm-dd, '' for none).
+ * ("Listening", "Vocabulary"), a caption and a deadline -- a day and time, as a `datetime-local`
+ * value ("yyyy-mm-ddTHH:MM", local time), '' for none.
  */
 export type HomeworkImageDraft = { id: string; title: string; caption: string; dueDate: string }
 
@@ -46,8 +47,8 @@ export function HomeworkImageView({ imageId, className, style }: { imageId: stri
 
 /**
  * The homework's pictures in the lesson form, one task each: add several at once (or drop them
- * in), then give each a title, caption and deadline. A new picture's deadline starts at
- * `defaultDueDate` (the group's next lesson). Each picture goes up as soon as it's picked;
+ * in), then give each a title, caption and deadline (day and time). A new picture's deadline
+ * starts at `defaultDueDate` (when the group's next lesson starts). Each picture goes up as soon as it's picked;
  * saving the lesson is what attaches them. `onBusyChange` says whether any are still uploading.
  */
 export function HomeworkImagesEditor({
@@ -194,7 +195,7 @@ export function HomeworkImagesEditor({
               <div className="flex flex-wrap items-center gap-2">
                 <Input
                   id={`hw-due-${image.id}`}
-                  type="date"
+                  type="datetime-local"
                   value={image.dueDate}
                   onChange={(e) => update(image.id, { dueDate: e.target.value })}
                   className="w-auto!"
@@ -205,7 +206,7 @@ export function HomeworkImagesEditor({
                     onClick={() => update(image.id, { dueDate: defaultDueDate })}
                     className="text-xs font-medium text-brand-600 hover:underline dark:text-brand-400"
                   >
-                    Keyingi dars ({formatDate(defaultDueDate)})
+                    Keyingi dars ({formatDeadline(defaultDueDate)})
                   </button>
                 )}
               </div>
@@ -338,10 +339,13 @@ export function HomeworkImageGallery({ images }: { images: HomeworkImage[] }) {
   )
 }
 
+/** "07.10.2026 18:00" -- a task's deadline. */
+const formatDeadline = (value: string) => `${formatDate(value)} ${formatTime(value)}`
+
 function DueLine({ dueDate, dark }: { dueDate: string; dark?: boolean }) {
   return (
     <span className={`flex items-center gap-1 text-xs ${dark ? 'text-amber-300' : 'text-amber-700 dark:text-amber-400'}`}>
-      <CalendarClock className="h-3.5 w-3.5" /> {formatDate(dueDate)} gacha
+      <CalendarClock className="h-3.5 w-3.5" /> {formatDeadline(dueDate)} gacha
     </span>
   )
 }
