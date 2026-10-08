@@ -128,8 +128,8 @@ export function formatPaymentReminder(reminder: {
     debtor: '❗️ <b>Toʻlov kechiktirilmoqda</b>',
   }[reminder.stage]
   const ask = {
-    upcoming: 'Iltimos, toʻlovni oʻz vaqtida tayyorlab qoʻying.',
-    due: 'Iltimos, bugun toʻlovni amalga oshiring yoki markazga olib keling.',
+    upcoming: 'Iltimos, keyingi oy uchun toʻlovni oʻz vaqtida tayyorlab qoʻying.',
+    due: 'Iltimos, bugun kelgusi oy uchun toʻlovni amalga oshiring yoki markazga olib keling.',
     overdue: 'Iltimos, toʻlovni imkon qadar tezroq amalga oshiring yoki markazga olib keling.',
     debtor: `Toʻlov kunidan ${-reminder.daysLeft} kun oʻtdi — hisobingizda qarzdorlik bor. Iltimos, toʻlovni zudlik bilan amalga oshiring.`,
   }[reminder.stage]

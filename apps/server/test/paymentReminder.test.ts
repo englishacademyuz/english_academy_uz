@@ -13,11 +13,8 @@ function daysFromToday(offset: number) {
   return date
 }
 
-/** A join date whose first month fell due `daysPastDue` days ago -- one month before that day. */
-function joinedWithFirstDue(daysPastDue: number) {
-  const due = daysFromToday(-daysPastDue)
-  return new Date(Date.UTC(due.getUTCFullYear(), due.getUTCMonth() - 1, due.getUTCDate()))
-}
+/** A join date whose first month fell due `daysPastDue` days ago -- each month is paid ahead, on the day it starts. */
+const joinedWithFirstDue = (daysPastDue: number) => daysFromToday(-daysPastDue)
 
 describe('payment reminders', () => {
   let app: Awaited<ReturnType<typeof buildApp>>
@@ -98,12 +95,16 @@ describe('payment reminders', () => {
     expect(sent).toHaveLength(0)
   })
 
-  it('says nothing during the first month', async () => {
-    const { student, cookie } = await setup(daysFromToday(-3))
+  it('asks for the first month on the day the student joins', async () => {
+    const { student, cookie } = await setup(daysFromToday(0))
     const list = await app.inject({ method: 'GET', url: '/students', headers: { cookie } })
-    expect(list.json().find((s: { id: string }) => s.id === student.id).paymentReminder).toBeNull()
+    expect(list.json().find((s: { id: string }) => s.id === student.id).paymentReminder).toMatchObject({
+      stage: 'due',
+      daysLeft: 0,
+      amount: 400_000,
+    })
     const home = await app.inject({ method: 'GET', url: '/student/home', headers: miniAppAuth('777') })
-    expect(home.json().payment).toBeNull()
+    expect(home.json().payment).toMatchObject({ stage: 'due', daysLeft: 0 })
   })
 
   it('warns the student on the Mini App home screen', async () => {

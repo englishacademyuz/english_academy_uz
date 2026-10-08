@@ -115,7 +115,7 @@ One Student's billing record for one monthly cycle (amount due, amount paid, sta
 _Avoid_: Invoice, bill
 
 **Payment day**:
-The day of the month a Student joined the center (`Student.joinedAt`); each cycle runs a month from that day and is paid at its end, so a Student who joined on 30 September first owes on 30 October. It is per Student, not per Group. A cycle's Payment row is keyed by the month the cycle starts in (the 30 October payment is September's).
+The day of the month a Student joined the center (`Student.joinedAt`); each cycle runs a month from that day and is paid in advance, on its first day, so a Student who joined on 30 September owes on 30 September for the month ahead, then on 30 October for the next. It is per Student, not per Group. A cycle's Payment row is keyed by the month the cycle starts in (the 30 October payment is October's). The reminder shows yellow from three days before the payment day through the day itself, red once it has passed unpaid, and the Student is a debtor after five days.
 
 **Payment reminder**:
 Shown from 3 days before a payment day until that cycle is fully paid: *upcoming* (1–3 days ahead), *due* (the day itself), *overdue* (1–5 days late), then *debtor* (more than 5 days late). Staff can send it to the Student's Telegram chats; the Mini App home screen shows it too.

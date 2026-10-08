@@ -124,21 +124,22 @@ function NewChatMessageCard({ count }: { count: number }) {
 }
 
 /**
- * The payment nudge: a warm yellow card from three days before the payment day until five days
- * after it, then a red, unhappy one -- the student counts as a debtor from then on.
+ * The payment nudge -- each month is paid ahead, on its first day. A warm yellow card from three
+ * days before the payment day through the day itself, then red once it has passed unpaid; after
+ * five days the student counts as a debtor.
  */
 function PaymentCard({ payment }: { payment: MiniPaymentReminder }) {
   const { stage, daysLeft } = payment
-  const debtor = stage === 'debtor'
+  const late = stage === 'overdue' || stage === 'debtor'
   const title = {
     upcoming: `${daysLeft} kundan soʻng toʻlov kuni`,
     due: 'Bugun toʻlov kuni!',
-    overdue: 'Toʻlov kuni keldi',
+    overdue: 'Toʻlov kuni oʻtdi',
     debtor: 'Toʻlov kechikmoqda',
   }[stage]
   const hint = {
-    upcoming: 'Toʻlovni oldindan tayyorlab qoʻying 🙂',
-    due: 'Iltimos, toʻlovni amalga oshiring yoki markazga olib keling.',
+    upcoming: 'Keyingi oy uchun toʻlovni oldindan tayyorlab qoʻying 🙂',
+    due: 'Iltimos, kelgusi oy uchun toʻlovni amalga oshiring yoki markazga olib keling.',
     overdue: `Toʻlov kunidan ${-daysLeft} kun oʻtdi. Iltimos, toʻlovni amalga oshiring yoki olib keling.`,
     debtor: `Toʻlov kunidan ${-daysLeft} kun oʻtdi — qarzdorlik bor. Iltimos, zudlik bilan toʻlang.`,
   }[stage]
@@ -146,17 +147,17 @@ function PaymentCard({ payment }: { payment: MiniPaymentReminder }) {
   return (
     <section
       className={`flex items-center gap-4 rounded-[28px] border-[3px] p-[18px] ${
-        debtor ? 'border-tg-cherry bg-tg-cherry-soft' : 'border-tg-sun bg-tg-sun-soft'
+        late ? 'border-tg-cherry bg-tg-cherry-soft' : 'border-tg-sun bg-tg-sun-soft'
       }`}
     >
       {/* A worried face while it's only due, a sad one once they're a debtor. */}
-      <GradeFace grade={debtor ? 2 : 3} size={64} />
+      <GradeFace grade={stage === 'debtor' ? 2 : 3} size={64} />
       <div className="flex min-w-0 grow flex-col gap-1">
-        <span className={`text-sm font-extrabold uppercase ${debtor ? 'text-tg-cherry' : 'text-tg-sun-ink'}`}>
-          {debtor ? '❗️ Qarzdorlik' : '🔔 Toʻlov eslatmasi'}
+        <span className={`text-sm font-extrabold uppercase ${late ? 'text-tg-cherry' : 'text-tg-sun-ink'}`}>
+          {stage === 'debtor' ? '❗️ Qarzdorlik' : '🔔 Toʻlov eslatmasi'}
         </span>
         <span className="font-tg-display text-[22px] font-semibold leading-[1.15]">{title}</span>
-        <span className={`text-sm font-bold ${debtor ? 'text-tg-cherry' : 'text-tg-sun-body'}`}>{hint}</span>
+        <span className={`text-sm font-bold ${late ? 'text-tg-cherry' : 'text-tg-sun-body'}`}>{hint}</span>
         <span className="mt-1 flex flex-wrap gap-1.5">
           <span className="rounded-full bg-white px-2.5 py-0.5 text-[13px] font-extrabold">
             📅 {weekdayDate(new Date(payment.dueDate))}

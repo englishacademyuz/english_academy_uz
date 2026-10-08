@@ -31,8 +31,8 @@ export function PaymentsCard({
   const today = tashkentToday()
   // The month that's owed, else the one today falls in.
   const suggested = reminder ?? billingMonthOf(student.joinedAt, today)
-  // Every month from the one they joined in to the one they're in now, plus any rows outside that
-  // span (recorded ahead, or before a join date was moved).
+  // Every month from the one they joined in to the one they're in now (and the next, three days
+  // before it starts), plus any rows outside that span (recorded ahead, or before a join date was moved).
   const cycles = billingCycles(student.joinedAt, payments, fee, today)
   const extra = payments.filter((p) => !cycles.some((c) => c.year === p.year && c.month === p.month))
   const overdue = cycles.filter((c) => c.state === 'overdue')
@@ -123,7 +123,7 @@ export function PaymentsCard({
   )
 }
 
-/** The headline: what's owed for months whose payment day has come, else the month they're in now. */
+/** The headline: what's owed for months whose payment day has passed, else the month due now or next. */
 function PaymentSummary({
   owed,
   overdueMonths,
@@ -164,11 +164,11 @@ function PaymentSummary({
 
 const cycleBadge: Record<BillingCycle['state'], { tone: 'green' | 'amber' | 'red'; label: string }> = {
   paid: { tone: 'green', label: 'Toʻlangan' },
-  current: { tone: 'amber', label: 'Oʻqiyapti · toʻlanmagan' },
+  current: { tone: 'amber', label: 'Toʻlov kutilmoqda' },
   overdue: { tone: 'red', label: 'Toʻlanmagan' },
 }
 
-/** One month: yellow while the student is in it, red once its payment day passes unpaid, green when paid. */
+/** One month: yellow from three days before its payment day (its first day), red once that passes unpaid, green when paid. */
 function CycleRow({ cycle, note, onOpen }: { cycle: BillingCycle; note?: string | null; onOpen: () => void }) {
   const partial = cycle.state !== 'paid' && cycle.amountPaid > 0
   const badge = cycleBadge[cycle.state]

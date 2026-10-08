@@ -1,9 +1,10 @@
 // Pure billing-calendar math, shared by the server, the bot and both web apps -- so no dependencies here.
 //
 // Every student is billed on their own monthly schedule, anchored to the day they joined
-// (Student.joinedAt): each cycle runs a month from the join day and is paid at its end, so
-// someone who joined on 30 September first owes on 30 October. A cycle's Payment row is keyed
-// by the (year, month) the cycle starts in -- what that student pays on 30 October is September's.
+// (Student.joinedAt): each cycle runs a month from the join day and is paid in advance, on its
+// first day. Someone who joined on 30 September owes on 30 September for the month ahead, then on
+// 30 October for the next one. A cycle's Payment row is keyed by the (year, month) the cycle
+// starts in -- what that student pays on 30 October is October's.
 //
 // All dates are calendar days in the center's time zone. Stored dates (joinedAt, a lesson's
 // startDate) are midnight UTC of the picked day, so their UTC fields *are* that calendar day;
@@ -60,9 +61,9 @@ export function cycleStart(joinedAt: string | Date, { year, month }: BillingMont
   return { year, month, day: Math.min(calendarDayOf(joinedAt).day, lastDay) }
 }
 
-/** The day a (year, month) cycle falls due: its end, the day the next cycle starts. */
+/** The day a (year, month) cycle falls due: its first day -- each month is paid ahead. */
 export function paymentDay(joinedAt: string | Date, cycle: BillingMonth): CalendarDay {
-  return cycleStart(joinedAt, addMonths(cycle, 1))
+  return cycleStart(joinedAt, cycle)
 }
 
 /**
@@ -107,8 +108,8 @@ export function reminderStage(daysLeft: number): ReminderStage {
 /**
  * What the student owes right now, or null when nothing is due within the next three days.
  * Walks the cycles from the student's first one through every one due within three days and
- * picks the oldest that isn't fully paid -- a partly paid month is still owed. A new student
- * sees nothing until three days before their first month ends.
+ * picks the oldest that isn't fully paid -- a partly paid month is still owed. A new student owes
+ * their first month on the day they join; once it's paid, the next shows three days before it starts.
  */
 export function paymentReminder(
   joinedAt: string | Date,
@@ -145,9 +146,9 @@ export function paymentReminder(
 export type CycleState =
   /** Fully paid. */
   | 'paid'
-  /** The month the student is in now -- its payment day hasn't come yet. */
+  /** Not paid yet, and its payment day is today or in the next three days. */
   | 'current'
-  /** Its payment day has come and it isn't fully paid. */
+  /** Its payment day has passed and it isn't fully paid. */
   | 'overdue'
 
 export type BillingCycle = BillingMonth & {
@@ -158,8 +159,9 @@ export type BillingCycle = BillingMonth & {
 }
 
 /**
- * Every cycle from the student's first one to the one they're in today, newest first -- with
- * or without a Payment row. A cycle with no row owes the group's `fee`.
+ * Every cycle from the student's first one to the one they're in today -- plus the next one once
+ * its payment day is three days off -- newest first, with or without a Payment row. A cycle with
+ * no row owes the group's `fee`.
  */
 export function billingCycles(
   joinedAt: string | Date,
@@ -168,17 +170,19 @@ export function billingCycles(
   today: CalendarDay,
 ): BillingCycle[] {
   const joined = calendarDayOf(joinedAt)
-  const current = billingMonthOf(joinedAt, today)
   const cycles: BillingCycle[] = []
-  for (let m: BillingMonth = { year: joined.year, month: joined.month }; ; m = addMonths(m, 1)) {
+  for (
+    let m: BillingMonth = { year: joined.year, month: joined.month };
+    cycles.length === 0 || daysBetween(today, paymentDay(joinedAt, m)) <= REMINDER_LEAD_DAYS;
+    m = addMonths(m, 1)
+  ) {
     const row = payments.find((p) => p.year === m.year && p.month === m.month)
     const amountDue = row?.amountDue ?? fee
     const amountPaid = row?.amountPaid ?? 0
     const due = paymentDay(joinedAt, m)
     const state: CycleState =
-      amountDue > 0 && amountPaid >= amountDue ? 'paid' : daysBetween(today, due) <= 0 ? 'overdue' : 'current'
+      amountDue > 0 && amountPaid >= amountDue ? 'paid' : daysBetween(today, due) < 0 ? 'overdue' : 'current'
     cycles.push({ ...m, state, dueDate: toStoredDate(due).toISOString(), amountDue, amountPaid })
-    if (m.year === current.year && m.month === current.month) break
   }
   return cycles.reverse()
 }
