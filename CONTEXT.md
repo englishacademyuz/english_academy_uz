@@ -63,10 +63,10 @@ _Avoid_: Lesson, class, session — the requirements document uses "Lesson" for 
 A file, link, or text resource attached to a LessonSession for Students to view.
 
 **Homework**:
-The instructions a Teacher records against a LessonSession (what to do, what to learn, due by when). Usually checked in class; only in Groups that take photo submissions does the Student hand it in through the platform (a HomeworkSubmission).
+The instructions a Teacher records against a LessonSession (what to do, what to learn, due by when). Usually checked in class; only in Groups that take homework through the platform does the Student hand it in there (a HomeworkSubmission).
 
 **HomeworkSubmission**:
-One Student's photos of one Homework, handed in through Telegram — from the Mini App's camera/gallery, or by sending photos straight to the bot (they go to the newest Homework not yet checked). Only Groups with photo submissions turned on accept them. The Teacher marks it *Checked* or sends it back to be *redone* with a comment, and the Student's chats are told; a redone one goes back to the Teacher when new photos are added, and a checked one is closed. Handed in after the due date it is *late* — still accepted, just flagged. It carries no score: a homework mark is still an AssessmentResult. The photos live on Telegram, not in our storage — see [ADR-0006](./docs/adr/0006-homework-photos-stored-on-telegram.md).
+One Student's photos and voice notes for one Homework, handed in through Telegram. Photos come from the Mini App's camera/gallery or are sent straight to the bot; voice notes (speaking homework) are recorded in the bot chat only. Whatever is sent to the bot goes to the newest Homework not yet checked. Only Groups with "homework through the platform" turned on accept them. The Teacher marks it *Checked* or sends it back to be *redone* with a comment, and the Student's chats are told; a redone one goes back to the Teacher when a new photo or voice note is added, and a checked one is closed. Handed in after the due date it is *late* — still accepted, just flagged. It carries no score: a homework mark is still an AssessmentResult. The files live on Telegram, not in our storage — see [ADR-0006](./docs/adr/0006-homework-photos-stored-on-telegram.md).
 _Avoid_: Upload, attachment
 
 **HomeworkResult**:

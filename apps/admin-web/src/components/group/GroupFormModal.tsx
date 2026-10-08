@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { AlertTriangle, Archive, Camera } from 'lucide-react'
+import { AlertTriangle, Archive, Send } from 'lucide-react'
 import {
   groups as groupsApi,
   levels as levelsApi,
@@ -185,10 +185,10 @@ export function GroupFormModal({
           />
           <span className="min-w-0">
             <span className="flex items-center gap-1.5 text-sm font-medium text-slate-800 dark:text-slate-200">
-              <Camera className="h-4 w-4 text-slate-400" /> Uyga vazifani rasm orqali topshirish
+              <Send className="h-4 w-4 text-slate-400" /> Uyga vazifani platforma orqali topshirish
             </span>
             <span className="mt-0.5 block text-xs text-slate-500 dark:text-slate-400">
-              Oʻquvchilar vazifasini suratga olib, Telegram orqali yuboradi. Oʻqituvchi ularni «Uyga vazifalar» boʻlimida tekshiradi.
+              Oʻquvchilar vazifani Telegram orqali yuboradi: daftar rasmi yoki ovozli xabar (speaking uchun). Oʻqituvchi ularni «Uyga vazifalar» boʻlimida tekshiradi.
             </span>
           </span>
         </label>

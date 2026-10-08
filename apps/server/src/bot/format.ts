@@ -183,23 +183,32 @@ export function formatChatTooLong(max: number): string {
   return `Xabar juda uzun. Iltimos, ${max} belgidan qisqaroq qilib yozing yoki bir necha qismga boʻlib yuboring.`
 }
 
-/** Sent once the photos a chat just sent are in -- an album gets one receipt, not one per photo. */
-export function formatHomeworkPhotosReceived(receipt: { date: Date; topic: string | null; photoCount: number }): string {
+/** Sent once the files a chat just sent are in -- an album gets one receipt, not one per photo. */
+export function formatHomeworkReceived(receipt: { date: Date; topic: string | null; photoCount: number; voiceCount: number }): string {
   return [
-    '📸 <b>Uyga vazifa qabul qilindi</b>',
+    '📥 <b>Uyga vazifa qabul qilindi</b>',
     `📅 ${formatLessonDay(receipt.date)}${receipt.topic ? ` · ${escapeHtml(receipt.topic)}` : ''}`,
-    `🖼 Rasmlar: ${receipt.photoCount} ta`,
+    ...(receipt.photoCount ? [`🖼 Rasmlar: ${receipt.photoCount} ta`] : []),
+    ...(receipt.voiceCount ? [`🎤 Ovozli xabarlar: ${receipt.voiceCount} ta`] : []),
     '',
-    'Ustoz tekshirgach, natija shu yerga keladi. Rasmlarni ilovada koʻrish yoki oʻchirish mumkin.',
+    'Ustoz tekshirgach, natija shu yerga keladi. Yuborganlaringizni ilovada koʻrish yoki oʻchirish mumkin.',
   ].join('\n')
 }
 
 export function formatNoOpenHomework(): string {
-  return "Hozir topshiriladigan uyga vazifa yoʻq 🙂\nRasm faqat ustoz bergan vazifa uchun qabul qilinadi."
+  return "Hozir topshiriladigan uyga vazifa yoʻq 🙂\nRasm va ovozli xabar faqat ustoz bergan vazifa uchun qabul qilinadi."
 }
 
 export function formatTooManyHomeworkPhotos(max: number): string {
   return `Bitta vazifaga koʻpi bilan ${max} ta rasm yuborish mumkin. Keraksizlarini ilovada oʻchirib, keyin qayta yuboring.`
+}
+
+export function formatTooManyHomeworkVoices(max: number): string {
+  return `Bitta vazifaga koʻpi bilan ${max} ta ovozli xabar yuborish mumkin. Keraksizlarini ilovada oʻchirib, keyin qayta yuboring.`
+}
+
+export function formatHomeworkAudioTooBig(): string {
+  return 'Bu fayl juda katta (20 MB dan ortiq). Iltimos, uni ovozli xabar qilib yozib yuboring 🎤'
 }
 
 export function formatHomeworkReview(review: {

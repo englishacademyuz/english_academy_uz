@@ -7,7 +7,11 @@ import {
   assertCanAddHomeworkPhoto,
   HOMEWORK_WITH_IMAGES,
   MAX_HOMEWORK_PHOTOS,
+  MAX_HOMEWORK_VOICES,
+  latestOpenHomework,
   removeHomeworkPhoto,
+  removeHomeworkVoice,
+  SUBMISSION_FILES,
   submissionView,
   familyUnreadCount,
   calculateAttendanceRate,
@@ -26,7 +30,7 @@ import {
 import { AppError, NotFoundError, ValidationError } from '@tashkurgan/shared'
 import { telegramDisplayName } from '../telegram/initData'
 import { isSupportedImage, type HomeworkFileStore } from '../telegram/fileStore'
-import { homeworkPhotoCaption, sendHomeworkPhoto } from './homeworkSubmissions'
+import { homeworkPhotoCaption, sendHomeworkFile } from './homeworkSubmissions'
 
 /**
  * The Telegram Mini App's API. Every route is scoped to `request.student`,
@@ -208,7 +212,7 @@ export const miniAppRoutes: FastifyPluginAsync<{ fileStore?: HomeworkFileStore }
         homework: {
           include: {
             ...HOMEWORK_WITH_IMAGES.include,
-            submissions: { where: { studentId: student.id }, include: { photos: true } },
+            submissions: { where: { studentId: student.id }, include: SUBMISSION_FILES },
           },
         },
         group: { select: { name: true, homeworkSubmissionEnabled: true } },
@@ -255,7 +259,7 @@ export const miniAppRoutes: FastifyPluginAsync<{ fileStore?: HomeworkFileStore }
             instructions: true,
             dueDate: true,
             images: HOMEWORK_WITH_IMAGES.include.images,
-            submissions: { where: { studentId: student.id }, include: { photos: { orderBy: { createdAt: 'asc' } } } },
+            submissions: { where: { studentId: student.id }, include: SUBMISSION_FILES },
           },
         },
       },
@@ -274,7 +278,7 @@ export const miniAppRoutes: FastifyPluginAsync<{ fileStore?: HomeworkFileStore }
     })
   })
 
-  // Topshirish: one homework with the student's own photos for it.
+  // Topshirish: one homework with the student's own photos and voice notes for it.
   app.get('/student/homework/:id', async (request) => {
     const student = me(request)
     const { id } = idParams.parse(request.params)
@@ -286,13 +290,15 @@ export const miniAppRoutes: FastifyPluginAsync<{ fileStore?: HomeworkFileStore }
         homework: {
           include: {
             ...HOMEWORK_WITH_IMAGES.include,
-            submissions: { where: { studentId: student.id }, include: { photos: { orderBy: { createdAt: 'asc' } } } },
+            submissions: { where: { studentId: student.id }, include: SUBMISSION_FILES },
           },
         },
       },
     })
     if (!lesson?.homework) throw new NotFoundError('Homework not found')
     const submission = lesson.homework.submissions[0]
+    // Voice notes are recorded in the bot chat, which files them under the newest open homework.
+    const newestOpen = lesson.group.homeworkSubmissionEnabled ? await latestOpenHomework(student.id) : null
     return {
       lessonId: lesson.id,
       date: lesson.date,
@@ -303,6 +309,9 @@ export const miniAppRoutes: FastifyPluginAsync<{ fileStore?: HomeworkFileStore }
       images: lesson.homework.images,
       submissionEnabled: lesson.group.homeworkSubmissionEnabled,
       maxPhotos: MAX_HOMEWORK_PHOTOS,
+      maxVoices: MAX_HOMEWORK_VOICES,
+      // What the student sends the bot now lands on this homework.
+      botTarget: newestOpen?.id === lesson.id,
       submission: submission ? submissionView(submission, lesson.homework.dueDate) : null,
     }
   })
@@ -335,7 +344,22 @@ export const miniAppRoutes: FastifyPluginAsync<{ fileStore?: HomeworkFileStore }
     const { id } = idParams.parse(request.params)
     const photo = await prisma.homeworkPhoto.findFirst({ where: { id, submission: { studentId: student.id } } })
     if (!photo) throw new NotFoundError('Photo not found')
-    return sendHomeworkPhoto(reply, opts.fileStore, photo.telegramFileId)
+    return sendHomeworkFile(reply, opts.fileStore, photo.telegramFileId)
+  })
+
+  // Voice notes come in through the bot only; here they are played back or taken out again.
+  app.delete('/student/homework-voices/:id', async (request) => {
+    const { id } = idParams.parse(request.params)
+    const submission = await removeHomeworkVoice(me(request).id, id)
+    return { submission: submission && submissionView(submission, submission.homework.dueDate) }
+  })
+
+  app.get('/student/homework-voices/:id', async (request, reply) => {
+    const student = me(request)
+    const { id } = idParams.parse(request.params)
+    const voice = await prisma.homeworkVoice.findFirst({ where: { id, submission: { studentId: student.id } } })
+    if (!voice) throw new NotFoundError('Voice note not found')
+    return sendHomeworkFile(reply, opts.fileStore, voice.telegramFileId)
   })
 
   // A picture the teacher gave with homework -- for any group the student is or was in.
@@ -347,7 +371,7 @@ export const miniAppRoutes: FastifyPluginAsync<{ fileStore?: HomeworkFileStore }
       select: { telegramFileId: true },
     })
     if (!image) throw new NotFoundError('Image not found')
-    return sendHomeworkPhoto(reply, opts.fileStore, image.telegramFileId)
+    return sendHomeworkFile(reply, opts.fileStore, image.telegramFileId)
   })
 
   app.get('/student/progress', async (request) => {

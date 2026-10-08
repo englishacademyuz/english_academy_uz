@@ -4,7 +4,7 @@ import { prisma } from '@tashkurgan/db'
 import { assertCan, createHomeworkImage } from '@tashkurgan/domain'
 import { AppError, NotFoundError, ValidationError } from '@tashkurgan/shared'
 import { isSupportedImage, type HomeworkFileStore } from '../telegram/fileStore'
-import { sendHomeworkPhoto } from './homeworkSubmissions'
+import { sendHomeworkFile } from './homeworkSubmissions'
 
 /** A picture is shrunk in the browser first; this only stops something absurd. */
 const MAX_UPLOAD_BYTES = 10 * 1024 * 1024
@@ -42,6 +42,6 @@ export const homeworkImageRoutes: FastifyPluginAsync<{ fileStore?: HomeworkFileS
     })
     if (!image) throw new NotFoundError('Image not found')
     assertCan(request.actor!, { resource: 'lessonSession', action: 'view', ownerTeacherId: image.group.teacherId })
-    return sendHomeworkPhoto(reply, opts.fileStore, image.telegramFileId)
+    return sendHomeworkFile(reply, opts.fileStore, image.telegramFileId)
   })
 }

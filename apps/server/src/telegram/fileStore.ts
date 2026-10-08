@@ -1,14 +1,14 @@
 import { GrammyError, InputFile, type Api } from 'grammy'
 import type { PhotoSize } from 'grammy/types'
-import type { StoredPhoto } from '@tashkurgan/domain'
+import type { StoredPhoto, StoredVoice } from '@tashkurgan/domain'
 import { AppError } from '@tashkurgan/shared'
 
 /**
- * Where homework photos live: on Telegram's servers, not ours. The database keeps only each
- * photo's Telegram file id, so photos cost the server no disk space; they are fetched back
- * through the Bot API when someone looks at them.
+ * Where homework photos and voice notes live: on Telegram's servers, not ours. The database keeps
+ * only each file's Telegram file id, so they cost the server no disk space; they are fetched back
+ * through the Bot API when someone looks at (or listens to) them.
  *
- * With `storageChatId` set (a private channel the bot posts in), every photo is also posted
+ * With `storageChatId` set (a private channel the bot posts in), every file is also posted
  * there -- a durable copy that survives a family deleting their chat with the bot, and a place
  * to browse submissions by hand. Without it, Mini App uploads land in the uploader's own chat.
  */
@@ -23,9 +23,17 @@ export type HomeworkFileStore = {
    * `kind` is how it was sent: as a photo, or as an image file (uncompressed).
    */
   keep(photo: StoredPhoto, caption: string, kind: 'photo' | 'document'): Promise<StoredPhoto>
-  /** The image bytes again. */
+  /**
+   * Keeps a voice note (or audio file) someone sent the bot -- copied to the storage chat when
+   * there is one, the same way as `keep`.
+   */
+  keepVoice(voice: StoredVoice, caption: string, kind: 'voice' | 'audio'): Promise<StoredVoice>
+  /** The file's bytes again (an image, or a voice note). */
   download(fileId: string): Promise<{ body: Buffer; contentType: string }>
 }
+
+/** The biggest file the Bot API will download -- anything larger couldn't be played back. */
+export const MAX_DOWNLOAD_BYTES = 20 * 1024 * 1024
 
 /** The biggest size Telegram made of a photo -- the one worth keeping. */
 export function largestPhoto(sizes: PhotoSize[]): StoredPhoto {
@@ -33,7 +41,19 @@ export function largestPhoto(sizes: PhotoSize[]): StoredPhoto {
   return { fileId: best.file_id, fileUniqueId: best.file_unique_id, width: best.width, height: best.height, size: best.file_size ?? null }
 }
 
-const CONTENT_TYPES: Record<string, string> = { jpg: 'image/jpeg', jpeg: 'image/jpeg', png: 'image/png', webp: 'image/webp' }
+const CONTENT_TYPES: Record<string, string> = {
+  jpg: 'image/jpeg',
+  jpeg: 'image/jpeg',
+  png: 'image/png',
+  webp: 'image/webp',
+  // Telegram voice notes are Opus in an Ogg container, saved as .oga.
+  oga: 'audio/ogg',
+  ogg: 'audio/ogg',
+  opus: 'audio/ogg',
+  mp3: 'audio/mpeg',
+  m4a: 'audio/mp4',
+  wav: 'audio/wav',
+}
 
 /** Recently viewed photos, so a teacher flipping back and forth doesn't refetch from Telegram. */
 class ByteCache {
@@ -95,6 +115,16 @@ export function telegramFileStore(api: Api, token: string, storageChatId?: strin
       if (kind === 'photo') return largestPhoto((await api.sendPhoto(storageChatId, photo.fileId, options)).photo)
       const { document } = await api.sendDocument(storageChatId, photo.fileId, options)
       return document ? { ...photo, fileId: document.file_id, fileUniqueId: document.file_unique_id } : photo
+    },
+
+    async keepVoice(voice, caption, kind) {
+      if (!storageChatId) return voice
+      const options = { caption, disable_notification: true }
+      const copy =
+        kind === 'voice'
+          ? (await api.sendVoice(storageChatId, voice.fileId, options)).voice
+          : (await api.sendAudio(storageChatId, voice.fileId, options)).audio
+      return { ...voice, fileId: copy.file_id, fileUniqueId: copy.file_unique_id }
     },
 
     async download(fileId) {

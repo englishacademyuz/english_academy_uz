@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react'
 import { useInfiniteQuery, useQuery, useQueryClient } from '@tanstack/react-query'
-import { Camera, ChevronLeft, ChevronRight, Search } from 'lucide-react'
+import { Camera, ChevronLeft, ChevronRight, Mic, Search } from 'lucide-react'
 import { homeworkSubmissions as submissionsApi, sessions as sessionsApi } from '../../lib/api'
 import { formatDate, formatTime, toDateInputValue } from '../../lib/format'
 import { richTextToPlain } from '../../lib/richText'
@@ -14,7 +14,7 @@ type Mode = 'lesson' | 'all'
 const LESSON_PICKER_DAYS = 120
 
 /**
- * Uyga vazifalar: homework the group's students handed in as photos through Telegram.
+ * Uyga vazifalar: homework the group's students handed in through Telegram -- photos and voice notes.
  * "Dars boʻyicha" goes lesson by lesson with the whole roster; "Barcha topshiriqlar" is every
  * submission, newest first, searchable by topic or name and filterable by date and status.
  */
@@ -285,7 +285,13 @@ function AllSubmissions({ group, onReviewed }: { group: Group; onReviewed: () =>
                       className="flex w-full items-center gap-3 px-3 py-2.5 text-left hover:bg-slate-50 dark:hover:bg-slate-800/50"
                     >
                       <span className="relative h-14 w-11 shrink-0 overflow-hidden rounded-md">
-                        {item.photos[0] && <HomeworkPhoto photoId={item.photos[0].id} className="h-full w-full object-cover" />}
+                        {item.photos[0] ? (
+                          <HomeworkPhoto photoId={item.photos[0].id} className="h-full w-full object-cover" />
+                        ) : (
+                          <span className="flex h-full w-full items-center justify-center bg-slate-100 text-slate-400 dark:bg-slate-800">
+                            <Mic className="h-5 w-5" />
+                          </span>
+                        )}
                         {item.photos.length > 1 && (
                           <span className="absolute bottom-0.5 right-0.5 rounded bg-black/60 px-1 text-[10px] font-semibold text-white">
                             {item.photos.length}
@@ -298,6 +304,7 @@ function AllSubmissions({ group, onReviewed }: { group: Group; onReviewed: () =>
                         </span>
                         <span className="block truncate text-xs text-slate-500 dark:text-slate-400">
                           {formatDate(item.lesson.date)} dars · {item.lesson.topic || 'Mavzusiz'}
+                          {item.voices.length > 0 && ` · 🎤 ${item.voices.length}`}
                         </span>
                       </span>
                       <span className="hidden shrink-0 text-xs text-slate-400 sm:block">{formatTime(item.submittedAt)}</span>
@@ -339,6 +346,11 @@ function Thumbnails({ submission, onOpen }: { submission: HomeworkSubmission; on
         </span>
       ))}
       {more > 0 && <span className="text-xs font-medium text-slate-500">+{more}</span>}
+      {submission.voices.length > 0 && (
+        <span className="ml-1 flex items-center gap-0.5 text-xs font-medium text-slate-500" title="Ovozli xabarlar">
+          <Mic className="h-3.5 w-3.5" /> {submission.voices.length}
+        </span>
+      )}
     </button>
   )
 }

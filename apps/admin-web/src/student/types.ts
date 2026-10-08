@@ -98,7 +98,7 @@ export type MiniHomeworkImage = {
   height: number | null
 }
 
-/** The student's photos of one homework: waiting for the teacher, checked, or sent back to redo. */
+/** The student's photos and voice notes for one homework: waiting for the teacher, checked, or sent back to redo. */
 export type MiniSubmission = {
   id: string
   status: 'SUBMITTED' | 'CHECKED' | 'RETURNED'
@@ -108,6 +108,8 @@ export type MiniSubmission = {
   /** Handed in after the due date -- still accepted. */
   late: boolean
   photos: Array<{ id: string; width: number | null; height: number | null }>
+  /** `duration` in seconds. */
+  voices: Array<{ id: string; duration: number }>
 }
 
 export type MiniHomework = {
@@ -117,12 +119,18 @@ export type MiniHomework = {
   instructions: string
   dueDate: string | null
   images: MiniHomeworkImage[]
-  /** The group takes homework as photos -- otherwise it's only checked in class. */
+  /** The group takes homework through the platform (photos, voice notes) -- otherwise it's only checked in class. */
   submissionEnabled: boolean
   submission: MiniSubmission | null
 }
 
-export type MiniHomeworkDetail = MiniHomework & { group: string; maxPhotos: number }
+export type MiniHomeworkDetail = MiniHomework & {
+  group: string
+  maxPhotos: number
+  maxVoices: number
+  /** A voice note (or photo) sent to the bot now lands on this homework -- it's the newest open one. */
+  botTarget: boolean
+}
 
 export type MiniMark = {
   id: string

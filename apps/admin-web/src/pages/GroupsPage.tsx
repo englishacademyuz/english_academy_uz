@@ -136,7 +136,7 @@ function GroupCard({
   onDelete,
 }: {
   group: Group
-  /** Homework photos waiting for the teacher. */
+  /** Homework submissions waiting for the teacher. */
   uncheckedHomework: number
   onEdit?: () => void
   onDelete?: () => void

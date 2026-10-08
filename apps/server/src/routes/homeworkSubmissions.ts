@@ -1,7 +1,7 @@
 import type { FastifyPluginAsync, FastifyReply } from 'fastify'
 import { z } from 'zod'
 import { prisma, type Prisma } from '@tashkurgan/db'
-import { assertCan, reviewHomeworkSubmission, studentChatIds, submissionView } from '@tashkurgan/domain'
+import { assertCan, reviewHomeworkSubmission, studentChatIds, submissionView, SUBMISSION_FILES } from '@tashkurgan/domain'
 import { AppError, NotFoundError } from '@tashkurgan/shared'
 import type { HomeworkFileStore } from '../telegram/fileStore'
 
@@ -17,15 +17,15 @@ export type HomeworkReviewAnnouncement = {
 /** Tells a student's Telegram chats their homework was checked or sent back -- the bot in production, a spy in tests. */
 export type HomeworkReviewNotifier = (chatIds: string[], review: HomeworkReviewAnnouncement) => Promise<void>
 
-/** The caption a homework photo carries in Telegram -- whose it is and for which lesson. */
+/** The caption a homework photo or voice note carries in Telegram -- whose it is and for which lesson. */
 export function homeworkPhotoCaption(student: { firstName: string; lastName: string }, date: Date, topic: string | null) {
   const day = date.toISOString().slice(0, 10)
   return `📝 ${student.firstName} ${student.lastName} · ${day}${topic ? ` · ${topic}` : ''}`
 }
 
-/** Streams a stored photo back. Its bytes never change, so browsers may keep it. */
-export async function sendHomeworkPhoto(reply: FastifyReply, store: HomeworkFileStore | undefined, fileId: string) {
-  if (!store) throw new AppError('Photo storage is not configured', 503)
+/** Streams a stored photo or voice note back. Its bytes never change, so browsers may keep it. */
+export async function sendHomeworkFile(reply: FastifyReply, store: HomeworkFileStore | undefined, fileId: string) {
+  if (!store) throw new AppError('File storage is not configured', 503)
   const { body, contentType } = await store.download(fileId)
   return reply.header('content-type', contentType).header('cache-control', 'private, max-age=604800, immutable').send(body)
 }
@@ -60,7 +60,7 @@ export const homeworkSubmissionRoutes: FastifyPluginAsync<{
       where: { id },
       include: {
         group: { select: { teacherId: true } },
-        homework: { include: { submissions: { include: { photos: { orderBy: { createdAt: 'asc' } } } } } },
+        homework: { include: { submissions: { include: SUBMISSION_FILES } } },
       },
     })
     if (!lesson) throw new NotFoundError('Session not found')
@@ -124,7 +124,7 @@ export const homeworkSubmissionRoutes: FastifyPluginAsync<{
         skip: page * PAGE_SIZE,
         take: PAGE_SIZE,
         include: {
-          photos: { orderBy: { createdAt: 'asc' } },
+          ...SUBMISSION_FILES,
           student: { select: studentSelect },
           homework: { select: { dueDate: true, lessonSession: { select: { id: true, date: true, topic: true } } } },
         },
@@ -194,18 +194,31 @@ export const homeworkSubmissionRoutes: FastifyPluginAsync<{
     return submissionView(reviewed, reviewed.homework.dueDate)
   })
 
+  const ownerTeacher = {
+    submission: { select: { homework: { select: { lessonSession: { select: { group: { select: { teacherId: true } } } } } } } },
+  } satisfies Prisma.HomeworkPhotoInclude & Prisma.HomeworkVoiceInclude
+
   app.get('/homework-photos/:id', { preHandler: app.authenticate }, async (request, reply) => {
     const { id } = idParams.parse(request.params)
-    const photo = await prisma.homeworkPhoto.findUnique({
-      where: { id },
-      include: { submission: { select: { homework: { select: { lessonSession: { select: { group: { select: { teacherId: true } } } } } } } } },
-    })
+    const photo = await prisma.homeworkPhoto.findUnique({ where: { id }, include: ownerTeacher })
     if (!photo) throw new NotFoundError('Photo not found')
     assertCan(request.actor!, {
       resource: 'lessonSession',
       action: 'view',
       ownerTeacherId: photo.submission.homework.lessonSession.group.teacherId,
     })
-    return sendHomeworkPhoto(reply, opts.fileStore, photo.telegramFileId)
+    return sendHomeworkFile(reply, opts.fileStore, photo.telegramFileId)
+  })
+
+  app.get('/homework-voices/:id', { preHandler: app.authenticate }, async (request, reply) => {
+    const { id } = idParams.parse(request.params)
+    const voice = await prisma.homeworkVoice.findUnique({ where: { id }, include: ownerTeacher })
+    if (!voice) throw new NotFoundError('Voice note not found')
+    assertCan(request.actor!, {
+      resource: 'lessonSession',
+      action: 'view',
+      ownerTeacherId: voice.submission.homework.lessonSession.group.teacherId,
+    })
+    return sendHomeworkFile(reply, opts.fileStore, voice.telegramFileId)
   })
 }

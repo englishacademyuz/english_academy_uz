@@ -10,7 +10,7 @@ import { miniApi } from '../api'
 import { CheckIcon, ClockIcon, DocIcon, HomeworkScene, PlayIcon } from '../components/art'
 import { HomeworkImages } from '../components/HomeworkImages'
 import { ErrorState, Loading, Screen, Section } from '../components/kit'
-import { weekdayDate, weekdayDayMonth } from '../format'
+import { submissionContents, weekdayDate, weekdayDayMonth } from '../format'
 import type { MiniLessonDetail } from '../types'
 
 type Material = MiniLessonDetail['materials'][number]
@@ -159,7 +159,7 @@ function Homework({ homework, lessonId }: { homework: NonNullable<MiniLessonDeta
       )}
       <HomeworkImages images={homework.images} />
       {homework.submissionEnabled ? (
-        // This group hands homework in as photos -- the hand-in screen has the camera.
+        // This group hands homework in through the platform -- the hand-in screen has the camera and voice notes.
         <Link
           to={`/student/homework/${lessonId}`}
           className="flex min-h-14 w-full items-center justify-center gap-2 rounded-[18px] bg-tg-blue px-4 text-lg font-extrabold text-white active:scale-[0.99]"
@@ -170,7 +170,7 @@ function Homework({ homework, lessonId }: { homework: NonNullable<MiniLessonDeta
               ? '⭐ Tekshirildi — koʻrish'
               : submission.status === 'RETURNED'
                 ? '🔁 Qayta topshirish'
-                : `✅ Topshirildi · ${submission.photos.length} rasm`}
+                : `✅ Topshirildi · ${submissionContents(submission)}`}
         </Link>
       ) : (
         // Otherwise it's checked by the teacher in class (CONTEXT.md: HomeworkResult), so there's no "done" button here.

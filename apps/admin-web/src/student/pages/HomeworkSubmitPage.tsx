@@ -1,8 +1,9 @@
 import { useEffect, useRef, useState, type ReactNode } from 'react'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { useParams } from 'react-router-dom'
-import { Camera, ImagePlus, Loader2, RotateCw, X } from 'lucide-react'
+import { Camera, ImagePlus, Loader2, Mic, RotateCw, Trash2, X } from 'lucide-react'
 import { RichText } from '../../components/shared/RichText'
+import { VoiceNote } from '../../components/shared/VoiceNote'
 import { shrinkPhoto } from '../../lib/image'
 import { isRichTextEmpty } from '../../lib/richText'
 import { MiniApiError, miniApi } from '../api'
@@ -10,7 +11,7 @@ import { CheckIcon, ClockIcon } from '../components/art'
 import { HomeworkImages } from '../components/HomeworkImages'
 import { ErrorState, Loading, Screen, Section } from '../components/kit'
 import { formatDateTime, weekdayDate, weekdayDayMonth } from '../format'
-import { haptic } from '../telegram'
+import { haptic, webApp } from '../telegram'
 import type { MiniHomeworkDetail, MiniSubmission } from '../types'
 
 type Pending = { key: string; blob: Blob; preview: string; failed: boolean }
@@ -18,10 +19,13 @@ type Pending = { key: string; blob: Blob; preview: string; failed: boolean }
 const UPLOAD_ERRORS: Record<string, string> = {
   TOO_MANY_PHOTOS: 'Rasmlar soni chegaraga yetdi',
   ALREADY_CHECKED: 'Ustoz bu vazifani allaqachon tekshirgan',
-  SUBMISSIONS_DISABLED: 'Bu guruhda vazifa rasm orqali topshirilmaydi',
+  SUBMISSIONS_DISABLED: 'Bu guruhda vazifa platforma orqali topshirilmaydi',
 }
 
-/** Topshirish: the homework, the student's photos of it, and the camera/gallery buttons to add more. */
+/**
+ * Topshirish: the homework, the student's photos and voice notes for it, and the camera/gallery
+ * buttons to add photos. Voice notes are recorded in the bot chat (Telegram's own mic button).
+ */
 export function HomeworkSubmitPage() {
   const { id } = useParams<{ id: string }>()
   const queryClient = useQueryClient()
@@ -97,6 +101,15 @@ export function HomeworkSubmitPage() {
     }
   }
 
+  async function removeVoice(voiceId: string) {
+    try {
+      const { submission } = await miniApi.deleteHomeworkVoice(voiceId)
+      setSubmission(submission)
+    } catch {
+      setError('Ovozli xabarni oʻchirib boʻlmadi')
+    }
+  }
+
   if (homework.isLoading) return <Loading />
   if (homework.error || !homework.data) {
     return (
@@ -106,10 +119,13 @@ export function HomeworkSubmitPage() {
     )
   }
 
-  const { date, topic, group, instructions, dueDate, images, submissionEnabled, submission, maxPhotos } = homework.data
+  const { date, topic, group, instructions, dueDate, images, submissionEnabled, submission, maxPhotos, maxVoices, botTarget } =
+    homework.data
   const photos = submission?.photos ?? []
+  const voices = submission?.voices ?? []
+  const open = submissionEnabled && submission?.status !== 'CHECKED'
   const room = maxPhotos - photos.length - pending.length
-  const canAdd = submissionEnabled && submission?.status !== 'CHECKED' && room > 0
+  const canAdd = open && room > 0
 
   return (
     <Screen back={back} eyebrow={weekdayDayMonth(new Date(date))} title={topic || 'Uyga vazifa'} subtitle={group}>
@@ -188,10 +204,41 @@ export function HomeworkSubmitPage() {
               <PickButton icon={<ImagePlus className="h-7 w-7" strokeWidth={2.4} />} label="Galereyadan" tone="white" multiple onPick={(f) => addFiles(f, room)} />
             </div>
           )}
-          {submissionEnabled && submission?.status !== 'CHECKED' && (
+          {open && (
             <p className="text-center text-[13px] font-bold text-tg-faint">
-              Koʻpi bilan {maxPhotos} ta rasm. Rasmni botga yuborsangiz ham shu vazifaga qoʻshiladi.
+              Koʻpi bilan {maxPhotos} ta rasm.{botTarget && ' Rasmni botga yuborsangiz ham shu vazifaga qoʻshiladi.'}
             </p>
+          )}
+
+          {(voices.length > 0 || open) && (
+            <Section title={`Ovozli xabarlarim${voices.length ? ` · ${voices.length}` : ''}`}>
+              {voices.length > 0 && (
+                <div className="flex flex-col gap-2">
+                  {voices.map((voice) => (
+                    <div key={voice.id} className="flex items-center gap-2 rounded-[18px] border-2 border-tg-line bg-white px-3 py-2">
+                      <VoiceNote
+                        voiceId={voice.id}
+                        load={miniApi.homeworkVoiceUrl}
+                        duration={voice.duration}
+                        className="grow"
+                        labelClassName="text-tg-muted font-bold"
+                      />
+                      {open && (
+                        <button
+                          type="button"
+                          onClick={() => removeVoice(voice.id)}
+                          aria-label="Ovozli xabarni oʻchirish"
+                          className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full text-tg-cherry active:bg-tg-cherry-soft"
+                        >
+                          <Trash2 className="h-5 w-5" strokeWidth={2.4} />
+                        </button>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              )}
+              {open && <VoiceHint botTarget={botTarget} full={voices.length >= maxVoices} />}
+            </Section>
           )}
         </>
       )}
@@ -237,9 +284,40 @@ function StatusBanner({ submission }: { submission: MiniSubmission | null }) {
         </p>
       )}
       {submission.status === 'RETURNED' && (
-        <p className="text-[14px] font-bold text-tg-body">Xatolarni tuzating va yangi rasm qoʻshing — vazifa yana ustozga boradi.</p>
+        <p className="text-[14px] font-bold text-tg-body">Xatolarni tuzating va yangi rasm yoki ovozli xabar qoʻshing — vazifa yana ustozga boradi.</p>
       )}
     </section>
+  )
+}
+
+/**
+ * How to hand in a voice note: record it in the bot chat. The bot files it under the newest open
+ * homework, so on an older one the student is told so instead of being sent off to record.
+ */
+function VoiceHint({ botTarget, full }: { botTarget: boolean; full: boolean }) {
+  if (full) return <p className="mt-2 text-center text-[13px] font-bold text-tg-faint">Ovozli xabarlar soni chegaraga yetdi.</p>
+  if (!botTarget) {
+    return (
+      <p className="mt-2 rounded-[18px] bg-tg-sand px-4 py-3 text-center text-[14px] font-bold text-tg-muted">
+        Botga yuborilgan ovozli xabar eng yangi vazifaga qoʻshiladi.
+      </p>
+    )
+  }
+  return (
+    <div className="mt-2 flex flex-col gap-2">
+      <p className="rounded-[18px] border-2 border-dashed border-tg-dash bg-white px-4 py-3 text-center text-[14px] font-bold text-tg-muted">
+        Speaking vazifasi uchun botga ovozli xabar yozib yuboring 🎤 — u darhol shu vazifaga qoʻshiladi.
+      </p>
+      {webApp() && (
+        <button
+          type="button"
+          onClick={() => webApp()?.close()}
+          className="flex min-h-[56px] items-center justify-center gap-2 rounded-[22px] border-2 border-tg-line-strong bg-white text-base font-extrabold text-tg-blue-dark active:scale-[0.98]"
+        >
+          <Mic className="h-6 w-6" strokeWidth={2.4} /> Botga oʻtib yozish
+        </button>
+      )}
+    </div>
   )
 }
 

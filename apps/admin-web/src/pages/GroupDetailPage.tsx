@@ -44,8 +44,8 @@ export function GroupDetailPage() {
     queryFn: () => groupsApi.get(id!),
     enabled: !!id,
   })
-  const takesPhotos = !!groupQuery.data?.homeworkSubmissionEnabled
-  const unchecked = useQuery({ queryKey: ['homework-unchecked'], queryFn: submissionsApi.unchecked, enabled: takesPhotos })
+  const takesHomework = !!groupQuery.data?.homeworkSubmissionEnabled
+  const unchecked = useQuery({ queryKey: ['homework-unchecked'], queryFn: submissionsApi.unchecked, enabled: takesHomework })
   const waiting = (id && unchecked.data?.byGroup[id]) || 0
 
   if (groupQuery.isLoading) return <Spinner />
@@ -119,8 +119,8 @@ export function GroupDetailPage() {
             { key: 'lesson' as const, label: 'Dars', icon: BookOpen },
             { key: 'students' as const, label: "Oʻquvchilar", icon: Users },
             { key: 'quizzes' as const, label: 'Testlar', icon: Brain },
-            // Only for groups that take homework as photos.
-            ...(takesPhotos
+            // Only for groups that take homework through the platform.
+            ...(takesHomework
               ? [{ key: 'homework' as const, label: waiting ? `Uyga vazifalar (${waiting})` : 'Uyga vazifalar', icon: Camera }]
               : []),
           ]}
@@ -136,7 +136,7 @@ export function GroupDetailPage() {
         </div>
       ) : tab === 'students' ? (
         <StudentsTab group={group} initialDate={deepLinkDate} />
-      ) : tab === 'homework' && takesPhotos ? (
+      ) : tab === 'homework' && takesHomework ? (
         <HomeworkTab group={group} />
       ) : (
         <QuizTab group={group} initialDate={deepLinkDate} />

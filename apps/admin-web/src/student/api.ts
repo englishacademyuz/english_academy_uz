@@ -63,8 +63,21 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
   return (await (await send(path, init)).json()) as T
 }
 
-/** Object URLs of homework photos already fetched -- an image tag can't send the Telegram auth header itself. */
+/**
+ * Object URLs of homework photos and voice notes already fetched, by path -- an image or audio
+ * tag can't send the Telegram auth header itself.
+ */
 const photoUrls = new Map<string, Promise<string>>()
+
+function fileUrl(path: string) {
+  let url = photoUrls.get(path)
+  if (!url) {
+    url = send(path).then(async (res) => URL.createObjectURL(await res.blob()))
+    url.catch(() => photoUrls.delete(path))
+    photoUrls.set(path, url)
+  }
+  return url
+}
 /** The same for the pictures a teacher gives with homework. */
 const imageUrls = new Map<string, Promise<string>>()
 
@@ -78,15 +91,10 @@ export const miniApi = {
     request<MiniSubmission>(`/student/homework/${lessonId}/photos`, { method: 'POST', body: photo }),
   deleteHomeworkPhoto: (photoId: string) =>
     request<{ submission: MiniSubmission | null }>(`/student/homework-photos/${photoId}`, { method: 'DELETE' }),
-  homeworkPhotoUrl: (photoId: string) => {
-    let url = photoUrls.get(photoId)
-    if (!url) {
-      url = send(`/student/homework-photos/${photoId}`).then(async (res) => URL.createObjectURL(await res.blob()))
-      url.catch(() => photoUrls.delete(photoId))
-      photoUrls.set(photoId, url)
-    }
-    return url
-  },
+  homeworkPhotoUrl: (photoId: string) => fileUrl(`/student/homework-photos/${photoId}`),
+  deleteHomeworkVoice: (voiceId: string) =>
+    request<{ submission: MiniSubmission | null }>(`/student/homework-voices/${voiceId}`, { method: 'DELETE' }),
+  homeworkVoiceUrl: (voiceId: string) => fileUrl(`/student/homework-voices/${voiceId}`),
   homeworkImageUrl: (imageId: string) => {
     let url = imageUrls.get(imageId)
     if (!url) {

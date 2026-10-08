@@ -1,6 +1,6 @@
 import { afterAll, afterEach, beforeAll, describe, expect, it } from 'vitest'
 import { prisma } from '@tashkurgan/db'
-import { isLateSubmission } from '@tashkurgan/domain'
+import { addHomeworkVoice, isLateSubmission } from '@tashkurgan/domain'
 import { buildApp } from '../src/app'
 import type { HomeworkReviewAnnouncement } from '../src/routes/homeworkSubmissions'
 import type { HomeworkFileStore } from '../src/telegram/fileStore'
@@ -20,17 +20,23 @@ function fakeFileStore() {
       uploads.push(options)
       return { fileId, fileUniqueId: `u-${fileId}`, width: 800, height: 600, size: photo.length }
     },
+    async keepVoice(voice) {
+      return voice
+    },
     async keep(photo) {
       return photo
     },
     async download(fileId) {
       const body = files.get(fileId)
       if (!body) throw new Error('no such file')
-      return { body, contentType: 'image/jpeg' }
+      return { body, contentType: fileId.startsWith('voice-') ? 'audio/ogg' : 'image/jpeg' }
     },
   }
-  return { store, uploads }
+  return { store, uploads, files }
 }
+
+/** Voice notes only come in through the bot (tested there); here one is put straight in place. */
+const OGG = Buffer.from('OggS fake opus bytes')
 
 describe('isLateSubmission', () => {
   const due = new Date('2026-10-05T00:00:00Z')
@@ -46,7 +52,7 @@ describe('isLateSubmission', () => {
 
 describe('homework photo submissions', () => {
   let app: Awaited<ReturnType<typeof buildApp>>
-  const { store, uploads } = fakeFileStore()
+  const { store, uploads, files } = fakeFileStore()
   const reviews: Array<{ chatIds: string[]; review: HomeworkReviewAnnouncement }> = []
 
   beforeAll(async () => {
@@ -134,6 +140,51 @@ describe('homework photo submissions', () => {
 
     const removed = await app.inject({ method: 'DELETE', url: `/student/homework-photos/${photoId}`, headers: miniAppAuth(700) })
     expect(removed.json().submission.photos).toHaveLength(1)
+  })
+
+  it('plays voice notes back to the student and the teacher, and lets the student take them out', async () => {
+    const { lesson, student } = await seedLesson()
+    files.set('voice-1', OGG)
+    await addHomeworkVoice(student.id, lesson.id, { fileId: 'voice-1', fileUniqueId: 'u-voice-1', duration: 42 })
+    await upload(lesson.id)
+
+    const one = await app.inject({ method: 'GET', url: `/student/homework/${lesson.id}`, headers: miniAppAuth(700) })
+    // The newest open homework -- what the student sends the bot goes here.
+    expect(one.json()).toMatchObject({ maxVoices: 10, botTarget: true, submission: { voices: [{ duration: 42 }] } })
+    const voiceId = one.json().submission.voices[0].id
+
+    const played = await app.inject({ method: 'GET', url: `/student/homework-voices/${voiceId}`, headers: miniAppAuth(700) })
+    expect(played.headers['content-type']).toBe('audio/ogg')
+    expect(played.rawPayload.equals(OGG)).toBe(true)
+
+    const cookie = await loginAs(app, 'teacher1', 'teacher12345')
+    const roster = await app.inject({ method: 'GET', url: `/sessions/${lesson.id}/homework-submissions`, headers: { cookie } })
+    expect(roster.json().students[0].submission.voices).toEqual([{ id: voiceId, duration: 42 }])
+    const teacherPlay = await app.inject({ method: 'GET', url: `/homework-voices/${voiceId}`, headers: { cookie } })
+    expect(teacherPlay.statusCode).toBe(200)
+
+    const other = await prisma.student.create({ data: { firstName: 'Vali', lastName: 'B', dob: new Date('2012-01-01') } })
+    await prisma.telegramLink.create({ data: { chatId: '701', studentId: other.id } })
+    const peek = await app.inject({ method: 'GET', url: `/student/homework-voices/${voiceId}`, headers: miniAppAuth(701) })
+    expect(peek.statusCode).toBe(404)
+
+    // Taking the voice note out leaves the photo -- the submission stays.
+    const removed = await app.inject({ method: 'DELETE', url: `/student/homework-voices/${voiceId}`, headers: miniAppAuth(700) })
+    expect(removed.json().submission).toMatchObject({ voices: [], photos: [{}] })
+    // ...and taking out the last file removes it.
+    const photoId = removed.json().submission.photos[0].id
+    const emptied = await app.inject({ method: 'DELETE', url: `/student/homework-photos/${photoId}`, headers: miniAppAuth(700) })
+    expect(emptied.json().submission).toBeNull()
+  })
+
+  it('caps voice notes per homework', async () => {
+    const { lesson, student } = await seedLesson()
+    for (let i = 0; i < 10; i++) {
+      await addHomeworkVoice(student.id, lesson.id, { fileId: `voice-${i}`, fileUniqueId: `u-${i}`, duration: 5 })
+    }
+    await expect(
+      addHomeworkVoice(student.id, lesson.id, { fileId: 'voice-x', fileUniqueId: 'u-x', duration: 5 }),
+    ).rejects.toThrow('TOO_MANY_VOICES')
   })
 
   it("refuses anything but an image, and another student's photos", async () => {

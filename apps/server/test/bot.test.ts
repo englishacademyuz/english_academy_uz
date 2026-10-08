@@ -250,10 +250,62 @@ describe('telegram bot', () => {
       throw new Error('not used by the bot')
     },
     keep: async (photo) => photo,
+    keepVoice: async (voice) => voice,
     download: async () => {
       throw new Error('not used by the bot')
     },
   }
+
+  function voiceUpdate(chatId: number, fileId: string, fileSize = 40_000) {
+    return {
+      update_id: nextUpdateId++,
+      message: {
+        message_id: nextUpdateId,
+        date: Math.floor(Date.now() / 1000),
+        chat: { id: chatId, type: 'private' as const, first_name: 'Test' },
+        from: { id: chatId, is_bot: false, first_name: 'Test' },
+        voice: { file_id: fileId, file_unique_id: `${fileId}-u`, duration: 42, mime_type: 'audio/ogg', file_size: fileSize },
+      },
+    }
+  }
+
+  it('hands voice notes in for the newest homework, alongside photos', async () => {
+    const { group, student } = await seedAcademicStructure()
+    await prisma.group.update({ where: { id: group.id }, data: { homeworkSubmissionEnabled: true } })
+    await prisma.telegramLink.create({ data: { chatId: '670', studentId: student.id } })
+    await prisma.lessonSession.create({
+      data: { groupId: group.id, teacherId: group.teacherId, date: new Date('2026-09-27'), topic: 'Speaking', homework: { create: { instructions: 'Talk' } } },
+    })
+
+    const { bot, calls } = buildBot({ fileStore: keepingStore, homeworkReceiptDelayMs: 0 })
+    await bot.init()
+    await bot.handleUpdate(photoUpdate(670, 'photo-v'))
+    await bot.handleUpdate(voiceUpdate(670, 'voice-a'))
+    await new Promise((resolve) => setTimeout(resolve, 50))
+
+    const submission = await prisma.homeworkSubmission.findFirstOrThrow({ include: { voices: true, photos: true } })
+    expect(submission.voices).toMatchObject([{ telegramFileId: 'voice-a', duration: 42 }])
+    expect(submission.photos).toHaveLength(1)
+    const receipt = calls.filter((c) => c.method === 'sendMessage' && String(c.payload.text).includes('qabul qilindi')).at(-1)!
+    expect(String(receipt.payload.text)).toContain('Ovozli xabarlar: 1 ta')
+    expect(String(receipt.payload.text)).toContain('Rasmlar: 1 ta')
+
+    // Too big for the Bot API to download back -- refused, not stored.
+    await bot.handleUpdate(voiceUpdate(670, 'voice-huge', 30 * 1024 * 1024))
+    expect(sentText(calls, '20 MB')).toBe(true)
+    expect(await prisma.homeworkVoice.count()).toBe(1)
+    expect(sentText(calls, 'faqat matnli')).toBe(false)
+  })
+
+  it('still asks for text when a voice note comes from a group that does not take homework', async () => {
+    const { student } = await seedAcademicStructure()
+    await prisma.telegramLink.create({ data: { chatId: '671', studentId: student.id } })
+    const { bot, calls } = buildBot({ fileStore: keepingStore, homeworkReceiptDelayMs: 0 })
+    await bot.init()
+    await bot.handleUpdate(voiceUpdate(671, 'voice-b'))
+    expect(sentText(calls, 'faqat matnli')).toBe(true)
+    expect(await prisma.homeworkVoice.count()).toBe(0)
+  })
 
   it("hands photos in for the newest homework in groups that take them, with one receipt per album", async () => {
     const { group, student } = await seedAcademicStructure()

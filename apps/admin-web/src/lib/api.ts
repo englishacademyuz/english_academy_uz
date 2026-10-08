@@ -296,7 +296,7 @@ export const quizzes = {
   close: (id: string) => post<QuizDetail>(`/quizzes/${id}/close`),
 }
 
-/** Object URLs of homework photos already fetched this session -- they never change. */
+/** Object URLs of homework photos and voice notes already fetched this session, by path -- they never change. */
 const photoUrls = new Map<string, Promise<string>>()
 
 export const homeworkSubmissions = {
@@ -315,18 +315,21 @@ export const homeworkSubmissions = {
   /** Checked, or sent back to redo -- the student's Telegram chats are told either way. */
   review: (id: string, status: 'CHECKED' | 'RETURNED', comment?: string) =>
     post<HomeworkSubmission>(`/homework-submissions/${id}/review`, { status, comment: comment ?? null }),
-  photoUrl: (photoId: string) => {
-    let url = photoUrls.get(photoId)
-    if (!url) {
-      url = fetch(`${BASE_URL}/homework-photos/${photoId}`, { credentials: 'include' }).then(async (res) => {
-        if (!res.ok) throw new ApiError(res.statusText, res.status)
-        return URL.createObjectURL(await res.blob())
-      })
-      url.catch(() => photoUrls.delete(photoId))
-      photoUrls.set(photoId, url)
-    }
-    return url
-  },
+  photoUrl: (photoId: string) => submissionFileUrl(`/homework-photos/${photoId}`),
+  voiceUrl: (voiceId: string) => submissionFileUrl(`/homework-voices/${voiceId}`),
+}
+
+function submissionFileUrl(path: string) {
+  let url = photoUrls.get(path)
+  if (!url) {
+    url = fetch(`${BASE_URL}${path}`, { credentials: 'include' }).then(async (res) => {
+      if (!res.ok) throw new ApiError(res.statusText, res.status)
+      return URL.createObjectURL(await res.blob())
+    })
+    url.catch(() => photoUrls.delete(path))
+    photoUrls.set(path, url)
+  }
+  return url
 }
 
 /** Object URLs of homework pictures already fetched this session -- they never change. */

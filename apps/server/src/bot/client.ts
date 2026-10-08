@@ -3,13 +3,16 @@ import type { UserFromGetMe } from 'grammy/types'
 import { prisma } from '@tashkurgan/db'
 import {
   addHomeworkPhoto,
+  addHomeworkVoice,
   CHAT_MESSAGE_MAX_LENGTH,
   latestOpenHomework,
   looksLikeLinkingCode,
   MAX_HOMEWORK_PHOTOS,
+  MAX_HOMEWORK_VOICES,
   postFamilyMessage,
   redeemLinkingCode,
   type StoredPhoto,
+  type StoredVoice,
 } from '@tashkurgan/domain'
 import { ConflictError, NotFoundError } from '@tashkurgan/shared'
 import type { QuizAnnouncement } from '../routes/quizzes'
@@ -18,7 +21,7 @@ import type { AbsenceAnnouncement } from '../routes/absences'
 import type { LessonChangeAnnouncement } from '../routes/schedule'
 import type { StaffMessageAnnouncement } from '../routes/conversations'
 import { homeworkPhotoCaption, type HomeworkReviewAnnouncement } from '../routes/homeworkSubmissions'
-import { largestPhoto, type HomeworkFileStore } from '../telegram/fileStore'
+import { largestPhoto, MAX_DOWNLOAD_BYTES, type HomeworkFileStore } from '../telegram/fileStore'
 import { telegramDisplayName } from '../telegram/initData'
 import type { BotContext } from './types'
 import {
@@ -34,8 +37,8 @@ import * as fmt from './format'
 
 /**
  * The bot is for linking, notifications and the family chat with the teacher
- * (any other text a linked chat sends is a message to the teacher), plus homework
- * photos in groups that take them (a photo goes to the newest open homework); everything
+ * (any other text a linked chat sends is a message to the teacher), plus homework photos
+ * and voice notes in groups that take them (each goes to the newest open homework); everything
  * a student (or parent) browses -- lessons, homework, progress, attendance,
  * quizzes -- is in the Telegram Mini App at `miniAppUrl`.
  */
@@ -44,7 +47,7 @@ export type BotOptions = {
   botInfo?: UserFromGetMe
   /** HTTPS base URL of the student Mini App (e.g. https://…/student). */
   miniAppUrl?: string
-  /** Keeps homework photos sent to the chat; without it, photos are refused like other non-text messages. */
+  /** Keeps homework photos and voice notes sent to the chat; without it, they're refused like other non-text messages. */
   fileStore?: HomeworkFileStore
   /** How long to wait for the rest of an album before confirming it (tests use 0). */
   homeworkReceiptDelayMs?: number
@@ -52,6 +55,16 @@ export type BotOptions = {
 
 /** Image files sent "as a file" (uncompressed) count as homework photos too. */
 const IMAGE_MIME_TYPES = new Set(['image/jpeg', 'image/png', 'image/webp'])
+
+type StudentName = { id: string; firstName: string; lastName: string }
+
+/** The student's current group takes homework through the platform. */
+async function takesHomework(studentId: string) {
+  const enabled = await prisma.enrollment.count({
+    where: { studentId, status: 'ACTIVE', group: { homeworkSubmissionEnabled: true } },
+  })
+  return enabled > 0
+}
 
 /** The student a chat may view -- the only identity the bot has (student and parents alike). */
 async function resolveStudent(chatId: string) {
@@ -126,19 +139,19 @@ export function createBot(token: string, options: BotOptions = {}) {
     )
   }
 
-  /** Attaches a photo a linked chat sent to the student's newest open homework. False when their group doesn't take photos. */
-  async function handleHomeworkPhoto(
+  /**
+   * Attaches a file a linked chat sent to the student's newest open homework: `attach` stores it
+   * (captioned with whose it is) and adds it to the submission. False when their group doesn't
+   * take homework through the platform.
+   */
+  async function handleHomeworkFile(
     ctx: BotContext,
     student: { id: string; firstName: string; lastName: string },
-    photo: StoredPhoto,
-    kind: 'photo' | 'document',
+    attach: (store: HomeworkFileStore, lessonId: string, caption: string) => Promise<{ id: string }>,
   ): Promise<boolean> {
     if (!fileStore) return false
     const chatId = String(ctx.chat!.id)
-    const enabled = await prisma.enrollment.count({
-      where: { studentId: student.id, status: 'ACTIVE', group: { homeworkSubmissionEnabled: true } },
-    })
-    if (!enabled) return false
+    if (!(await takesHomework(student.id))) return false
 
     const lesson = await latestOpenHomework(student.id)
     if (!lesson) {
@@ -146,12 +159,16 @@ export function createBot(token: string, options: BotOptions = {}) {
       return true
     }
     try {
-      const stored = await fileStore.keep(photo, homeworkPhotoCaption(student, lesson.date, lesson.topic), kind)
-      const submission = await addHomeworkPhoto(student.id, lesson.id, stored)
+      const submission = await attach(fileStore, lesson.id, homeworkPhotoCaption(student, lesson.date, lesson.topic))
       await ctx.react('👌').catch(() => {})
       scheduleReceipt(chatId, async () => {
-        const photoCount = await prisma.homeworkPhoto.count({ where: { submissionId: submission.id } })
-        await ctx.reply(fmt.formatHomeworkPhotosReceived({ date: lesson.date, topic: lesson.topic, photoCount }), {
+        const counts = await prisma.homeworkSubmission.findUnique({
+          where: { id: submission.id },
+          select: { _count: { select: { photos: true, voices: true } } },
+        })
+        if (!counts) return
+        const receipt = { date: lesson.date, topic: lesson.topic, photoCount: counts._count.photos, voiceCount: counts._count.voices }
+        await ctx.reply(fmt.formatHomeworkReceived(receipt), {
           parse_mode: 'HTML',
           ...(miniAppUrl ? { reply_markup: openHomeworkKeyboard(miniAppUrl, lesson.id) } : {}),
         })
@@ -159,11 +176,25 @@ export function createBot(token: string, options: BotOptions = {}) {
     } catch (err) {
       if (err instanceof ConflictError && err.message === 'TOO_MANY_PHOTOS') {
         scheduleReceipt(chatId, () => ctx.reply(fmt.formatTooManyHomeworkPhotos(MAX_HOMEWORK_PHOTOS)))
+      } else if (err instanceof ConflictError && err.message === 'TOO_MANY_VOICES') {
+        scheduleReceipt(chatId, () => ctx.reply(fmt.formatTooManyHomeworkVoices(MAX_HOMEWORK_VOICES)))
       } else {
         throw err
       }
     }
     return true
+  }
+
+  function handleHomeworkPhoto(ctx: BotContext, student: StudentName, photo: StoredPhoto, kind: 'photo' | 'document') {
+    return handleHomeworkFile(ctx, student, async (store, lessonId, caption) =>
+      addHomeworkPhoto(student.id, lessonId, await store.keep(photo, caption, kind)),
+    )
+  }
+
+  function handleHomeworkVoice(ctx: BotContext, student: StudentName, voice: StoredVoice, kind: 'voice' | 'audio') {
+    return handleHomeworkFile(ctx, student, async (store, lessonId, caption) =>
+      addHomeworkVoice(student.id, lessonId, await store.keepVoice(voice, caption, kind)),
+    )
   }
 
   bot.command(['start', 'menu'], async (ctx) => {
@@ -217,7 +248,24 @@ export function createBot(token: string, options: BotOptions = {}) {
     return next()
   })
 
-  // Voice notes, stickers … (and photos, where homework isn't handed in) aren't relayed -- a linked chat is asked to write instead.
+  // A voice note (or an audio file, e.g. from a recorder app) is speaking homework, in groups that take homework.
+  bot.on(['message:voice', 'message:audio'], async (ctx, next) => {
+    const student = await resolveStudent(String(ctx.chat.id))
+    if (!student) return next()
+    const { voice, audio } = ctx.message
+    const file = voice ?? audio!
+    const stored = { fileId: file.file_id, fileUniqueId: file.file_unique_id, duration: file.duration, size: file.file_size ?? null }
+    // Telegram's bots can't download anything bigger, so it could never be played back.
+    if ((file.file_size ?? 0) > MAX_DOWNLOAD_BYTES) {
+      if (!fileStore || !(await takesHomework(student.id))) return next()
+      await ctx.reply(fmt.formatHomeworkAudioTooBig())
+      return
+    }
+    if (await handleHomeworkVoice(ctx, student, stored, voice ? 'voice' : 'audio')) return
+    return next()
+  })
+
+  // Stickers, videos … (and photos or voice notes, where homework isn't handed in) aren't relayed -- a linked chat is asked to write instead.
   bot.on('message', async (ctx) => {
     if (await resolveStudent(String(ctx.chat.id))) await ctx.reply(fmt.formatChatTextOnly())
   })

@@ -3,10 +3,18 @@ import { ConflictError, ForbiddenError, NotFoundError, tashkentToday, toStoredDa
 
 /** How many photos one student may hand in for one homework. */
 export const MAX_HOMEWORK_PHOTOS = 10
+/** How many voice notes one student may hand in for one homework. */
+export const MAX_HOMEWORK_VOICES = 10
 
-/** What a submission is read with: its photos in the order they were added, and its due date. */
-const SUBMISSION_INCLUDE = {
+/** A submission's photos and voice notes, in the order they were added -- what `submissionView` needs. */
+export const SUBMISSION_FILES = {
   photos: { orderBy: { createdAt: 'asc' } },
+  voices: { orderBy: { createdAt: 'asc' } },
+} satisfies Prisma.HomeworkSubmissionInclude
+
+/** What a submission is read with: its files and its due date. */
+const SUBMISSION_INCLUDE = {
+  ...SUBMISSION_FILES,
   homework: { select: { dueDate: true } },
 } satisfies Prisma.HomeworkSubmissionInclude
 
@@ -16,6 +24,15 @@ export type StoredPhoto = {
   fileUniqueId: string
   width?: number | null
   height?: number | null
+  size?: number | null
+}
+
+/** A voice note already stored on Telegram. */
+export type StoredVoice = {
+  fileId: string
+  fileUniqueId: string
+  /** Seconds. */
+  duration: number
   size?: number | null
 }
 
@@ -35,9 +52,10 @@ type SubmissionWithPhotos = {
   checkedAt: Date | null
   teacherComment: string | null
   photos: Array<{ id: string; width: number | null; height: number | null }>
+  voices: Array<{ id: string; duration: number }>
 }
 
-/** A submission as both apps show it -- photo ids only, never Telegram's file ids. */
+/** A submission as both apps show it -- file ids of ours only, never Telegram's. */
 export function submissionView(submission: SubmissionWithPhotos, dueDate: Date | null) {
   return {
     id: submission.id,
@@ -47,12 +65,13 @@ export function submissionView(submission: SubmissionWithPhotos, dueDate: Date |
     teacherComment: submission.teacherComment,
     late: isLateSubmission(submission.submittedAt, dueDate),
     photos: submission.photos.map((p) => ({ id: p.id, width: p.width, height: p.height })),
+    voices: submission.voices.map((v) => ({ id: v.id, duration: v.duration })),
   }
 }
 
 /**
  * The homework of `lessonSessionId`, if `studentId` may hand it in: they were enrolled in the
- * lesson's group, the group takes photo submissions, and the lesson has homework.
+ * lesson's group, the group takes submissions, and the lesson has homework.
  * "Not found" for lessons that aren't the student's -- nothing to probe.
  */
 export async function submittableHomework(studentId: string, lessonSessionId: string) {
@@ -65,32 +84,48 @@ export async function submittableHomework(studentId: string, lessonSessionId: st
   return { lesson, homework: lesson.homework }
 }
 
-/**
- * Checks a photo may still be added before it is uploaded anywhere: the homework is
- * submittable, not already checked, and has room for another photo.
- */
-export async function assertCanAddHomeworkPhoto(studentId: string, lessonSessionId: string) {
-  const target = await submittableHomework(studentId, lessonSessionId)
-  const submission = await prisma.homeworkSubmission.findUnique({
-    where: { homeworkId_studentId: { homeworkId: target.homework.id, studentId } },
-    include: { _count: { select: { photos: true } } },
-  })
-  if (submission?.status === 'CHECKED') throw new ConflictError('ALREADY_CHECKED')
-  if ((submission?._count.photos ?? 0) >= MAX_HOMEWORK_PHOTOS) throw new ConflictError('TOO_MANY_PHOTOS')
-  return target
+type FileKind = 'photo' | 'voice'
+
+const FILE_LIMITS: Record<FileKind, { max: number; error: string }> = {
+  photo: { max: MAX_HOMEWORK_PHOTOS, error: 'TOO_MANY_PHOTOS' },
+  voice: { max: MAX_HOMEWORK_VOICES, error: 'TOO_MANY_VOICES' },
 }
 
 /**
- * Adds one photo to the student's submission for that lesson's homework (creating it on the
- * first photo). A submission sent back to be redone goes back to the teacher's queue.
+ * Checks a file may still be added before it is stored anywhere: the homework is
+ * submittable, not already checked, and has room for another photo (or voice note).
  */
-export async function addHomeworkPhoto(studentId: string, lessonSessionId: string, photo: StoredPhoto, now = new Date()) {
-  const { homework } = await assertCanAddHomeworkPhoto(studentId, lessonSessionId)
-  const submission = await prisma.homeworkSubmission.upsert({
+async function assertCanAddHomeworkFile(studentId: string, lessonSessionId: string, kind: FileKind) {
+  const target = await submittableHomework(studentId, lessonSessionId)
+  const submission = await prisma.homeworkSubmission.findUnique({
+    where: { homeworkId_studentId: { homeworkId: target.homework.id, studentId } },
+    include: { _count: { select: { photos: true, voices: true } } },
+  })
+  if (submission?.status === 'CHECKED') throw new ConflictError('ALREADY_CHECKED')
+  const count = kind === 'photo' ? submission?._count.photos : submission?._count.voices
+  if ((count ?? 0) >= FILE_LIMITS[kind].max) throw new ConflictError(FILE_LIMITS[kind].error)
+  return target
+}
+
+export const assertCanAddHomeworkPhoto = (studentId: string, lessonSessionId: string) =>
+  assertCanAddHomeworkFile(studentId, lessonSessionId, 'photo')
+
+/**
+ * The student's submission for that lesson's homework, ready for one more file (created on the
+ * first one). A submission sent back to be redone goes back to the teacher's queue.
+ */
+async function openSubmission(studentId: string, lessonSessionId: string, kind: FileKind, now: Date) {
+  const { homework } = await assertCanAddHomeworkFile(studentId, lessonSessionId, kind)
+  return prisma.homeworkSubmission.upsert({
     where: { homeworkId_studentId: { homeworkId: homework.id, studentId } },
     update: { status: 'SUBMITTED', submittedAt: now, checkedAt: null },
     create: { homeworkId: homework.id, studentId, submittedAt: now },
   })
+}
+
+/** Adds one photo to the student's submission for that lesson's homework. */
+export async function addHomeworkPhoto(studentId: string, lessonSessionId: string, photo: StoredPhoto, now = new Date()) {
+  const submission = await openSubmission(studentId, lessonSessionId, 'photo', now)
   await prisma.homeworkPhoto.create({
     data: {
       submissionId: submission.id,
@@ -104,21 +139,55 @@ export async function addHomeworkPhoto(studentId: string, lessonSessionId: strin
   return getHomeworkSubmission(submission.id)
 }
 
-/** Takes one of the student's own photos back out; an emptied submission is removed. Not once it's checked. */
+/** Adds one voice note to the student's submission for that lesson's homework. */
+export async function addHomeworkVoice(studentId: string, lessonSessionId: string, voice: StoredVoice, now = new Date()) {
+  const submission = await openSubmission(studentId, lessonSessionId, 'voice', now)
+  await prisma.homeworkVoice.create({
+    data: {
+      submissionId: submission.id,
+      telegramFileId: voice.fileId,
+      telegramFileUniqueId: voice.fileUniqueId,
+      duration: voice.duration,
+      size: voice.size ?? null,
+    },
+  })
+  return getHomeworkSubmission(submission.id)
+}
+
+const FILE_COUNT = { _count: { select: { photos: true, voices: true } } } as const
+
+/** Removes a file the student took back; the submission goes with its last file. Not once it's checked. */
+async function removeHomeworkFile(
+  file: { submissionId: string; submission: { status: HomeworkSubmissionStatus; _count: { photos: number; voices: number } } } | null,
+  remove: () => Promise<unknown>,
+) {
+  if (!file) throw new NotFoundError('File not found')
+  if (file.submission.status === 'CHECKED') throw new ConflictError('ALREADY_CHECKED')
+
+  if (file.submission._count.photos + file.submission._count.voices <= 1) {
+    await prisma.homeworkSubmission.delete({ where: { id: file.submissionId } })
+    return null
+  }
+  await remove()
+  return getHomeworkSubmission(file.submissionId)
+}
+
+/** Takes one of the student's own photos back out. */
 export async function removeHomeworkPhoto(studentId: string, photoId: string) {
   const photo = await prisma.homeworkPhoto.findFirst({
     where: { id: photoId, submission: { studentId } },
-    include: { submission: { include: { _count: { select: { photos: true } } } } },
+    include: { submission: { include: FILE_COUNT } },
   })
-  if (!photo) throw new NotFoundError('Photo not found')
-  if (photo.submission.status === 'CHECKED') throw new ConflictError('ALREADY_CHECKED')
+  return removeHomeworkFile(photo, () => prisma.homeworkPhoto.delete({ where: { id: photoId } }))
+}
 
-  if (photo.submission._count.photos <= 1) {
-    await prisma.homeworkSubmission.delete({ where: { id: photo.submissionId } })
-    return null
-  }
-  await prisma.homeworkPhoto.delete({ where: { id: photoId } })
-  return getHomeworkSubmission(photo.submissionId)
+/** Takes one of the student's own voice notes back out. */
+export async function removeHomeworkVoice(studentId: string, voiceId: string) {
+  const voice = await prisma.homeworkVoice.findFirst({
+    where: { id: voiceId, submission: { studentId } },
+    include: { submission: { include: FILE_COUNT } },
+  })
+  return removeHomeworkFile(voice, () => prisma.homeworkVoice.delete({ where: { id: voiceId } }))
 }
 
 export function getHomeworkSubmission(id: string) {
@@ -129,9 +198,9 @@ export function getHomeworkSubmission(id: string) {
 }
 
 /**
- * The homework a photo sent straight to the bot is for: the newest homework of the student's
+ * The homework a photo or voice note sent straight to the bot is for: the newest homework of the student's
  * current group that is still open to them (not already checked). Null when the group doesn't
- * take photo submissions or nothing is open.
+ * take submissions or nothing is open.
  */
 export async function latestOpenHomework(studentId: string) {
   const enrollment = await prisma.enrollment.findFirst({

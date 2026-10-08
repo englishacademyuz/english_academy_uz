@@ -58,7 +58,7 @@ export type Group = {
   startDate: string
   /** Monthly course fee in so'm; 0 = not set. */
   monthlyFee: number
-  /** Students may hand in homework as photos through Telegram. */
+  /** Students may hand in homework through the platform -- photos and voice notes, via Telegram. */
   homeworkSubmissionEnabled: boolean
   status: string
   archivedAt?: string | null
@@ -84,7 +84,7 @@ export type LessonMaterial = { id: string; type: LessonMaterialType; content: st
 
 export type HomeworkSubmissionStatus = 'SUBMITTED' | 'CHECKED' | 'RETURNED'
 
-/** One student's photos of one homework, as the teacher reviews them. */
+/** One student's photos and voice notes for one homework, as the teacher reviews them. */
 export type HomeworkSubmission = {
   id: string
   status: HomeworkSubmissionStatus
@@ -94,6 +94,8 @@ export type HomeworkSubmission = {
   /** Handed in after the due date. */
   late: boolean
   photos: Array<{ id: string; width: number | null; height: number | null }>
+  /** Voice notes (speaking homework); `duration` in seconds. */
+  voices: Array<{ id: string; duration: number }>
 }
 
 export type SubmissionStudent = { id: string; firstName: string; lastName: string }

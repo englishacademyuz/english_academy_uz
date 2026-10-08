@@ -18,6 +18,9 @@ function fakeFileStore() {
       uploads.push(options)
       return { fileId, fileUniqueId: `u-${fileId}`, width: 1200, height: 900, size: photo.length }
     },
+    async keepVoice(voice) {
+      return voice
+    },
     async keep(photo) {
       return photo
     },

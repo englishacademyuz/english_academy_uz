@@ -7,14 +7,14 @@ import { DeadlineChip } from '../components/Deadline'
 import { homeworkPreviewText } from '../components/HomeworkImages'
 import { DayBadge, Empty, ErrorState, Loading, Screen, Section } from '../components/kit'
 import { deadlineLabel, homeworkDeadline, timeLeft, urgencyOf, useNow } from '../deadline'
-import { weekdayDate } from '../format'
+import { submissionContents, weekdayDate } from '../format'
 import { richTextToPlain } from '../../lib/richText'
 import type { MiniHomework } from '../types'
 
-/** Where a homework row leads: its hand-in screen where photos are taken, else its lesson. */
+/** Where a homework row leads: its hand-in screen (photos, voice notes), else its lesson. */
 const homeworkLink = (h: MiniHomework) => (h.submissionEnabled ? `/student/homework/${h.lessonId}` : `/student/lessons/${h.lessonId}`)
 
-/** The hand-in state of one homework, for groups that take photos. */
+/** The hand-in state of one homework, for groups that take homework through the platform. */
 function SubmissionChip({ homework }: { homework: MiniHomework }) {
   if (!homework.submissionEnabled) return null
   const s = homework.submission
@@ -24,7 +24,7 @@ function SubmissionChip({ homework }: { homework: MiniHomework }) {
       ? { cls: 'bg-tg-blue-soft text-tg-blue-dark', text: '⭐ Tekshirildi' }
       : s.status === 'RETURNED'
         ? { cls: 'bg-tg-cherry-soft text-tg-cherry', text: '🔁 Qayta ishlash' }
-        : { cls: 'bg-tg-leaf-soft text-tg-leaf-dark', text: `✅ Topshirildi · ${s.photos.length} rasm` }
+        : { cls: 'bg-tg-leaf-soft text-tg-leaf-dark', text: `✅ Topshirildi · ${submissionContents(s)}` }
   return <span className={`self-start rounded-full px-2.5 py-1 text-[13px] font-extrabold ${look.cls}`}>{look.text}</span>
 }
 

@@ -1,11 +1,12 @@
 import { useEffect, useState, type CSSProperties, type ReactNode } from 'react'
 import { useMutation } from '@tanstack/react-query'
-import { Check, ChevronLeft, ChevronRight, Loader2, RotateCcw, RotateCw, X, ZoomIn, ZoomOut } from 'lucide-react'
+import { Check, ChevronLeft, ChevronRight, Loader2, Mic, RotateCcw, RotateCw, X, ZoomIn, ZoomOut } from 'lucide-react'
 import { homeworkSubmissions as submissionsApi } from '../../lib/api'
 import { formatDate, formatTime } from '../../lib/format'
 import { richTextToPlain } from '../../lib/richText'
 import { notifyError, notifySuccess } from '../../lib/toast'
 import type { HomeworkSubmission, HomeworkSubmissionStatus, SubmissionStudent } from '../../lib/types'
+import { VoiceNote } from '../shared/VoiceNote'
 import { Badge, Button } from '../ui'
 
 /** A stored homework photo -- fetched with the login cookie, then shown from memory. */
@@ -55,7 +56,7 @@ export type ReviewItem = {
 }
 
 /**
- * Looks through one student's photos at a time (zoom, rotate, ←/→) and records the verdict:
+ * Looks through one student's photos (zoom, rotate, ←/→) and voice notes at a time, and records the verdict:
  * checked, or sent back to redo with a comment. Moves on to the next unchecked one after.
  */
 export function SubmissionReviewModal({
@@ -92,6 +93,7 @@ export function SubmissionReviewModal({
   }, [photoIndex])
 
   const photos = item?.submission.photos ?? []
+  const voices = item?.submission.voices ?? []
 
   useEffect(() => {
     function onKey(e: KeyboardEvent) {
@@ -127,9 +129,7 @@ export function SubmissionReviewModal({
       {/* Photo pane */}
       <div className="flex min-w-0 grow flex-col">
         <div className="flex items-center justify-between gap-2 px-4 py-3 text-slate-200">
-          <span className="text-sm font-medium">
-            Rasm {photos.length ? photoIndex + 1 : 0} / {photos.length}
-          </span>
+          <span className="text-sm font-medium">{photos.length ? `Rasm ${photoIndex + 1} / ${photos.length}` : 'Rasm yoʻq'}</span>
           <div className="flex items-center gap-1">
             <IconButton label="Chapga burish" onClick={() => setRotation((r) => r - 90)}>
               <RotateCcw className="h-4 w-4" />
@@ -151,6 +151,12 @@ export function SubmissionReviewModal({
             <NavArrow side="left" onClick={() => setPhotoIndex(photoIndex - 1)} />
           )}
           <div className={`flex h-full w-full ${zoomed ? 'overflow-auto' : 'items-center justify-center overflow-hidden'} p-4`}>
+            {!photo && voices.length > 0 && (
+              <span className="flex flex-col items-center gap-2 text-sm text-slate-400">
+                <Mic className="h-8 w-8" />
+                Faqat ovozli xabar yuborilgan — tinglash uchun oʻng tomonga qarang
+              </span>
+            )}
             {photo && (
               <button type="button" onClick={() => setZoomed((z) => !z)} className={zoomed ? 'm-auto cursor-zoom-out' : 'cursor-zoom-in'}>
                 <HomeworkPhoto
@@ -229,6 +235,17 @@ export function SubmissionReviewModal({
             Topshirildi: {formatDate(item.submission.submittedAt)}, {formatTime(item.submission.submittedAt)}
           </p>
         </div>
+
+        {voices.length > 0 && (
+          <div className="space-y-2">
+            <span className="flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-wide text-slate-400">
+              <Mic className="h-3.5 w-3.5" /> Ovozli xabarlar · {voices.length}
+            </span>
+            {voices.map((v) => (
+              <VoiceNote key={v.id} voiceId={v.id} load={submissionsApi.voiceUrl} duration={v.duration} />
+            ))}
+          </div>
+        )}
 
         <label className="block">
           <span className="mb-1 block text-sm font-medium text-slate-700 dark:text-slate-300">Izoh (oʻquvchiga boradi)</span>
