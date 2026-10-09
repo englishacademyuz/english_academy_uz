@@ -17,13 +17,13 @@ export type HomeworkReviewAnnouncement = {
 /** Tells a student's Telegram chats their homework was checked or sent back -- the bot in production, a spy in tests. */
 export type HomeworkReviewNotifier = (chatIds: string[], review: HomeworkReviewAnnouncement) => Promise<void>
 
-/** The caption a homework photo or voice note carries in Telegram -- whose it is and for which lesson. */
+/** The caption a homework photo, voice note or video carries in Telegram -- whose it is and for which lesson. */
 export function homeworkPhotoCaption(student: { firstName: string; lastName: string }, date: Date, topic: string | null) {
   const day = date.toISOString().slice(0, 10)
   return `📝 ${student.firstName} ${student.lastName} · ${day}${topic ? ` · ${topic}` : ''}`
 }
 
-/** Streams a stored photo or voice note back. Its bytes never change, so browsers may keep it. */
+/** Streams a stored photo, voice note or video back. Its bytes never change, so browsers may keep it. */
 export async function sendHomeworkFile(reply: FastifyReply, store: HomeworkFileStore | undefined, fileId: string) {
   if (!store) throw new AppError('File storage is not configured', 503)
   const { body, contentType } = await store.download(fileId)
@@ -196,7 +196,7 @@ export const homeworkSubmissionRoutes: FastifyPluginAsync<{
 
   const ownerTeacher = {
     submission: { select: { homework: { select: { lessonSession: { select: { group: { select: { teacherId: true } } } } } } } },
-  } satisfies Prisma.HomeworkPhotoInclude & Prisma.HomeworkVoiceInclude
+  } satisfies Prisma.HomeworkPhotoInclude & Prisma.HomeworkVoiceInclude & Prisma.HomeworkVideoInclude
 
   app.get('/homework-photos/:id', { preHandler: app.authenticate }, async (request, reply) => {
     const { id } = idParams.parse(request.params)
@@ -220,5 +220,17 @@ export const homeworkSubmissionRoutes: FastifyPluginAsync<{
       ownerTeacherId: voice.submission.homework.lessonSession.group.teacherId,
     })
     return sendHomeworkFile(reply, opts.fileStore, voice.telegramFileId)
+  })
+
+  app.get('/homework-videos/:id', { preHandler: app.authenticate }, async (request, reply) => {
+    const { id } = idParams.parse(request.params)
+    const video = await prisma.homeworkVideo.findUnique({ where: { id }, include: ownerTeacher })
+    if (!video) throw new NotFoundError('Video not found')
+    assertCan(request.actor!, {
+      resource: 'lessonSession',
+      action: 'view',
+      ownerTeacherId: video.submission.homework.lessonSession.group.teacherId,
+    })
+    return sendHomeworkFile(reply, opts.fileStore, video.telegramFileId)
   })
 }

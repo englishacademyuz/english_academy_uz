@@ -1,6 +1,6 @@
 import { GrammyError, InputFile, type Api } from 'grammy'
 import type { PhotoSize } from 'grammy/types'
-import type { StoredPhoto, StoredVoice } from '@tashkurgan/domain'
+import type { StoredPhoto, StoredVideo, StoredVoice } from '@tashkurgan/domain'
 import { AppError } from '@tashkurgan/shared'
 
 /**
@@ -28,7 +28,12 @@ export type HomeworkFileStore = {
    * there is one, the same way as `keep`.
    */
   keepVoice(voice: StoredVoice, caption: string, kind: 'voice' | 'audio'): Promise<StoredVoice>
-  /** The file's bytes again (an image, or a voice note). */
+  /**
+   * Keeps a video someone sent the bot (a round video message, or a regular video) -- copied to
+   * the storage chat when there is one, the same way as `keep`.
+   */
+  keepVideo(video: StoredVideo, caption: string): Promise<StoredVideo>
+  /** The file's bytes again (an image, a voice note or a video). */
   download(fileId: string): Promise<{ body: Buffer; contentType: string }>
 }
 
@@ -53,6 +58,10 @@ const CONTENT_TYPES: Record<string, string> = {
   mp3: 'audio/mpeg',
   m4a: 'audio/mp4',
   wav: 'audio/wav',
+  // Round video messages are always MP4; regular videos nearly always are.
+  mp4: 'video/mp4',
+  mov: 'video/quicktime',
+  webm: 'video/webm',
 }
 
 /** Recently viewed photos, so a teacher flipping back and forth doesn't refetch from Telegram. */
@@ -127,6 +136,18 @@ export function telegramFileStore(api: Api, token: string, storageChatId?: strin
       return { ...voice, fileId: copy.file_id, fileUniqueId: copy.file_unique_id }
     },
 
+    async keepVideo(video, caption) {
+      if (!storageChatId) return video
+      if (!video.round) {
+        const copy = (await api.sendVideo(storageChatId, video.fileId, { caption, disable_notification: true })).video
+        return { ...video, fileId: copy.file_id, fileUniqueId: copy.file_unique_id }
+      }
+      // A round video message can't carry a caption, so whose it is goes in a reply to it.
+      const message = await api.sendVideoNote(storageChatId, video.fileId, { disable_notification: true })
+      await api.sendMessage(storageChatId, caption, { disable_notification: true, reply_parameters: { message_id: message.message_id } })
+      return { ...video, fileId: message.video_note.file_id, fileUniqueId: message.video_note.file_unique_id }
+    },
+
     async download(fileId) {
       const cached = cache.get(fileId)
       if (cached) return cached
@@ -137,7 +158,8 @@ export function telegramFileStore(api: Api, token: string, storageChatId?: strin
       if (!res.ok) throw new Error(`Telegram file download failed: ${res.status}`)
       const extension = file.file_path.split('.').pop()?.toLowerCase() ?? ''
       const result = { body: Buffer.from(await res.arrayBuffer()), contentType: CONTENT_TYPES[extension] ?? 'image/jpeg' }
-      cache.set(fileId, result)
+      // A couple of videos would fill the cache and push out every photo; the browser keeps them instead.
+      if (!result.contentType.startsWith('video/')) cache.set(fileId, result)
       return result
     },
   }

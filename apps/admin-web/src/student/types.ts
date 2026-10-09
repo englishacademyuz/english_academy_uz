@@ -98,7 +98,7 @@ export type MiniHomeworkImage = {
   height: number | null
 }
 
-/** The student's photos and voice notes for one homework: waiting for the teacher, checked, or sent back to redo. */
+/** The student's photos, voice notes and videos for one homework: waiting for the teacher, checked, or sent back to redo. */
 export type MiniSubmission = {
   id: string
   status: 'SUBMITTED' | 'CHECKED' | 'RETURNED'
@@ -110,6 +110,8 @@ export type MiniSubmission = {
   photos: Array<{ id: string; width: number | null; height: number | null }>
   /** `duration` in seconds. */
   voices: Array<{ id: string; duration: number }>
+  /** `round` for a round video message; `duration` in seconds. */
+  videos: Array<{ id: string; duration: number; round: boolean; width: number | null; height: number | null }>
 }
 
 export type MiniHomework = {
@@ -119,7 +121,9 @@ export type MiniHomework = {
   instructions: string
   dueDate: string | null
   images: MiniHomeworkImage[]
-  /** The group takes homework through the platform (photos, voice notes) -- otherwise it's only checked in class. */
+  /** When it stops taking files -- the last of its deadlines; null when it has none. */
+  closesAt: string | null
+  /** The group takes homework through the platform (photos, voice notes, videos) -- otherwise it's only checked in class. */
   submissionEnabled: boolean
   submission: MiniSubmission | null
 }
@@ -128,6 +132,7 @@ export type MiniHomeworkDetail = MiniHomework & {
   group: string
   maxPhotos: number
   maxVoices: number
+  maxVideos: number
   /** A voice note (or photo) sent to the bot now lands on this homework -- it's the newest open one. */
   botTarget: boolean
 }

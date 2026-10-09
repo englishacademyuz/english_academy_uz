@@ -184,19 +184,26 @@ export function formatChatTooLong(max: number): string {
 }
 
 /** Sent once the files a chat just sent are in -- an album gets one receipt, not one per photo. */
-export function formatHomeworkReceived(receipt: { date: Date; topic: string | null; photoCount: number; voiceCount: number }): string {
+export function formatHomeworkReceived(receipt: {
+  date: Date
+  topic: string | null
+  photoCount: number
+  voiceCount: number
+  videoCount: number
+}): string {
   return [
     '📥 <b>Uyga vazifa qabul qilindi</b>',
     `📅 ${formatLessonDay(receipt.date)}${receipt.topic ? ` · ${escapeHtml(receipt.topic)}` : ''}`,
     ...(receipt.photoCount ? [`🖼 Rasmlar: ${receipt.photoCount} ta`] : []),
     ...(receipt.voiceCount ? [`🎤 Ovozli xabarlar: ${receipt.voiceCount} ta`] : []),
+    ...(receipt.videoCount ? [`🎬 Videolar: ${receipt.videoCount} ta`] : []),
     '',
     'Ustoz tekshirgach, natija shu yerga keladi. Yuborganlaringizni ilovada koʻrish yoki oʻchirish mumkin.',
   ].join('\n')
 }
 
 export function formatNoOpenHomework(): string {
-  return "Hozir topshiriladigan uyga vazifa yoʻq 🙂\nRasm va ovozli xabar faqat ustoz bergan vazifa uchun qabul qilinadi."
+  return "Hozir topshiriladigan uyga vazifa yoʻq 🙂\nRasm, ovozli xabar va video faqat ustoz bergan vazifa uchun qabul qilinadi."
 }
 
 export function formatTooManyHomeworkPhotos(max: number): string {
@@ -205,6 +212,25 @@ export function formatTooManyHomeworkPhotos(max: number): string {
 
 export function formatTooManyHomeworkVoices(max: number): string {
   return `Bitta vazifaga koʻpi bilan ${max} ta ovozli xabar yuborish mumkin. Keraksizlarini ilovada oʻchirib, keyin qayta yuboring.`
+}
+
+export function formatTooManyHomeworkVideos(max: number): string {
+  return `Bitta vazifaga koʻpi bilan ${max} ta video yuborish mumkin. Keraksizlarini ilovada oʻchirib, keyin qayta yuboring.`
+}
+
+export function formatHomeworkVideoTooBig(): string {
+  return 'Bu video juda katta (20 MB dan ortiq) 🎬\nQisqaroq video yoki dumaloq video xabar yozib yuboring.'
+}
+
+/** Sent after a sad emoji when a file comes in for homework whose deadline has passed. */
+export function formatHomeworkDeadlinePassed(homework: { date: Date; topic: string | null; closesAt: Date | null }): string {
+  return [
+    '⏰ <b>Topshirish muddati tugagan</b>',
+    `📅 ${formatLessonDay(homework.date)}${homework.topic ? ` · ${escapeHtml(homework.topic)}` : ''}`,
+    ...(homework.closesAt ? [`Muddat: ${formatDeadline(homework.closesAt)} gacha edi`] : []),
+    '',
+    'Afsuski, bu vazifa endi qabul qilinmaydi. Keyingi vazifani oʻz vaqtida topshiring 💪',
+  ].join('\n')
 }
 
 export function formatHomeworkAudioTooBig(): string {

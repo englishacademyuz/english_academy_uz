@@ -8,6 +8,8 @@ The Mini App shrinks a photo to 1600px JPEG (a few hundred KB) before uploading,
 
 Voice notes (speaking homework, added October 2026) are kept the same way: a student records one in the bot chat, the bot posts a copy in the storage channel with `sendVoice` (`sendAudio` for an audio file), and we keep its `file_id` and length in `homework_voices`. A voice note is roughly 100–200 KB a minute. They are not recorded in the Mini App — browsers record in different formats, and Telegram's own mic button is what students already know. Audio files over 20 MB are refused, since the Bot API couldn't download them back. Telegram records Ogg/Opus, which some older Safari versions can't play; the player offers a download there instead.
 
+Videos (October 2026) follow the same path: a round video message (`sendVideoNote`, whose caption goes in a reply since it can't carry one) or a regular video (`sendVideo`), with its `file_id`, length and size in `homework_videos`. Anything over 20 MB is refused for the same reason as audio — a round message is at most a minute and a few MB, a phone video about 2–3 minutes. Videos skip the server's in-memory cache (two would fill it) and are played from an object URL in the browser, so no byte-range support is needed.
+
 Trade-offs accepted: photos depend on Telegram (if the bot token is lost or revoked, the file ids stop working — the storage channel still has every photo, just not linked to rows); Telegram recompresses photos to at most 2560px; the Bot API only downloads files up to 20 MB, far above a homework photo. Moving to object storage (e.g. Cloudflare R2) later only means a different `HomeworkFileStore` (apps/server/src/telegram/fileStore.ts) and a one-off copy of the existing files.
 
 Status: accepted

@@ -84,7 +84,7 @@ export type LessonMaterial = { id: string; type: LessonMaterialType; content: st
 
 export type HomeworkSubmissionStatus = 'SUBMITTED' | 'CHECKED' | 'RETURNED'
 
-/** One student's photos and voice notes for one homework, as the teacher reviews them. */
+/** One student's photos, voice notes and videos for one homework, as the teacher reviews them. */
 export type HomeworkSubmission = {
   id: string
   status: HomeworkSubmissionStatus
@@ -96,7 +96,11 @@ export type HomeworkSubmission = {
   photos: Array<{ id: string; width: number | null; height: number | null }>
   /** Voice notes (speaking homework); `duration` in seconds. */
   voices: Array<{ id: string; duration: number }>
+  /** Videos (round video messages or regular ones); `duration` in seconds. */
+  videos: HomeworkVideoFile[]
 }
+
+export type HomeworkVideoFile = { id: string; duration: number; round: boolean; width: number | null; height: number | null }
 
 export type SubmissionStudent = { id: string; firstName: string; lastName: string }
 

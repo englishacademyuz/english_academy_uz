@@ -1,6 +1,6 @@
 import { afterAll, afterEach, beforeAll, describe, expect, it } from 'vitest'
 import { prisma } from '@tashkurgan/db'
-import { addHomeworkVoice, isLateSubmission } from '@tashkurgan/domain'
+import { addHomeworkPhoto, addHomeworkVideo, addHomeworkVoice, homeworkClosesAt, isLateSubmission, isPastDeadline } from '@tashkurgan/domain'
 import { buildApp } from '../src/app'
 import type { HomeworkReviewAnnouncement } from '../src/routes/homeworkSubmissions'
 import type { HomeworkFileStore } from '../src/telegram/fileStore'
@@ -20,6 +20,9 @@ function fakeFileStore() {
       uploads.push(options)
       return { fileId, fileUniqueId: `u-${fileId}`, width: 800, height: 600, size: photo.length }
     },
+    async keepVideo(video) {
+      return video
+    },
     async keepVoice(voice) {
       return voice
     },
@@ -29,14 +32,16 @@ function fakeFileStore() {
     async download(fileId) {
       const body = files.get(fileId)
       if (!body) throw new Error('no such file')
-      return { body, contentType: fileId.startsWith('voice-') ? 'audio/ogg' : 'image/jpeg' }
+      const contentType = fileId.startsWith('voice-') ? 'audio/ogg' : fileId.startsWith('video-') ? 'video/mp4' : 'image/jpeg'
+      return { body, contentType }
     },
   }
   return { store, uploads, files }
 }
 
-/** Voice notes only come in through the bot (tested there); here one is put straight in place. */
+/** Voice notes and videos only come in through the bot (tested there); here they are put straight in place. */
 const OGG = Buffer.from('OggS fake opus bytes')
+const MP4 = Buffer.from('....ftypisom fake video bytes')
 
 describe('isLateSubmission', () => {
   const due = new Date('2026-10-05T00:00:00Z')
@@ -47,6 +52,26 @@ describe('isLateSubmission', () => {
     // 00:30 on 6 October in Tashkent is still 5 October in UTC.
     expect(isLateSubmission(new Date('2026-10-05T19:30:00Z'), due)).toBe(true)
     expect(isLateSubmission(new Date('2026-10-09T10:00:00Z'), null)).toBe(false)
+  })
+})
+
+describe('homeworkClosesAt', () => {
+  it('closes at the last deadline: the due day (23:59 in Tashkent) or a later picture task', () => {
+    const dueDate = new Date('2026-10-05T00:00:00Z')
+    expect(homeworkClosesAt({ dueDate, images: [] })).toEqual(new Date('2026-10-05T18:59:00Z'))
+    const later = new Date('2026-10-07T13:00:00Z')
+    expect(homeworkClosesAt({ dueDate, images: [{ dueDate: later }, { dueDate: null }] })).toEqual(later)
+    expect(homeworkClosesAt({ dueDate: null, images: [{ dueDate: null }] })).toBeNull()
+  })
+
+  it('keeps a submission sent back to be redone open past the deadline', () => {
+    const closesAt = new Date('2026-10-05T18:59:00Z')
+    const after = new Date('2026-10-06T08:00:00Z')
+    expect(isPastDeadline(closesAt, 'SUBMITTED', after)).toBe(true)
+    expect(isPastDeadline(closesAt, null, after)).toBe(true)
+    expect(isPastDeadline(closesAt, 'RETURNED', after)).toBe(false)
+    expect(isPastDeadline(closesAt, null, new Date('2026-10-05T18:00:00Z'))).toBe(false)
+    expect(isPastDeadline(null, null, after)).toBe(false)
   })
 })
 
@@ -76,7 +101,8 @@ describe('homework photo submissions', () => {
     await prisma.$disconnect()
   })
 
-  async function seedLesson({ enabled = true } = {}) {
+  // Due far ahead unless a test says otherwise -- a passed deadline closes the homework.
+  async function seedLesson({ enabled = true, dueDate = new Date('2099-12-31') }: { enabled?: boolean; dueDate?: Date | null } = {}) {
     const seeded = await seedAcademicStructure()
     await prisma.group.update({ where: { id: seeded.group.id }, data: { homeworkSubmissionEnabled: enabled } })
     await prisma.enrollment.updateMany({ data: { startDate: new Date('2026-09-01') } })
@@ -87,7 +113,7 @@ describe('homework photo submissions', () => {
         teacherId: seeded.group.teacherId,
         date: new Date('2026-09-20'),
         topic: 'Present Simple',
-        homework: { create: { instructions: 'Ex. 4, page 12', dueDate: new Date('2026-09-22') } },
+        homework: { create: { instructions: 'Ex. 4, page 12', dueDate } },
       },
     })
     return { ...seeded, lesson }
@@ -210,8 +236,7 @@ describe('homework photo submissions', () => {
     const roster = await app.inject({ method: 'GET', url: `/sessions/${lesson.id}/homework-submissions`, headers: { cookie } })
     expect(roster.statusCode).toBe(200)
     const [row] = roster.json().students
-    // Due on 22 September, handed in today -- late, but accepted.
-    expect(row).toMatchObject({ student: { id: student.id }, submission: { status: 'SUBMITTED', late: true } })
+    expect(row).toMatchObject({ student: { id: student.id }, submission: { status: 'SUBMITTED', late: false } })
 
     const sentBack = await app.inject({
       method: 'POST',
@@ -238,6 +263,76 @@ describe('homework photo submissions', () => {
     const late = await upload(lesson.id)
     expect(late.statusCode).toBe(409)
     expect(late.json().error).toBe('ALREADY_CHECKED')
+  })
+
+  it('closes the homework once its deadline has passed, unless the teacher sends it back', async () => {
+    const { lesson, student } = await seedLesson({ dueDate: new Date('2026-09-22') })
+
+    const detail = await app.inject({ method: 'GET', url: `/student/homework/${lesson.id}`, headers: miniAppAuth(700) })
+    expect(detail.json().closesAt).toBe('2026-09-22T18:59:00.000Z')
+    const refused = await upload(lesson.id)
+    expect(refused.statusCode).toBe(409)
+    expect(refused.json().error).toBe('DEADLINE_PASSED')
+    expect(uploads).toHaveLength(0)
+
+    // Handed in on time (the day before)...
+    const onTime = await addHomeworkPhoto(student.id, lesson.id, { fileId: 'p-1', fileUniqueId: 'u-p-1' }, new Date('2026-09-21T10:00:00Z'))
+    await addHomeworkPhoto(student.id, lesson.id, { fileId: 'p-2', fileUniqueId: 'u-p-2' }, new Date('2026-09-21T10:01:00Z'))
+    // ...but can't be taken back out once it's over.
+    const remove = await app.inject({ method: 'DELETE', url: `/student/homework-photos/${onTime.photos[0].id}`, headers: miniAppAuth(700) })
+    expect(remove.statusCode).toBe(409)
+    expect(remove.json().error).toBe('DEADLINE_PASSED')
+
+    // Sent back to be redone: open again, and the fix is late.
+    const cookie = await loginAs(app, 'teacher1', 'teacher12345')
+    await app.inject({ method: 'POST', url: `/homework-submissions/${onTime.id}/review`, headers: { cookie }, payload: { status: 'RETURNED' } })
+    const redone = await upload(lesson.id)
+    expect(redone.statusCode).toBe(200)
+    expect(redone.json()).toMatchObject({ status: 'SUBMITTED', late: true })
+  })
+
+  it('keeps a homework open until its last picture task is due', async () => {
+    const { lesson, group } = await seedLesson({ dueDate: new Date('2026-09-22') })
+    const homework = await prisma.homework.findUniqueOrThrow({ where: { lessonSessionId: lesson.id } })
+    await prisma.homeworkImage.create({
+      data: { groupId: group.id, homeworkId: homework.id, telegramFileId: 'img', telegramFileUniqueId: 'u-img', dueDate: new Date('2099-01-01T10:00:00Z') },
+    })
+    expect((await upload(lesson.id)).statusCode).toBe(200)
+  })
+
+  it('plays videos back to the student and the teacher, and lets the student take them out', async () => {
+    const { lesson, student } = await seedLesson()
+    files.set('video-1', MP4)
+    await addHomeworkVideo(student.id, lesson.id, { fileId: 'video-1', fileUniqueId: 'u-video-1', round: true, duration: 40, width: 384, height: 384 })
+    await upload(lesson.id)
+
+    const one = await app.inject({ method: 'GET', url: `/student/homework/${lesson.id}`, headers: miniAppAuth(700) })
+    expect(one.json()).toMatchObject({ maxVideos: 5, submission: { videos: [{ duration: 40, round: true, width: 384 }] } })
+    const videoId = one.json().submission.videos[0].id
+
+    const played = await app.inject({ method: 'GET', url: `/student/homework-videos/${videoId}`, headers: miniAppAuth(700) })
+    expect(played.headers['content-type']).toBe('video/mp4')
+    expect(played.rawPayload.equals(MP4)).toBe(true)
+
+    const cookie = await loginAs(app, 'teacher1', 'teacher12345')
+    const roster = await app.inject({ method: 'GET', url: `/sessions/${lesson.id}/homework-submissions`, headers: { cookie } })
+    expect(roster.json().students[0].submission.videos).toEqual([{ id: videoId, duration: 40, round: true, width: 384, height: 384 }])
+    expect((await app.inject({ method: 'GET', url: `/homework-videos/${videoId}`, headers: { cookie } })).statusCode).toBe(200)
+
+    const other = await prisma.student.create({ data: { firstName: 'Vali', lastName: 'B', dob: new Date('2012-01-01') } })
+    await prisma.telegramLink.create({ data: { chatId: '701', studentId: other.id } })
+    const peek = await app.inject({ method: 'GET', url: `/student/homework-videos/${videoId}`, headers: miniAppAuth(701) })
+    expect(peek.statusCode).toBe(404)
+
+    const removed = await app.inject({ method: 'DELETE', url: `/student/homework-videos/${videoId}`, headers: miniAppAuth(700) })
+    expect(removed.json().submission).toMatchObject({ videos: [], photos: [{}] })
+  })
+
+  it('caps videos per homework', async () => {
+    const { lesson, student } = await seedLesson()
+    const video = (i: number | string) => ({ fileId: `video-${i}`, fileUniqueId: `u-${i}`, round: false, duration: 30 })
+    for (let i = 0; i < 5; i++) await addHomeworkVideo(student.id, lesson.id, video(i))
+    await expect(addHomeworkVideo(student.id, lesson.id, video('x'))).rejects.toThrow('TOO_MANY_VIDEOS')
   })
 
   it('lists the group feed by topic and date, and keeps other teachers out', async () => {

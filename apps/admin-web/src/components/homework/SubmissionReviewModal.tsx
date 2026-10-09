@@ -1,11 +1,12 @@
 import { useEffect, useState, type CSSProperties, type ReactNode } from 'react'
 import { useMutation } from '@tanstack/react-query'
-import { Check, ChevronLeft, ChevronRight, Loader2, Mic, RotateCcw, RotateCw, X, ZoomIn, ZoomOut } from 'lucide-react'
+import { Check, ChevronLeft, ChevronRight, Loader2, Mic, RotateCcw, RotateCw, Video, X, ZoomIn, ZoomOut } from 'lucide-react'
 import { homeworkSubmissions as submissionsApi } from '../../lib/api'
 import { formatDate, formatTime } from '../../lib/format'
 import { richTextToPlain } from '../../lib/richText'
 import { notifyError, notifySuccess } from '../../lib/toast'
 import type { HomeworkSubmission, HomeworkSubmissionStatus, SubmissionStudent } from '../../lib/types'
+import { HomeworkVideo } from '../shared/HomeworkVideo'
 import { VoiceNote } from '../shared/VoiceNote'
 import { Badge, Button } from '../ui'
 
@@ -94,6 +95,7 @@ export function SubmissionReviewModal({
 
   const photos = item?.submission.photos ?? []
   const voices = item?.submission.voices ?? []
+  const videos = item?.submission.videos ?? []
 
   useEffect(() => {
     function onKey(e: KeyboardEvent) {
@@ -151,10 +153,10 @@ export function SubmissionReviewModal({
             <NavArrow side="left" onClick={() => setPhotoIndex(photoIndex - 1)} />
           )}
           <div className={`flex h-full w-full ${zoomed ? 'overflow-auto' : 'items-center justify-center overflow-hidden'} p-4`}>
-            {!photo && voices.length > 0 && (
+            {!photo && (voices.length > 0 || videos.length > 0) && (
               <span className="flex flex-col items-center gap-2 text-sm text-slate-400">
-                <Mic className="h-8 w-8" />
-                Faqat ovozli xabar yuborilgan — tinglash uchun oʻng tomonga qarang
+                {videos.length > 0 ? <Video className="h-8 w-8" /> : <Mic className="h-8 w-8" />}
+                Rasm yuborilmagan — {videos.length > 0 ? 'video' : 'ovozli xabar'} oʻng tomonda
               </span>
             )}
             {photo && (
@@ -243,6 +245,17 @@ export function SubmissionReviewModal({
             </span>
             {voices.map((v) => (
               <VoiceNote key={v.id} voiceId={v.id} load={submissionsApi.voiceUrl} duration={v.duration} />
+            ))}
+          </div>
+        )}
+
+        {videos.length > 0 && (
+          <div className="space-y-2">
+            <span className="flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-wide text-slate-400">
+              <Video className="h-3.5 w-3.5" /> Videolar · {videos.length}
+            </span>
+            {videos.map((v) => (
+              <HomeworkVideo key={v.id} videoId={v.id} load={submissionsApi.videoUrl} duration={v.duration} round={v.round} className="mx-auto" />
             ))}
           </div>
         )}

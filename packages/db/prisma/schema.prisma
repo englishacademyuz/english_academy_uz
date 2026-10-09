@@ -413,7 +413,7 @@ model HomeworkImage {
   @@map("homework_images")
 }
 
-// One student's photos and voice notes for one Homework. The files themselves
+// One student's photos, voice notes and videos for one Homework. The files themselves
 // live on Telegram's servers -- only their file ids are stored here (see
 // apps/server/src/telegram/fileStore.ts).
 model HomeworkSubmission {
@@ -423,7 +423,7 @@ model HomeworkSubmission {
   studentId      String
   student        Student                  @relation(fields: [studentId], references: [id], onDelete: Cascade)
   status         HomeworkSubmissionStatus @default(SUBMITTED)
-  // When a photo or voice note was last added -- "late" compares it with the homework's due date.
+  // When a file was last added -- "late" compares it with the homework's due date.
   submittedAt    DateTime                 @default(now())
   checkedAt      DateTime?
   teacherComment String?
@@ -432,6 +432,7 @@ model HomeworkSubmission {
 
   photos HomeworkPhoto[]
   voices HomeworkVoice[]
+  videos HomeworkVideo[]
 
   @@unique([homeworkId, studentId])
   @@index([submittedAt])
@@ -469,6 +470,29 @@ model HomeworkVoice {
 
   @@index([submissionId])
   @@map("homework_voices")
+}
+
+// A video handed in through the bot -- a round video message or a regular video
+// of the student speaking. Only videos up to 20 MB are taken: what the Bot API
+// can download back for playback.
+model HomeworkVideo {
+  id                   String             @id @default(cuid())
+  submissionId         String
+  submission           HomeworkSubmission @relation(fields: [submissionId], references: [id], onDelete: Cascade)
+  // Telegram's id for downloading the file again (see HomeworkSubmission).
+  telegramFileId       String
+  telegramFileUniqueId String
+  // A round video message (Telegram's "video note") rather than a regular video.
+  round                Boolean            @default(false)
+  // Length in seconds, as Telegram reports it.
+  duration             Int
+  width                Int?
+  height               Int?
+  size                 Int?
+  createdAt            DateTime           @default(now())
+
+  @@index([submissionId])
+  @@map("homework_videos")
 }
 
 // A completion status is always required; `score` is optional and, when

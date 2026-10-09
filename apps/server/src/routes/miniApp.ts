@@ -6,10 +6,13 @@ import {
   answerQuizQuestion,
   assertCanAddHomeworkPhoto,
   HOMEWORK_WITH_IMAGES,
+  homeworkClosesAt,
   MAX_HOMEWORK_PHOTOS,
+  MAX_HOMEWORK_VIDEOS,
   MAX_HOMEWORK_VOICES,
   latestOpenHomework,
   removeHomeworkPhoto,
+  removeHomeworkVideo,
   removeHomeworkVoice,
   SUBMISSION_FILES,
   submissionView,
@@ -233,6 +236,7 @@ export const miniAppRoutes: FastifyPluginAsync<{ fileStore?: HomeworkFileStore }
             instructions: lesson.homework.instructions,
             dueDate: lesson.homework.dueDate,
             images: lesson.homework.images,
+            closesAt: homeworkClosesAt(lesson.homework),
             submissionEnabled: lesson.group.homeworkSubmissionEnabled,
             submission: lesson.homework.submissions[0]
               ? submissionView(lesson.homework.submissions[0], lesson.homework.dueDate)
@@ -272,6 +276,7 @@ export const miniAppRoutes: FastifyPluginAsync<{ fileStore?: HomeworkFileStore }
         date: l.date,
         topic: l.topic,
         ...homework,
+        closesAt: homeworkClosesAt(homework),
         submissionEnabled,
         submission: submissions[0] ? submissionView(submissions[0], homework.dueDate) : null,
       }
@@ -307,9 +312,12 @@ export const miniAppRoutes: FastifyPluginAsync<{ fileStore?: HomeworkFileStore }
       instructions: lesson.homework.instructions,
       dueDate: lesson.homework.dueDate,
       images: lesson.homework.images,
+      // After this, nothing more is taken (unless the teacher sends it back to be redone).
+      closesAt: homeworkClosesAt(lesson.homework),
       submissionEnabled: lesson.group.homeworkSubmissionEnabled,
       maxPhotos: MAX_HOMEWORK_PHOTOS,
       maxVoices: MAX_HOMEWORK_VOICES,
+      maxVideos: MAX_HOMEWORK_VIDEOS,
       // What the student sends the bot now lands on this homework.
       botTarget: newestOpen?.id === lesson.id,
       submission: submission ? submissionView(submission, lesson.homework.dueDate) : null,
@@ -360,6 +368,21 @@ export const miniAppRoutes: FastifyPluginAsync<{ fileStore?: HomeworkFileStore }
     const voice = await prisma.homeworkVoice.findFirst({ where: { id, submission: { studentId: student.id } } })
     if (!voice) throw new NotFoundError('Voice note not found')
     return sendHomeworkFile(reply, opts.fileStore, voice.telegramFileId)
+  })
+
+  // Videos come in through the bot only, like voice notes.
+  app.delete('/student/homework-videos/:id', async (request) => {
+    const { id } = idParams.parse(request.params)
+    const submission = await removeHomeworkVideo(me(request).id, id)
+    return { submission: submission && submissionView(submission, submission.homework.dueDate) }
+  })
+
+  app.get('/student/homework-videos/:id', async (request, reply) => {
+    const student = me(request)
+    const { id } = idParams.parse(request.params)
+    const video = await prisma.homeworkVideo.findFirst({ where: { id, submission: { studentId: student.id } } })
+    if (!video) throw new NotFoundError('Video not found')
+    return sendHomeworkFile(reply, opts.fileStore, video.telegramFileId)
   })
 
   // A picture the teacher gave with homework -- for any group the student is or was in.

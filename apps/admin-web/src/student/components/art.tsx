@@ -135,7 +135,24 @@ export function HomeworkScene() {
   )
 }
 
-const NEUTRAL_FACE = { face: '#DEE2E6', mouth: 'M8.5 15h7', mouthFill: 'none' }
+/** A sad face with a tear and an alarm clock -- the "too late" sticker when a homework's deadline has passed. */
+export function LateSticker({ size = 120 }: { size?: number }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 120 120" fill="none" aria-hidden className="shrink-0">
+      <circle cx="56" cy="64" r="44" fill="#FFD43B" stroke="#1F2A44" strokeWidth="5" />
+      <path d="M36 50l10 4M76 50l-10 4" stroke="#1F2A44" strokeWidth="4.5" strokeLinecap="round" />
+      <circle cx="43" cy="62" r="4.5" fill="#1F2A44" />
+      <circle cx="69" cy="62" r="4.5" fill="#1F2A44" />
+      <path d="M40 86c9-10 23-10 32 0" stroke="#1F2A44" strokeWidth="5" strokeLinecap="round" />
+      <path d="M41 70c-4 7-6 11-6 14a6 6 0 0 0 12 0c0-3-2-7-6-14Z" fill="#74C0FC" stroke="#1F2A44" strokeWidth="3" strokeLinejoin="round" />
+      <circle cx="96" cy="26" r="18" fill="#fff" stroke="#1F2A44" strokeWidth="4.5" />
+      <path d="M96 16v10l6 5" stroke="#FF6B6B" strokeWidth="4" strokeLinecap="round" strokeLinejoin="round" />
+      <path d="M82 9l-5-4M110 9l5-4" stroke="#1F2A44" strokeWidth="4" strokeLinecap="round" />
+    </svg>
+  )
+}
+
+const NEUTRAL_FACE ={ face: '#DEE2E6', mouth: 'M8.5 15h7', mouthFill: 'none' }
 
 /** A smiley whose face and mouth say the grade at a glance; `null` is a calm grey "no mark yet". */
 export function GradeFace({ grade, size = 54 }: { grade: Grade | null; size?: number }) {

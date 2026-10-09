@@ -75,11 +75,12 @@ export function initialsOf(first: string, last?: string): string {
   return `${parts[0]?.[0] ?? ''}${parts[1]?.[0] ?? ''}`.toUpperCase()
 }
 
-/** What a submission holds, for its "handed in" chip: "2 rasm", "1 ovozli", "2 rasm · 1 ovozli". */
-export function submissionContents(submission: { photos: unknown[]; voices: unknown[] }): string {
+/** What a submission holds, for its "handed in" chip: "2 rasm", "1 ovozli", "2 rasm · 1 video". */
+export function submissionContents(submission: { photos: unknown[]; voices: unknown[]; videos: unknown[] }): string {
   const parts = [
     ...(submission.photos.length ? [`${submission.photos.length} rasm`] : []),
     ...(submission.voices.length ? [`${submission.voices.length} ovozli`] : []),
+    ...(submission.videos.length ? [`${submission.videos.length} video`] : []),
   ]
   return parts.join(' · ')
 }

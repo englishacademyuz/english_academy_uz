@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react'
 import { useInfiniteQuery, useQuery, useQueryClient } from '@tanstack/react-query'
-import { Camera, ChevronLeft, ChevronRight, Mic, Search } from 'lucide-react'
+import { Camera, ChevronLeft, ChevronRight, Mic, Search, Video } from 'lucide-react'
 import { homeworkSubmissions as submissionsApi, sessions as sessionsApi } from '../../lib/api'
 import { formatDate, formatTime, toDateInputValue } from '../../lib/format'
 import { richTextToPlain } from '../../lib/richText'
@@ -289,7 +289,7 @@ function AllSubmissions({ group, onReviewed }: { group: Group; onReviewed: () =>
                           <HomeworkPhoto photoId={item.photos[0].id} className="h-full w-full object-cover" />
                         ) : (
                           <span className="flex h-full w-full items-center justify-center bg-slate-100 text-slate-400 dark:bg-slate-800">
-                            <Mic className="h-5 w-5" />
+                            {item.videos.length > 0 ? <Video className="h-5 w-5" /> : <Mic className="h-5 w-5" />}
                           </span>
                         )}
                         {item.photos.length > 1 && (
@@ -305,6 +305,7 @@ function AllSubmissions({ group, onReviewed }: { group: Group; onReviewed: () =>
                         <span className="block truncate text-xs text-slate-500 dark:text-slate-400">
                           {formatDate(item.lesson.date)} dars · {item.lesson.topic || 'Mavzusiz'}
                           {item.voices.length > 0 && ` · 🎤 ${item.voices.length}`}
+                          {item.videos.length > 0 && ` · 🎬 ${item.videos.length}`}
                         </span>
                       </span>
                       <span className="hidden shrink-0 text-xs text-slate-400 sm:block">{formatTime(item.submittedAt)}</span>
@@ -349,6 +350,11 @@ function Thumbnails({ submission, onOpen }: { submission: HomeworkSubmission; on
       {submission.voices.length > 0 && (
         <span className="ml-1 flex items-center gap-0.5 text-xs font-medium text-slate-500" title="Ovozli xabarlar">
           <Mic className="h-3.5 w-3.5" /> {submission.voices.length}
+        </span>
+      )}
+      {submission.videos.length > 0 && (
+        <span className="ml-1 flex items-center gap-0.5 text-xs font-medium text-slate-500" title="Videolar">
+          <Video className="h-3.5 w-3.5" /> {submission.videos.length}
         </span>
       )}
     </button>

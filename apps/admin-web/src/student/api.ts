@@ -64,7 +64,7 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
 }
 
 /**
- * Object URLs of homework photos and voice notes already fetched, by path -- an image or audio
+ * Object URLs of homework photos, voice notes and videos already fetched, by path -- an image, audio or video
  * tag can't send the Telegram auth header itself.
  */
 const photoUrls = new Map<string, Promise<string>>()
@@ -95,6 +95,9 @@ export const miniApi = {
   deleteHomeworkVoice: (voiceId: string) =>
     request<{ submission: MiniSubmission | null }>(`/student/homework-voices/${voiceId}`, { method: 'DELETE' }),
   homeworkVoiceUrl: (voiceId: string) => fileUrl(`/student/homework-voices/${voiceId}`),
+  deleteHomeworkVideo: (videoId: string) =>
+    request<{ submission: MiniSubmission | null }>(`/student/homework-videos/${videoId}`, { method: 'DELETE' }),
+  homeworkVideoUrl: (videoId: string) => fileUrl(`/student/homework-videos/${videoId}`),
   homeworkImageUrl: (imageId: string) => {
     let url = imageUrls.get(imageId)
     if (!url) {

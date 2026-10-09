@@ -2,12 +2,14 @@ import { useEffect, useRef, useState, type ReactNode } from 'react'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { useParams } from 'react-router-dom'
 import { Camera, ImagePlus, Loader2, Mic, RotateCw, Trash2, X } from 'lucide-react'
+import { HomeworkVideo } from '../../components/shared/HomeworkVideo'
 import { RichText } from '../../components/shared/RichText'
 import { VoiceNote } from '../../components/shared/VoiceNote'
 import { shrinkPhoto } from '../../lib/image'
 import { isRichTextEmpty } from '../../lib/richText'
 import { MiniApiError, miniApi } from '../api'
-import { CheckIcon, ClockIcon } from '../components/art'
+import { CheckIcon, ClockIcon, LateSticker } from '../components/art'
+import { useNow } from '../deadline'
 import { HomeworkImages } from '../components/HomeworkImages'
 import { ErrorState, Loading, Screen, Section } from '../components/kit'
 import { formatDateTime, weekdayDate, weekdayDayMonth } from '../format'
@@ -20,11 +22,14 @@ const UPLOAD_ERRORS: Record<string, string> = {
   TOO_MANY_PHOTOS: 'Rasmlar soni chegaraga yetdi',
   ALREADY_CHECKED: 'Ustoz bu vazifani allaqachon tekshirgan',
   SUBMISSIONS_DISABLED: 'Bu guruhda vazifa platforma orqali topshirilmaydi',
+  DEADLINE_PASSED: 'Topshirish muddati tugagan',
 }
 
 /**
- * Topshirish: the homework, the student's photos and voice notes for it, and the camera/gallery
- * buttons to add photos. Voice notes are recorded in the bot chat (Telegram's own mic button).
+ * Topshirish: the homework, the student's photos, voice notes and videos for it, and the camera/gallery
+ * buttons to add photos. Voice notes and videos are recorded in the bot chat (Telegram's own buttons).
+ * Once the deadline has passed, nothing more can be added or taken out -- unless the teacher sent
+ * it back to be redone.
  */
 export function HomeworkSubmitPage() {
   const { id } = useParams<{ id: string }>()
@@ -38,6 +43,7 @@ export function HomeworkSubmitPage() {
   const queue = useRef<Pending[]>([])
   const uploading = useRef(false)
   const back = { to: '/student/homework', label: 'Vazifalar' }
+  const now = useNow()
 
   function setSubmission(submission: MiniSubmission | null) {
     queryClient.setQueryData<MiniHomeworkDetail>(queryKey, (old) => old && { ...old, submission })
@@ -57,6 +63,8 @@ export function HomeworkSubmitPage() {
         setPending((list) => list.filter((p) => p.key !== item.key))
       } catch (err) {
         const code = err instanceof MiniApiError ? err.message : ''
+        // The page was open as the deadline passed -- show it closed.
+        if (code === 'DEADLINE_PASSED') homework.refetch()
         setError(UPLOAD_ERRORS[code] ?? (err instanceof TypeError ? 'Internet aloqasini tekshiring' : 'Rasmni yuborib boʻlmadi'))
         const failed = item
         setPending((list) => list.map((p) => (p.key === failed.key ? { ...p, failed: true } : p)))
@@ -110,6 +118,15 @@ export function HomeworkSubmitPage() {
     }
   }
 
+  async function removeVideo(videoId: string) {
+    try {
+      const { submission } = await miniApi.deleteHomeworkVideo(videoId)
+      setSubmission(submission)
+    } catch {
+      setError('Videoni oʻchirib boʻlmadi')
+    }
+  }
+
   if (homework.isLoading) return <Loading />
   if (homework.error || !homework.data) {
     return (
@@ -119,11 +136,14 @@ export function HomeworkSubmitPage() {
     )
   }
 
-  const { date, topic, group, instructions, dueDate, images, submissionEnabled, submission, maxPhotos, maxVoices, botTarget } =
+  const { date, topic, group, instructions, dueDate, images, closesAt, submissionEnabled, submission, maxPhotos, maxVoices, maxVideos, botTarget } =
     homework.data
   const photos = submission?.photos ?? []
   const voices = submission?.voices ?? []
-  const open = submissionEnabled && submission?.status !== 'CHECKED'
+  const videos = submission?.videos ?? []
+  // A submission sent back to be redone stays open past the deadline.
+  const late = !!closesAt && now.getTime() >= new Date(closesAt).getTime() && submission?.status !== 'RETURNED'
+  const open = submissionEnabled && submission?.status !== 'CHECKED' && !late
   const room = maxPhotos - photos.length - pending.length
   const canAdd = open && room > 0
 
@@ -155,6 +175,7 @@ export function HomeworkSubmitPage() {
       ) : (
         <>
           <StatusBanner submission={submission} />
+          {late && submission?.status !== 'CHECKED' && <DeadlinePassed closesAt={new Date(closesAt!)} handedIn={!!submission} />}
 
           <Section title={`Rasmlarim${photos.length ? ` · ${photos.length}` : ''}`}>
             {photos.length === 0 && pending.length === 0 ? (
@@ -240,6 +261,42 @@ export function HomeworkSubmitPage() {
               {open && <VoiceHint botTarget={botTarget} full={voices.length >= maxVoices} />}
             </Section>
           )}
+
+          {(videos.length > 0 || open) && (
+            <Section title={`Videolarim${videos.length ? ` · ${videos.length}` : ''}`}>
+              {videos.length > 0 && (
+                <div className="flex flex-col gap-2">
+                  {videos.map((video) => (
+                    <div key={video.id} className="flex flex-col items-center gap-2 rounded-[18px] border-2 border-tg-line bg-white p-2">
+                      <HomeworkVideo
+                        videoId={video.id}
+                        load={miniApi.homeworkVideoUrl}
+                        duration={video.duration}
+                        round={video.round}
+                        labelClassName="text-tg-muted font-bold"
+                      />
+                      {open && (
+                        <button
+                          type="button"
+                          onClick={() => removeVideo(video.id)}
+                          className="flex min-h-10 items-center gap-1.5 rounded-full px-4 text-[14px] font-extrabold text-tg-cherry active:bg-tg-cherry-soft"
+                        >
+                          <Trash2 className="h-4 w-4" strokeWidth={2.4} /> Oʻchirish
+                        </button>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              )}
+              {open && (
+                <p className="mt-2 text-center text-[13px] font-bold text-tg-faint">
+                  {videos.length >= maxVideos
+                    ? 'Videolar soni chegaraga yetdi.'
+                    : `Gapirayotganingizni videoga olib (yoki dumaloq video xabar) botga yuboring 🎬 Koʻpi bilan ${maxVideos} ta, har biri 20 MB gacha.`}
+                </p>
+              )}
+            </Section>
+          )}
         </>
       )}
 
@@ -249,10 +306,26 @@ export function HomeworkSubmitPage() {
           index={viewing}
           onIndex={setViewing}
           onClose={() => setViewing(null)}
-          onDelete={submission?.status === 'CHECKED' ? undefined : remove}
+          onDelete={open ? remove : undefined}
         />
       )}
     </Screen>
+  )
+}
+
+/** Too late: the deadline has passed, so the buttons are gone -- said with a sad sticker. */
+function DeadlinePassed({ closesAt, handedIn }: { closesAt: Date; handedIn: boolean }) {
+  return (
+    <section className="flex flex-col items-center gap-2 rounded-[26px] border-[3px] border-tg-cherry bg-tg-cherry-soft px-4 py-5 text-center">
+      <LateSticker size={112} />
+      <span className="font-tg-display text-xl font-semibold leading-tight text-tg-cherry">Muddat oʻtib ketdi</span>
+      <span className="text-[14px] font-bold text-tg-muted">Muddat: {formatDateTime(closesAt.toISOString())} gacha edi</span>
+      <p className="text-[15px] font-bold text-tg-body">
+        {handedIn
+          ? 'Topshirganlaringiz ustozga yetib bordi. Endi yangi narsa qoʻshib yoki oʻchirib boʻlmaydi.'
+          : 'Afsuski, bu vazifa endi qabul qilinmaydi. Keyingisini oʻz vaqtida topshiring 💪'}
+      </p>
+    </section>
   )
 }
 

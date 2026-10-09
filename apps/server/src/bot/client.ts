@@ -3,15 +3,19 @@ import type { UserFromGetMe } from 'grammy/types'
 import { prisma } from '@tashkurgan/db'
 import {
   addHomeworkPhoto,
+  addHomeworkVideo,
   addHomeworkVoice,
   CHAT_MESSAGE_MAX_LENGTH,
+  homeworkClosesAt,
   latestOpenHomework,
   looksLikeLinkingCode,
   MAX_HOMEWORK_PHOTOS,
+  MAX_HOMEWORK_VIDEOS,
   MAX_HOMEWORK_VOICES,
   postFamilyMessage,
   redeemLinkingCode,
   type StoredPhoto,
+  type StoredVideo,
   type StoredVoice,
 } from '@tashkurgan/domain'
 import { ConflictError, NotFoundError } from '@tashkurgan/shared'
@@ -37,8 +41,8 @@ import * as fmt from './format'
 
 /**
  * The bot is for linking, notifications and the family chat with the teacher
- * (any other text a linked chat sends is a message to the teacher), plus homework photos
- * and voice notes in groups that take them (each goes to the newest open homework); everything
+ * (any other text a linked chat sends is a message to the teacher), plus homework photos,
+ * voice notes and videos in groups that take them (each goes to the newest open homework); everything
  * a student (or parent) browses -- lessons, homework, progress, attendance,
  * quizzes -- is in the Telegram Mini App at `miniAppUrl`.
  */
@@ -47,7 +51,7 @@ export type BotOptions = {
   botInfo?: UserFromGetMe
   /** HTTPS base URL of the student Mini App (e.g. https://…/student). */
   miniAppUrl?: string
-  /** Keeps homework photos and voice notes sent to the chat; without it, they're refused like other non-text messages. */
+  /** Keeps homework photos, voice notes and videos sent to the chat; without it, they're refused like other non-text messages. */
   fileStore?: HomeworkFileStore
   /** How long to wait for the rest of an album before confirming it (tests use 0). */
   homeworkReceiptDelayMs?: number
@@ -164,10 +168,16 @@ export function createBot(token: string, options: BotOptions = {}) {
       scheduleReceipt(chatId, async () => {
         const counts = await prisma.homeworkSubmission.findUnique({
           where: { id: submission.id },
-          select: { _count: { select: { photos: true, voices: true } } },
+          select: { _count: { select: { photos: true, voices: true, videos: true } } },
         })
         if (!counts) return
-        const receipt = { date: lesson.date, topic: lesson.topic, photoCount: counts._count.photos, voiceCount: counts._count.voices }
+        const receipt = {
+          date: lesson.date,
+          topic: lesson.topic,
+          photoCount: counts._count.photos,
+          voiceCount: counts._count.voices,
+          videoCount: counts._count.videos,
+        }
         await ctx.reply(fmt.formatHomeworkReceived(receipt), {
           parse_mode: 'HTML',
           ...(miniAppUrl ? { reply_markup: openHomeworkKeyboard(miniAppUrl, lesson.id) } : {}),
@@ -178,6 +188,15 @@ export function createBot(token: string, options: BotOptions = {}) {
         scheduleReceipt(chatId, () => ctx.reply(fmt.formatTooManyHomeworkPhotos(MAX_HOMEWORK_PHOTOS)))
       } else if (err instanceof ConflictError && err.message === 'TOO_MANY_VOICES') {
         scheduleReceipt(chatId, () => ctx.reply(fmt.formatTooManyHomeworkVoices(MAX_HOMEWORK_VOICES)))
+      } else if (err instanceof ConflictError && err.message === 'TOO_MANY_VIDEOS') {
+        scheduleReceipt(chatId, () => ctx.reply(fmt.formatTooManyHomeworkVideos(MAX_HOMEWORK_VIDEOS)))
+      } else if (err instanceof ConflictError && err.message === 'DEADLINE_PASSED') {
+        // A lone emoji first -- Telegram shows it big and animated, like a sticker.
+        const closesAt = homeworkClosesAt(lesson.homework!)
+        scheduleReceipt(chatId, async () => {
+          await ctx.reply('😔')
+          await ctx.reply(fmt.formatHomeworkDeadlinePassed({ date: lesson.date, topic: lesson.topic, closesAt }), { parse_mode: 'HTML' })
+        })
       } else {
         throw err
       }
@@ -194,6 +213,12 @@ export function createBot(token: string, options: BotOptions = {}) {
   function handleHomeworkVoice(ctx: BotContext, student: StudentName, voice: StoredVoice, kind: 'voice' | 'audio') {
     return handleHomeworkFile(ctx, student, async (store, lessonId, caption) =>
       addHomeworkVoice(student.id, lessonId, await store.keepVoice(voice, caption, kind)),
+    )
+  }
+
+  function handleHomeworkVideo(ctx: BotContext, student: StudentName, video: StoredVideo) {
+    return handleHomeworkFile(ctx, student, async (store, lessonId, caption) =>
+      addHomeworkVideo(student.id, lessonId, await store.keepVideo(video, caption)),
     )
   }
 
@@ -265,7 +290,32 @@ export function createBot(token: string, options: BotOptions = {}) {
     return next()
   })
 
-  // Stickers, videos … (and photos or voice notes, where homework isn't handed in) aren't relayed -- a linked chat is asked to write instead.
+  // A video -- a round video message or a regular one -- is speaking homework too.
+  bot.on(['message:video_note', 'message:video'], async (ctx, next) => {
+    const student = await resolveStudent(String(ctx.chat.id))
+    if (!student) return next()
+    const { video_note: note, video } = ctx.message
+    const file = note ?? video!
+    const stored: StoredVideo = {
+      fileId: file.file_id,
+      fileUniqueId: file.file_unique_id,
+      round: !!note,
+      duration: file.duration,
+      width: note ? note.length : video!.width,
+      height: note ? note.length : video!.height,
+      size: file.file_size ?? null,
+    }
+    // Telegram's bots can't download anything bigger, so it could never be played back.
+    if ((file.file_size ?? 0) > MAX_DOWNLOAD_BYTES) {
+      if (!fileStore || !(await takesHomework(student.id))) return next()
+      await ctx.reply(fmt.formatHomeworkVideoTooBig())
+      return
+    }
+    if (await handleHomeworkVideo(ctx, student, stored)) return
+    return next()
+  })
+
+  // Stickers, files … (and photos, voice notes or videos, where homework isn't handed in) aren't relayed -- a linked chat is asked to write instead.
   bot.on('message', async (ctx) => {
     if (await resolveStudent(String(ctx.chat.id))) await ctx.reply(fmt.formatChatTextOnly())
   })

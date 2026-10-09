@@ -296,7 +296,7 @@ export const quizzes = {
   close: (id: string) => post<QuizDetail>(`/quizzes/${id}/close`),
 }
 
-/** Object URLs of homework photos and voice notes already fetched this session, by path -- they never change. */
+/** Object URLs of homework photos, voice notes and videos already fetched this session, by path -- they never change. */
 const photoUrls = new Map<string, Promise<string>>()
 
 export const homeworkSubmissions = {
@@ -317,6 +317,7 @@ export const homeworkSubmissions = {
     post<HomeworkSubmission>(`/homework-submissions/${id}/review`, { status, comment: comment ?? null }),
   photoUrl: (photoId: string) => submissionFileUrl(`/homework-photos/${photoId}`),
   voiceUrl: (voiceId: string) => submissionFileUrl(`/homework-voices/${voiceId}`),
+  videoUrl: (videoId: string) => submissionFileUrl(`/homework-videos/${videoId}`),
 }
 
 function submissionFileUrl(path: string) {

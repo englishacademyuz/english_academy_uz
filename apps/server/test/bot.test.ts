@@ -251,6 +251,7 @@ describe('telegram bot', () => {
     },
     keep: async (photo) => photo,
     keepVoice: async (voice) => voice,
+    keepVideo: async (video) => video,
     download: async () => {
       throw new Error('not used by the bot')
     },
@@ -305,6 +306,75 @@ describe('telegram bot', () => {
     await bot.handleUpdate(voiceUpdate(671, 'voice-b'))
     expect(sentText(calls, 'faqat matnli')).toBe(true)
     expect(await prisma.homeworkVoice.count()).toBe(0)
+  })
+
+  function videoUpdate(chatId: number, fileId: string, { round = false, fileSize = 3_000_000 } = {}) {
+    const file = { file_id: fileId, file_unique_id: `${fileId}-u`, duration: 55, file_size: fileSize }
+    return {
+      update_id: nextUpdateId++,
+      message: {
+        message_id: nextUpdateId,
+        date: Math.floor(Date.now() / 1000),
+        chat: { id: chatId, type: 'private' as const, first_name: 'Test' },
+        from: { id: chatId, is_bot: false, first_name: 'Test' },
+        ...(round ? { video_note: { ...file, length: 384 } } : { video: { ...file, width: 720, height: 1280, mime_type: 'video/mp4' } }),
+      },
+    }
+  }
+
+  async function seedSpeakingHomework(chatId: string, dueDate: Date | null = null) {
+    const { group, student } = await seedAcademicStructure()
+    await prisma.group.update({ where: { id: group.id }, data: { homeworkSubmissionEnabled: true } })
+    await prisma.telegramLink.create({ data: { chatId, studentId: student.id } })
+    await prisma.lessonSession.create({
+      data: {
+        groupId: group.id,
+        teacherId: group.teacherId,
+        date: new Date('2026-09-27'),
+        topic: 'Speaking',
+        homework: { create: { instructions: 'Talk about your day', dueDate } },
+      },
+    })
+  }
+
+  it('hands round and regular videos in for the newest homework', async () => {
+    await seedSpeakingHomework('672')
+    const { bot, calls } = buildBot({ fileStore: keepingStore, homeworkReceiptDelayMs: 0 })
+    await bot.init()
+    await bot.handleUpdate(videoUpdate(672, 'video-round', { round: true }))
+    await bot.handleUpdate(videoUpdate(672, 'video-flat'))
+    await new Promise((resolve) => setTimeout(resolve, 50))
+
+    const videos = await prisma.homeworkVideo.findMany({ orderBy: { createdAt: 'asc' } })
+    expect(videos).toMatchObject([
+      { telegramFileId: 'video-round', round: true, duration: 55, width: 384 },
+      { telegramFileId: 'video-flat', round: false, width: 720, height: 1280 },
+    ])
+    const receipt = calls.filter((c) => c.method === 'sendMessage' && String(c.payload.text).includes('qabul qilindi')).at(-1)!
+    expect(String(receipt.payload.text)).toContain('Videolar: 2 ta')
+
+    // Too big for the Bot API to download back -- refused, not stored.
+    await bot.handleUpdate(videoUpdate(672, 'video-huge', { fileSize: 40 * 1024 * 1024 }))
+    expect(sentText(calls, '20 MB')).toBe(true)
+    expect(await prisma.homeworkVideo.count()).toBe(2)
+  })
+
+  it('turns files away with a sad face once the deadline has passed', async () => {
+    await seedSpeakingHomework('673', new Date('2026-09-28'))
+    // A real (short) wait for the rest of the album, so its files get one answer.
+    const { bot, calls } = buildBot({ fileStore: keepingStore, homeworkReceiptDelayMs: 300 })
+    await bot.init()
+    await bot.handleUpdate(videoUpdate(673, 'video-late', { round: true }))
+    await bot.handleUpdate(photoUpdate(673, 'photo-late'))
+    await new Promise((resolve) => setTimeout(resolve, 600))
+
+    expect(await prisma.homeworkSubmission.count()).toBe(0)
+    expect(sentText(calls, '😔')).toBe(true)
+    expect(sentText(calls, 'muddati tugagan')).toBe(true)
+    // Due 28 September, by 23:59 in Tashkent.
+    expect(sentText(calls, '28.09.2026 23:59')).toBe(true)
+    // An album gets one answer, not one per file.
+    expect(calls.filter((c) => c.method === 'sendMessage' && c.payload.text === '😔')).toHaveLength(1)
   })
 
   it("hands photos in for the newest homework in groups that take them, with one receipt per album", async () => {
