@@ -18,6 +18,7 @@ import {
   submissionView,
   familyUnreadCount,
   calculateAttendanceRate,
+  chooseChatStudent,
   getGroupLeaderboard,
   getPaymentReminder,
   getFamilyThread,
@@ -26,6 +27,7 @@ import {
   placesByPoints,
   postFamilyMessage,
   startQuizAttempt,
+  studentChatIds,
   sumPoints,
   toPercentage,
   upcomingReschedules,
@@ -89,6 +91,35 @@ export const miniAppRoutes: FastifyPluginAsync<{ fileStore?: HomeworkFileStore }
   app.addContentTypeParser(['image/jpeg', 'image/png', 'image/webp'], { parseAs: 'buffer' }, (_request, body, done) =>
     done(null, body),
   )
+
+  // Whose account to open: siblings sharing a phone each have their own, and the app asks every time it opens.
+  app.get('/student/accounts', async (request) => {
+    const students = request.studentChoices!
+    const enrollments = await prisma.enrollment.findMany({
+      where: { studentId: { in: students.map((s) => s.id) }, status: 'ACTIVE' },
+      select: { studentId: true, group: { select: { name: true, level: { select: { color: true } } } } },
+      orderBy: { startDate: 'desc' },
+    })
+    return {
+      current: me(request).id,
+      accounts: students.map((s) => {
+        const enrollment = enrollments.find((e) => e.studentId === s.id)
+        return {
+          id: s.id,
+          firstName: s.firstName,
+          lastName: s.lastName,
+          group: enrollment ? { name: enrollment.group.name, levelColor: enrollment.group.level.color } : null,
+        }
+      }),
+    }
+  })
+
+  // The account just opened -- the bot hands this chat's homework and messages to them too, from now on.
+  app.post('/student/accounts/:id/choose', async (request) => {
+    const { id } = idParams.parse(request.params)
+    const student = await chooseChatStudent(String(request.telegramUser!.id), id)
+    return { id: student.id }
+  })
 
   // Bosh sahifa: everything the home screen needs in one call.
   app.get('/student/home', async (request) => {
@@ -501,7 +532,7 @@ export const miniAppRoutes: FastifyPluginAsync<{ fileStore?: HomeworkFileStore }
     const [enrollment, points, linkedAccounts] = await Promise.all([
       activeEnrollment(student.id),
       prisma.pointTransaction.findMany({ where: { studentId: student.id }, select: { points: true } }),
-      prisma.telegramLink.count({ where: { studentId: student.id } }),
+      studentChatIds(student.id).then((chats) => chats.length),
     ])
     return {
       student: {

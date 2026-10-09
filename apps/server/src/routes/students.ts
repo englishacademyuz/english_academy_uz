@@ -1,7 +1,16 @@
 import type { FastifyPluginAsync } from 'fastify'
 import { z } from 'zod'
 import { prisma } from '@tashkurgan/db'
-import { assertCan, deleteStudent, getStudentOverview, issueLinkingCode, listStudentsWithStats } from '@tashkurgan/domain'
+import {
+  assertCan,
+  deleteStudent,
+  getFamily,
+  getStudentOverview,
+  issueLinkingCode,
+  listStudentsWithStats,
+  tieStudents,
+  untieStudent,
+} from '@tashkurgan/domain'
 import { NotFoundError, tashkentToday, toStoredDate } from '@tashkurgan/shared'
 
 const age = z.number().int().min(1).max(100)
@@ -38,6 +47,7 @@ const querySchema = z.object({
 })
 
 const paramsSchema = z.object({ id: z.string() })
+const tieSchema = z.object({ studentId: z.string().min(1) })
 
 export const studentRoutes: FastifyPluginAsync = async (app) => {
   app.post('/', { preHandler: app.authenticate }, async (request) => {
@@ -87,6 +97,27 @@ export const studentRoutes: FastifyPluginAsync = async (app) => {
     assertCan(request.actor!, { resource: 'student', action: 'view' })
     const { id } = paramsSchema.parse(request.params)
     return getStudentOverview(id)
+  })
+
+  // Siblings who share one phone: tied together, one chat opens all of them (see identity/family.ts).
+  app.get('/:id/family', { preHandler: app.authenticate }, async (request) => {
+    assertCan(request.actor!, { resource: 'student', action: 'view' })
+    const { id } = paramsSchema.parse(request.params)
+    return getFamily(id)
+  })
+
+  app.post('/:id/family', { preHandler: app.authenticate }, async (request) => {
+    assertCan(request.actor!, { resource: 'student', action: 'manage' })
+    const { id } = paramsSchema.parse(request.params)
+    const { studentId } = tieSchema.parse(request.body)
+    return tieStudents(id, studentId)
+  })
+
+  app.delete('/:id/family', { preHandler: app.authenticate }, async (request) => {
+    assertCan(request.actor!, { resource: 'student', action: 'manage' })
+    const { id } = paramsSchema.parse(request.params)
+    await untieStudent(id)
+    return { ok: true }
   })
 
   app.post('/:id/linking-code', { preHandler: app.authenticate }, async (request) => {

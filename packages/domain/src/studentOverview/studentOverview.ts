@@ -1,5 +1,6 @@
 import { prisma } from '@tashkurgan/db'
 import { NotFoundError } from '@tashkurgan/shared'
+import { studentChatIds } from '../identity/family'
 import { calculateAttendanceRate } from '../attendance/attendance'
 import { computeOutstanding, getPaymentReminder } from '../payment/payment'
 import { sumPoints } from '../points/points'
@@ -25,7 +26,7 @@ export async function getStudentOverview(studentId: string) {
         },
         orderBy: { startDate: 'desc' },
       }),
-      prisma.telegramLink.count({ where: { studentId } }),
+      studentChatIds(studentId).then((chats) => chats.length),
       prisma.attendance.findMany({
         where: { studentId },
         include: { lessonSession: { include: { group: true } } },

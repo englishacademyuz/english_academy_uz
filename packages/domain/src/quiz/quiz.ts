@@ -1,5 +1,6 @@
 import { prisma, type Prisma } from '@tashkurgan/db'
 import { ConflictError, NotFoundError, ValidationError, roundPoints } from '@tashkurgan/shared'
+import { groupRecipients } from '../identity/family'
 
 const MIN_OPTIONS = 2
 const MAX_OPTIONS = 6
@@ -111,7 +112,7 @@ export async function deleteQuizDraft(quizId: string) {
 
 /**
  * Freezes the quiz and opens it until `deadline`. Returns the Telegram chats
- * to notify: every chat linked to a student actively enrolled in the group.
+ * to notify: every chat of a student actively enrolled in the group.
  */
 export async function sendQuiz(quizId: string, deadline: Date, now = new Date()) {
   if (deadline <= now) throw new ValidationError('The deadline must be in the future')
@@ -125,11 +126,7 @@ export async function sendQuiz(quizId: string, deadline: Date, now = new Date())
     })
   })
 
-  const links = await prisma.telegramLink.findMany({
-    where: { student: { enrollments: { some: { groupId: quiz.lessonSession.groupId, status: 'ACTIVE' } } } },
-    select: { chatId: true },
-  })
-  return { quiz, chatIds: links.map((l) => l.chatId) }
+  return { quiz, recipients: await groupRecipients(quiz.lessonSession.groupId) }
 }
 
 /** Closes a sent quiz now (by moving its deadline) and scores any unfinished attempts. */

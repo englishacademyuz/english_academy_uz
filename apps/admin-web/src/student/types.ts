@@ -30,6 +30,18 @@ export type MiniProgressSnapshot = {
   points: number
 }
 
+/** The students this phone may open -- more than one when siblings share it. */
+export type MiniAccounts = {
+  /** The one the phone chose last (the bot takes its homework and messages for them). */
+  current: string
+  accounts: Array<{
+    id: string
+    firstName: string
+    lastName: string
+    group: { name: string; levelColor: string } | null
+  }>
+}
+
 export type MiniHome = {
   student: { firstName: string; lastName: string }
   group: GroupSummary | null

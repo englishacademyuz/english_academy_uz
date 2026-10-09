@@ -1,13 +1,14 @@
 import { useMemo, useState } from 'react'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { Link } from 'react-router-dom'
-import { ArrowDown, ArrowUp, Cake, Plus, Search, Trophy, UserX, X } from 'lucide-react'
+import { ArrowDown, ArrowUp, Cake, Plus, Search, Smartphone, Trophy, UserX, X } from 'lucide-react'
 import { students as studentsApi } from '../lib/api'
 import { ageFrom, initials, studentStatusLabel, studentStatusTone } from '../lib/format'
 import { levelStyles } from '../lib/levelColor'
 import type { Student, StudentListItem, StudentStatus } from '../lib/types'
 import { AssignGroupModal } from '../components/student/AssignGroupModal'
 import { StudentFormModal } from '../components/student/StudentFormModal'
+import { FamilyModal } from '../components/student/FamilyModal'
 import { PaymentReminderButton } from '../components/shared/PaymentReminderButton'
 import { AbsenceNoticeButton } from '../components/shared/AbsenceNoticeButton'
 import { Badge, Button, Card, EmptyState, Input, PageHeader, Select, Spinner } from '../components/ui'
@@ -77,6 +78,7 @@ export function StudentsPage() {
   const [showCreate, setShowCreate] = useState(false)
   // Set right after creation, so the new student can be put into a group straight away.
   const [assigning, setAssigning] = useState<Student | null>(null)
+  const [tying, setTying] = useState<StudentListItem | null>(null)
   const queryClient = useQueryClient()
 
   // One fetch of everyone -- status counts, group options and filtering are all client-side.
@@ -87,6 +89,13 @@ export function StudentsPage() {
     const counts = new Map<string, number>()
     for (const s of all) counts.set(s.status, (counts.get(s.status) ?? 0) + 1)
     return counts
+  }, [all])
+
+  // Siblings tied to one phone, by family -- shown under each one's name.
+  const families = useMemo(() => {
+    const byFamily = new Map<string, StudentListItem[]>()
+    for (const s of all) if (s.familyId) byFamily.set(s.familyId, [...(byFamily.get(s.familyId) ?? []), s])
+    return byFamily
   }, [all])
 
   const groupOptions = useMemo(() => {
@@ -225,7 +234,12 @@ export function StudentsPage() {
               </thead>
               <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
                 {visible.map((student) => (
-                  <StudentRow key={student.id} student={student} />
+                  <StudentRow
+                    key={student.id}
+                    student={student}
+                    siblings={(student.familyId ? families.get(student.familyId) ?? [] : []).filter((s) => s.id !== student.id)}
+                    onTie={() => setTying(student)}
+                  />
                 ))}
               </tbody>
             </table>
@@ -248,6 +262,7 @@ export function StudentsPage() {
       )}
 
       {assigning && <AssignGroupModal student={assigning} onClose={() => setAssigning(null)} />}
+      {tying && <FamilyModal student={tying} all={all} onClose={() => setTying(null)} />}
     </div>
   )
 }
@@ -284,7 +299,15 @@ function SortHeader({
   )
 }
 
-function StudentRow({ student }: { student: StudentListItem }) {
+function StudentRow({
+  student,
+  siblings,
+  onTie,
+}: {
+  student: StudentListItem
+  siblings: StudentListItem[]
+  onTie: () => void
+}) {
   const age = ageFrom(student.dob)
   const primary = student.groups[0]
   const accent = levelStyles(primary?.level.color)
@@ -314,6 +337,18 @@ function StudentRow({ student }: { student: StudentListItem }) {
             </span>
           </span>
         </Link>
+        <button
+          onClick={onTie}
+          title="Bitta qurilmadagi aka-uka, opa-singillar"
+          className={`mt-1 ml-12 inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[11px] font-medium transition-colors ${
+            siblings.length
+              ? 'bg-violet-50 text-violet-700 hover:bg-violet-100 dark:bg-violet-500/10 dark:text-violet-300'
+              : 'text-slate-400 opacity-0 hover:bg-slate-100 hover:text-slate-600 group-hover:opacity-100 focus:opacity-100 dark:hover:bg-slate-800'
+          }`}
+        >
+          <Smartphone className="h-3 w-3" />
+          {siblings.length ? `${siblings.map((s) => s.firstName).join(', ')} bilan bir qurilmada` : 'Bir qurilmaga bogʻlash'}
+        </button>
       </td>
       <td className="px-3 py-2.5">
         {student.groups.length === 0 ? (

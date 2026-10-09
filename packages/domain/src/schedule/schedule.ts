@@ -100,15 +100,6 @@ export async function upcomingReschedules(groupId: string, now: Date = new Date(
   })
 }
 
-/** Every Telegram chat (student or parent) linked to a student currently in the group. */
-export async function groupChatIds(groupId: string): Promise<string[]> {
-  const links = await prisma.telegramLink.findMany({
-    where: { student: { enrollments: { some: { groupId, status: 'ACTIVE' } } } },
-    select: { chatId: true },
-  })
-  return links.map((l) => l.chatId)
-}
-
 export async function markRescheduleNotified(id: string, at: Date = new Date()) {
   return prisma.lessonReschedule.update({ where: { id }, data: { notifiedAt: at } })
 }

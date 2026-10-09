@@ -1,6 +1,6 @@
 import { afterAll, afterEach, beforeAll, describe, expect, it } from 'vitest'
 import { prisma } from '@tashkurgan/db'
-import { finalizeExpiredAttempts } from '@tashkurgan/domain'
+import { finalizeExpiredAttempts, type Recipient } from '@tashkurgan/domain'
 import { buildApp } from '../src/app'
 import type { QuizAnnouncement } from '../src/routes/quizzes'
 import { TEST_BOT_TOKEN, createTeacherUser, loginAs, miniAppAuth, resetDb, seedAcademicStructure } from './helpers'
@@ -21,13 +21,13 @@ const QUIZ_BODY = {
 
 describe('quizzes', () => {
   let app: Awaited<ReturnType<typeof buildApp>>
-  const announcements: Array<{ chatIds: string[]; quiz: QuizAnnouncement }> = []
+  const announcements: Array<{ chatIds: string[]; recipients: Recipient[]; quiz: QuizAnnouncement }> = []
 
   beforeAll(async () => {
     app = await buildApp({
       telegramBotToken: TEST_BOT_TOKEN,
-      quizNotifier: async (chatIds, quiz) => {
-        announcements.push({ chatIds, quiz })
+      quizNotifier: async (recipients, quiz) => {
+        announcements.push({ chatIds: recipients.map((r) => r.chatId), recipients, quiz })
       },
     })
   })

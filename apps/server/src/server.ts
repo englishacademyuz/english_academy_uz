@@ -26,9 +26,9 @@ const bot = config.telegramBotToken
   : null
 
 const app = await buildApp({
-  quizNotifier: bot ? (chatIds, quiz) => announceQuiz(bot, config.miniAppUrl, chatIds, quiz) : undefined,
+  quizNotifier: bot ? (recipients, quiz) => announceQuiz(bot, config.miniAppUrl, recipients, quiz) : undefined,
   lessonChangeNotifier: bot
-    ? (chatIds, change) => announceLessonChange(bot, config.miniAppUrl, chatIds, change)
+    ? (recipients, change) => announceLessonChange(bot, config.miniAppUrl, recipients, change)
     : undefined,
   paymentReminderNotifier: bot
     ? (chatIds, reminder) => announcePaymentReminder(bot, config.miniAppUrl, chatIds, reminder)

@@ -32,7 +32,14 @@ export type Student = {
   /** The day they joined -- their own monthly payment day. */
   joinedAt: string
   paymentRemindedAt?: string | null
+  /** Set when tied with siblings who share one phone. */
+  familyId?: string | null
   enrollments?: Enrollment[]
+}
+
+export type StudentFamily = {
+  familyId: string | null
+  students: Array<{ id: string; firstName: string; lastName: string; status: StudentStatus }>
 }
 
 /** A payment that is coming up (within 3 days) or overdue -- see @tashkurgan/shared/billing. */

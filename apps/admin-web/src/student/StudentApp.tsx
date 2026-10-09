@@ -1,7 +1,7 @@
-import { useEffect } from 'react'
+import { useEffect, useState } from 'react'
 import { NavLink, Navigate, Route, Routes, useLocation, useNavigate } from 'react-router-dom'
-import { useQuery } from '@tanstack/react-query'
-import { MiniApiError, miniApi } from './api'
+import { useQuery, useQueryClient } from '@tanstack/react-query'
+import { MiniApiError, chooseStudent, miniApi, whenAccountUnavailable } from './api'
 import { initData, webApp } from './telegram'
 import { BookIcon, CalendarIcon, HomeIcon, UserIcon } from './components/art'
 import { Loading } from './components/kit'
@@ -15,6 +15,7 @@ import { ProfilePage } from './pages/ProfilePage'
 import { QuizzesPage } from './pages/QuizzesPage'
 import { QuizPage } from './pages/QuizPage'
 import { ChatPage } from './pages/ChatPage'
+import { AccountPickerPage } from './pages/AccountPickerPage'
 import './student.css'
 
 const NAV = [
@@ -120,9 +121,31 @@ export function StudentApp() {
   useTelegramBackButton()
   const hasInitData = initData() !== ''
 
-  // The home call doubles as the "who am I" check: it tells us whether this
-  // Telegram account is linked before any section renders.
-  const gate = useQuery({ queryKey: ['mini', 'home'], queryFn: miniApi.home, enabled: hasInitData })
+  // The "who am I" check: whether this Telegram account is linked, and to whom -- siblings
+  // sharing a phone each have an account, and the app asks whose to open before anything renders.
+  // (Kept apart from the ['mini', …] data, which is dropped when the account changes.)
+  const gate = useQuery({ queryKey: ['mini-accounts'], queryFn: miniApi.accounts, enabled: hasInitData })
+  const queryClient = useQueryClient()
+  const [chosen, setChosen] = useState<string | null>(null)
+  const refetchGate = gate.refetch
+
+  function choose(id: string | null) {
+    chooseStudent(id)
+    queryClient.removeQueries({ queryKey: ['mini'] })
+    setChosen(id)
+    // The bot then takes this phone's homework and messages for them too.
+    if (id) miniApi.chooseAccount(id).catch(() => {})
+  }
+
+  // Untied while the app was open: back to the question.
+  useEffect(() => {
+    whenAccountUnavailable(() => {
+      chooseStudent(null)
+      setChosen(null)
+      refetchGate()
+    })
+    return () => whenAccountUnavailable(null)
+  }, [refetchGate])
 
   if (!hasInitData) {
     return (
@@ -152,6 +175,10 @@ export function StudentApp() {
     )
   }
   if (gate.isLoading) return <Loading />
+  const accounts = gate.data?.accounts ?? []
+  if (accounts.length > 1 && !(chosen && accounts.some((a) => a.id === chosen))) {
+    return <AccountPickerPage accounts={accounts} onChoose={choose} />
+  }
 
   return (
     <div className="mx-auto min-h-screen max-w-lg bg-tg-cream pb-28 font-tg-body text-tg-ink">

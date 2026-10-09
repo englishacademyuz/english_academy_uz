@@ -27,8 +27,12 @@ The student-facing app inside Telegram, where a Student (or a parent, seeing the
 _Avoid_: Student bot (for the browsing interface), web app
 
 **TelegramLink**:
-One Telegram chat bound to the Student it may view — created by redeeming that Student's LinkingCode. A Student has any number (their own chat, each parent's); a chat views one Student at a time and is re-pointed by sending another Student's code. The bot never distinguishes a student's chat from a parent's.
+One Telegram chat bound to the Student it may view — created by redeeming that Student's LinkingCode. A Student has any number (their own chat, each parent's); a chat views one Student at a time and is re-pointed by sending another Student's code. The bot never distinguishes a student's chat from a parent's. When the Student is in a Family, the chat may open every sibling too, and its Student is the one it chose last.
 _Avoid_: Parent account, bot user
+
+**Family**:
+Siblings tied together by an admin because they share one phone. A chat linked to any of them opens all of them: the Mini App asks whose account to open every time it opens, and each one's notifications reach all the family's chats with their name on them. See [ADR-0007](./docs/adr/0007-siblings-share-one-phone.md).
+_Avoid_: Household, parent group
 
 ### Academic Structure
 

@@ -1,6 +1,7 @@
 export * from './identity/actor'
 export * from './identity/authorize'
 export * from './identity/linkingCode'
+export * from './identity/family'
 export * from './enrollment/enrollment'
 export * from './lessonSession/lessonSession'
 export * from './attendance/attendance'

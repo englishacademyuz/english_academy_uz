@@ -32,6 +32,7 @@ import type {
   QuizInput,
   QuizSummary,
   Student,
+  StudentFamily,
   StudentListItem,
   StudentOverview,
   StudentStatus,
@@ -133,6 +134,10 @@ export const students = {
   issueLinkingCode: (id: string) => post<{ code: string }>(`/students/${id}/linking-code`),
   /** Deletes the student with all their records -- can't be undone. */
   remove: (id: string) => del<{ ok: true }>(`/students/${id}`),
+  /** Siblings who share one phone: a chat linked to any of them opens all of them. */
+  family: (id: string) => get<StudentFamily>(`/students/${id}/family`),
+  tie: (id: string, studentId: string) => post<StudentFamily>(`/students/${id}/family`, { studentId }),
+  untie: (id: string) => del<{ ok: true }>(`/students/${id}/family`),
 }
 
 export type GroupInput = {

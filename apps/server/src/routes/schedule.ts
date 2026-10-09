@@ -4,10 +4,11 @@ import { prisma, type LessonReschedule } from '@tashkurgan/db'
 import {
   assertCan,
   cancelReschedule,
-  groupChatIds,
+  groupRecipients,
   listReschedules,
   markRescheduleNotified,
   rescheduleLesson,
+  type Recipient,
 } from '@tashkurgan/domain'
 import { NotFoundError } from '@tashkurgan/shared'
 
@@ -22,8 +23,8 @@ export type LessonChangeAnnouncement = {
   reason: string | null
 }
 
-/** Tells a group's Telegram chats their lesson moved -- the bot in production, a no-op or spy in tests. */
-export type LessonChangeNotifier = (chatIds: string[], change: LessonChangeAnnouncement) => Promise<void>
+/** Tells a group's Telegram chats their lesson moved, naming whose it is -- the bot in production, a no-op or spy in tests. */
+export type LessonChangeNotifier = (recipients: Recipient[], change: LessonChangeAnnouncement) => Promise<void>
 
 const TIME = /^([01]\d|2[0-3]):[0-5]\d$/
 
@@ -61,8 +62,8 @@ export const scheduleRoutes: FastifyPluginAsync<{ notifier?: LessonChangeNotifie
     reschedule: LessonReschedule,
     kind: LessonChangeAnnouncement['kind'],
   ) {
-    const chatIds = await groupChatIds(group.id)
-    notifier(chatIds, {
+    const recipients = await groupRecipients(group.id)
+    notifier(recipients, {
       groupName: group.name,
       kind,
       originalDate: reschedule.originalDate,
@@ -71,7 +72,7 @@ export const scheduleRoutes: FastifyPluginAsync<{ notifier?: LessonChangeNotifie
       newTime: reschedule.newTime,
       reason: reschedule.reason,
     }).catch((err) => request.log.error({ err, rescheduleId: reschedule.id }, 'Lesson change announcement failed'))
-    return chatIds.length
+    return recipients.length
   }
 
   // Every reschedule in the range for the groups the caller can see -- the

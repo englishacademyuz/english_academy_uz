@@ -2,6 +2,7 @@ import { prisma, type Prisma } from '@tashkurgan/db'
 import { NotFoundError, ValidationError } from '@tashkurgan/shared'
 import type { Actor } from '../identity/actor'
 import { assertCan } from '../identity/authorize'
+import { studentChatIds } from '../identity/family'
 
 /**
  * "Oʻqituvchi bilan muloqot": one Conversation per Student between their family
@@ -92,11 +93,11 @@ export async function postFamilyMessage(input: { studentId: string; chatId: stri
   return { message, startsTurn: previous?.sender !== 'FAMILY' }
 }
 
-/** A Teacher's or Admin's answer. The caller delivers it to `chatIds` (every chat linked to the student). */
+/** A Teacher's or Admin's answer. The caller delivers it to `chatIds` (every chat that may open the student). */
 export async function postStaffMessage(actor: Actor, studentId: string, rawText: string) {
   const student = await assertCanChatWith(actor, studentId)
   const text = cleanText(rawText)
-  const chatIds = (await prisma.telegramLink.findMany({ where: { studentId }, select: { chatId: true } })).map((l) => l.chatId)
+  const chatIds = await studentChatIds(studentId)
   if (chatIds.length === 0) throw new ValidationError('The student has no linked Telegram account')
 
   const now = new Date()
@@ -218,7 +219,7 @@ export async function getStaffThread(actor: Actor, studentId: string) {
       where: { studentId },
       include: { messages: { orderBy: { createdAt: 'desc' }, take: THREAD_LIMIT } },
     }),
-    prisma.telegramLink.count({ where: { studentId } }),
+    studentChatIds(studentId).then((chats) => chats.length),
   ])
   if (conversation) await markStaffRead(conversation.id, actor.userId)
 

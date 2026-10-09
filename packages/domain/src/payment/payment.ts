@@ -205,12 +205,6 @@ export async function getPaymentReminder(studentId: string, today?: CalendarDay)
   return (await getPaymentReminders([studentId], today)).get(studentId) ?? null
 }
 
-/** Every Telegram chat linked to the student -- the student's own and their parents'. */
-export async function studentChatIds(studentId: string): Promise<string[]> {
-  const links = await prisma.telegramLink.findMany({ where: { studentId }, select: { chatId: true } })
-  return links.map((l) => l.chatId)
-}
-
 export async function markPaymentReminded(studentId: string, at: Date = new Date()) {
   return prisma.student.update({ where: { id: studentId }, data: { paymentRemindedAt: at } })
 }

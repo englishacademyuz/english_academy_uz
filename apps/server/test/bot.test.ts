@@ -415,6 +415,71 @@ describe('telegram bot', () => {
     expect(await prisma.homeworkSubmission.count()).toBe(0)
   })
 
+  /** Ali (in a group that takes homework) and his sister Vali (not in one), tied as siblings; the phone is linked through Vali's code. */
+  async function seedSiblings(chatId: string) {
+    const { group, student: ali } = await seedSpeakingHomeworkFor()
+    const vali = await prisma.student.create({ data: { firstName: 'Vali', lastName: 'K', dob: new Date('2014-01-01') } })
+    const family = await prisma.family.create({ data: {} })
+    await prisma.student.updateMany({ where: { id: { in: [ali.id, vali.id] } }, data: { familyId: family.id } })
+    await prisma.telegramLink.create({ data: { chatId, studentId: vali.id } })
+    return { group, ali, vali }
+  }
+
+  async function seedSpeakingHomeworkFor() {
+    const { group, student } = await seedAcademicStructure()
+    await prisma.group.update({ where: { id: group.id }, data: { homeworkSubmissionEnabled: true } })
+    await prisma.lessonSession.create({
+      data: { groupId: group.id, teacherId: group.teacherId, date: new Date('2026-09-27'), topic: 'Speaking', homework: { create: { instructions: 'Talk' } } },
+    })
+    return { group, student }
+  }
+
+  it("shows a shared phone every sibling, and lets it choose whose messages the bot takes", async () => {
+    const { ali, vali } = await seedSiblings('680')
+    const { bot, calls } = buildBot()
+    await bot.init()
+    await bot.handleUpdate(textUpdate(680, '/menu'))
+
+    const menu = calls.find((c) => c.method === 'sendMessage' && String(c.payload.text).includes('bir nechta oʻquvchiga'))!
+    expect(String(menu.payload.text)).toContain('• Ali K')
+    expect(String(menu.payload.text)).toContain('• Vali K')
+    const buttons = (menu.payload.reply_markup as { inline_keyboard: Array<Array<{ text: string; callback_data?: string }>> }).inline_keyboard.flat()
+    expect(buttons.filter((b) => b.callback_data)).toEqual([
+      { text: '✍️ Ali', callback_data: `student:${ali.id}` },
+      { text: '✅ Vali', callback_data: `student:${vali.id}` },
+    ])
+
+    // A message goes to the chosen child's teacher, and says whose it is.
+    await bot.handleUpdate(callbackUpdate(680, `student:${ali.id}`))
+    expect((await prisma.telegramLink.findUniqueOrThrow({ where: { chatId: '680' } })).studentId).toBe(ali.id)
+    expect(calls.some((c) => c.method === 'answerCallbackQuery' && String(c.payload.text).includes('Ali K uchun'))).toBe(true)
+    expect(calls.some((c) => c.method === 'editMessageText')).toBe(true)
+
+    await bot.handleUpdate(textUpdate(680, 'Ali bugun kelolmaydi'))
+    const thread = await prisma.conversation.findUniqueOrThrow({ where: { studentId: ali.id }, include: { messages: true } })
+    expect(thread.messages.map((m) => m.text)).toEqual(['Ali bugun kelolmaydi'])
+    expect(sentText(calls, 'oʻquvchi: <b>Ali K</b>')).toBe(true)
+
+    // Someone else's student can't be chosen.
+    const stranger = await prisma.student.create({ data: { firstName: 'Zed', lastName: 'Z', dob: new Date('2012-01-01') } })
+    await bot.handleUpdate(callbackUpdate(680, `student:${stranger.id}`))
+    expect((await prisma.telegramLink.findUniqueOrThrow({ where: { chatId: '680' } })).studentId).toBe(ali.id)
+  })
+
+  it("hands a shared phone's homework to the one sibling whose group takes it, naming them", async () => {
+    const { ali } = await seedSiblings('681')
+    const { bot, calls } = buildBot({ fileStore: keepingStore, homeworkReceiptDelayMs: 0 })
+    await bot.init()
+    // The phone last chose Vali, but only Ali's group takes homework through the bot.
+    await bot.handleUpdate(photoUpdate(681, 'photo-sib'))
+    await new Promise((resolve) => setTimeout(resolve, 50))
+
+    const submission = await prisma.homeworkSubmission.findFirstOrThrow()
+    expect(submission.studentId).toBe(ali.id)
+    const receipt = calls.find((c) => c.method === 'sendMessage' && String(c.payload.text).includes('qabul qilindi'))!
+    expect(String(receipt.payload.text)).toContain('Oʻquvchi: <b>Ali K</b>')
+  })
+
   it('tells an unlinked chat to send its code on /start', async () => {
     const { bot, calls } = buildBot()
     await bot.init()

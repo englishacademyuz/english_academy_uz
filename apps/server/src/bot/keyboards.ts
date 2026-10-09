@@ -43,6 +43,16 @@ export const MENU_LABELS = new Set<string>([
   '📊 Progressi',
 ])
 
+/** Callback data prefix of the family menu's name buttons. */
+export const CHOOSE_STUDENT = 'student:'
+
+/** The menu of a phone siblings share: the app's buttons, then one per child to choose whose homework and messages the bot takes. */
+export function familyMenuKeyboard(miniAppUrl: string, students: Array<{ id: string; firstName: string }>, currentId: string) {
+  const keyboard = miniAppMenuKeyboard(miniAppUrl).row()
+  for (const s of students) keyboard.text(`${s.id === currentId ? '✅' : '✍️'} ${s.firstName}`, `${CHOOSE_STUDENT}${s.id}`)
+  return keyboard
+}
+
 export function quizStartKeyboard(miniAppUrl: string, quizId: string) {
   return new InlineKeyboard().webApp('▶️ Boshlash', `${miniAppUrl}/quizzes/${quizId}`)
 }

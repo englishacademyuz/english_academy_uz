@@ -14,6 +14,9 @@ import {
   MAX_HOMEWORK_VOICES,
   postFamilyMessage,
   redeemLinkingCode,
+  chatAccess,
+  chooseChatStudent,
+  type Recipient,
   type StoredPhoto,
   type StoredVideo,
   type StoredVoice,
@@ -29,6 +32,8 @@ import { largestPhoto, MAX_DOWNLOAD_BYTES, type HomeworkFileStore } from '../tel
 import { telegramDisplayName } from '../telegram/initData'
 import type { BotContext } from './types'
 import {
+  CHOOSE_STUDENT,
+  familyMenuKeyboard,
   MENU_LABELS,
   miniAppMenuKeyboard,
   openChatKeyboard,
@@ -60,7 +65,8 @@ export type BotOptions = {
 /** Image files sent "as a file" (uncompressed) count as homework photos too. */
 const IMAGE_MIME_TYPES = new Set(['image/jpeg', 'image/png', 'image/webp'])
 
-type StudentName = { id: string; firstName: string; lastName: string }
+/** Whose homework a file is; `forName` is set on a phone siblings share, so the replies say whose. */
+type HomeworkSender = { id: string; firstName: string; lastName: string; forName?: string }
 
 /** The student's current group takes homework through the platform. */
 async function takesHomework(studentId: string) {
@@ -70,13 +76,44 @@ async function takesHomework(studentId: string) {
   return enabled > 0
 }
 
-/** The student a chat may view -- the only identity the bot has (student and parents alike). */
-async function resolveStudent(chatId: string) {
-  const link = await prisma.telegramLink.findUnique({ where: { chatId }, include: { student: true } })
-  return link?.student ?? null
+/** What a chat may open (student and parents alike): the student it last chose, and any tied siblings. */
+type Access = NonNullable<Awaited<ReturnType<typeof chatAccess>>>
+
+const fullName = (s: { firstName: string; lastName: string }) => `${s.firstName} ${s.lastName}`
+
+/** A phone siblings share -- its messages then say whose they are. */
+const isFamily = (access: Access) => access.students.length > 1
+
+/**
+ * Whose homework a file from this chat is: the student the chat last chose -- unless that's a
+ * sibling whose group doesn't take homework and exactly one other sibling's does.
+ */
+async function homeworkStudent(access: Access) {
+  if (!isFamily(access) || (await takesHomework(access.current.id))) return access.current
+  const takers = []
+  for (const s of access.students) if (await takesHomework(s.id)) takers.push(s)
+  return takers.length === 1 ? takers[0] : access.current
 }
 
-async function sendMenu(ctx: BotContext, student: { firstName: string; lastName: string }, miniAppUrl?: string) {
+/** Whose homework a file from the chat is, or null for an unlinked chat. */
+async function homeworkSender(chatId: string): Promise<HomeworkSender | null> {
+  const access = await chatAccess(chatId)
+  if (!access) return null
+  const student = await homeworkStudent(access)
+  return { ...student, forName: isFamily(access) ? fullName(student) : undefined }
+}
+
+function menuMessage(access: Access, miniAppUrl: string) {
+  if (!isFamily(access)) {
+    return { text: fmt.formatMenu(fullName(access.current)), keyboard: miniAppMenuKeyboard(miniAppUrl) }
+  }
+  return {
+    text: fmt.formatFamilyMenu(access.students.map(fullName), fullName(access.current)),
+    keyboard: familyMenuKeyboard(miniAppUrl, access.students, access.current.id),
+  }
+}
+
+async function sendMenu(ctx: BotContext, access: Access, miniAppUrl?: string) {
   if (!miniAppUrl) {
     await ctx.reply(fmt.formatMiniAppUnavailable())
     return
@@ -84,17 +121,14 @@ async function sendMenu(ctx: BotContext, student: { firstName: string; lastName:
   // Clears the old reply keyboard (📚 📊 📝 …) left over from the text-based bot;
   // a message can't carry both a keyboard removal and inline buttons.
   await ctx.reply('✅', { reply_markup: { remove_keyboard: true } })
-  await ctx.reply(fmt.formatMenu(`${student.firstName} ${student.lastName}`), {
-    parse_mode: 'HTML',
-    reply_markup: miniAppMenuKeyboard(miniAppUrl),
-  })
+  const { text, keyboard } = menuMessage(access, miniAppUrl)
+  await ctx.reply(text, { parse_mode: 'HTML', reply_markup: keyboard })
 }
 
 /** Links (or re-points) this chat with the code the admin gave the student or parent. */
 async function handleLinkingCode(ctx: BotContext, chatId: string, text: string, miniAppUrl?: string) {
-  let student
   try {
-    student = await redeemLinkingCode(text, chatId)
+    await redeemLinkingCode(text, chatId)
   } catch (err) {
     if (err instanceof NotFoundError) {
       await ctx.reply(fmt.formatCodeNotFound())
@@ -107,13 +141,14 @@ async function handleLinkingCode(ctx: BotContext, chatId: string, text: string, 
     return
   }
   await ctx.reply('✅ Hisobingiz muvaffaqiyatli ulandi!')
-  await sendMenu(ctx, student, miniAppUrl)
+  const access = await chatAccess(chatId)
+  if (access) await sendMenu(ctx, access, miniAppUrl)
 }
 
 /** Relays a linked chat's text to the teacher -- confirmed with a reaction, plus a line when a new run of messages starts. */
-async function handleFamilyMessage(ctx: BotContext, studentId: string, chatId: string, text: string, miniAppUrl?: string) {
+async function handleFamilyMessage(ctx: BotContext, access: Access, chatId: string, text: string, miniAppUrl?: string) {
   const { startsTurn } = await postFamilyMessage({
-    studentId,
+    studentId: access.current.id,
     chatId,
     senderName: ctx.from ? telegramDisplayName(ctx.from) : '',
     text,
@@ -121,7 +156,10 @@ async function handleFamilyMessage(ctx: BotContext, studentId: string, chatId: s
   // Reactions are a newer Bot API feature -- a client that can't show one still gets the line below.
   await ctx.react('👌').catch(() => {})
   if (startsTurn) {
-    await ctx.reply(fmt.formatChatDelivered(), miniAppUrl ? { reply_markup: openChatKeyboard(miniAppUrl) } : undefined)
+    await ctx.reply(fmt.formatChatDelivered(isFamily(access) ? fullName(access.current) : undefined), {
+      parse_mode: 'HTML',
+      ...(miniAppUrl ? { reply_markup: openChatKeyboard(miniAppUrl) } : {}),
+    })
   }
 }
 
@@ -150,7 +188,7 @@ export function createBot(token: string, options: BotOptions = {}) {
    */
   async function handleHomeworkFile(
     ctx: BotContext,
-    student: { id: string; firstName: string; lastName: string },
+    student: HomeworkSender,
     attach: (store: HomeworkFileStore, lessonId: string, caption: string) => Promise<{ id: string }>,
   ): Promise<boolean> {
     if (!fileStore) return false
@@ -172,6 +210,7 @@ export function createBot(token: string, options: BotOptions = {}) {
         })
         if (!counts) return
         const receipt = {
+          studentName: student.forName,
           date: lesson.date,
           topic: lesson.topic,
           photoCount: counts._count.photos,
@@ -195,7 +234,7 @@ export function createBot(token: string, options: BotOptions = {}) {
         const closesAt = homeworkClosesAt(lesson.homework!)
         scheduleReceipt(chatId, async () => {
           await ctx.reply('😔')
-          await ctx.reply(fmt.formatHomeworkDeadlinePassed({ date: lesson.date, topic: lesson.topic, closesAt }), { parse_mode: 'HTML' })
+          await ctx.reply(fmt.formatHomeworkDeadlinePassed({ studentName: student.forName, date: lesson.date, topic: lesson.topic, closesAt }), { parse_mode: 'HTML' })
         })
       } else {
         throw err
@@ -204,28 +243,28 @@ export function createBot(token: string, options: BotOptions = {}) {
     return true
   }
 
-  function handleHomeworkPhoto(ctx: BotContext, student: StudentName, photo: StoredPhoto, kind: 'photo' | 'document') {
+  function handleHomeworkPhoto(ctx: BotContext, student: HomeworkSender, photo: StoredPhoto, kind: 'photo' | 'document') {
     return handleHomeworkFile(ctx, student, async (store, lessonId, caption) =>
       addHomeworkPhoto(student.id, lessonId, await store.keep(photo, caption, kind)),
     )
   }
 
-  function handleHomeworkVoice(ctx: BotContext, student: StudentName, voice: StoredVoice, kind: 'voice' | 'audio') {
+  function handleHomeworkVoice(ctx: BotContext, student: HomeworkSender, voice: StoredVoice, kind: 'voice' | 'audio') {
     return handleHomeworkFile(ctx, student, async (store, lessonId, caption) =>
       addHomeworkVoice(student.id, lessonId, await store.keepVoice(voice, caption, kind)),
     )
   }
 
-  function handleHomeworkVideo(ctx: BotContext, student: StudentName, video: StoredVideo) {
+  function handleHomeworkVideo(ctx: BotContext, student: HomeworkSender, video: StoredVideo) {
     return handleHomeworkFile(ctx, student, async (store, lessonId, caption) =>
       addHomeworkVideo(student.id, lessonId, await store.keepVideo(video, caption)),
     )
   }
 
   bot.command(['start', 'menu'], async (ctx) => {
-    const student = await resolveStudent(String(ctx.chat.id))
-    if (student) {
-      await sendMenu(ctx, student, miniAppUrl)
+    const access = await chatAccess(String(ctx.chat.id))
+    if (access) {
+      await sendMenu(ctx, access, miniAppUrl)
       return
     }
     await ctx.reply(fmt.formatWelcome())
@@ -236,18 +275,18 @@ export function createBot(token: string, options: BotOptions = {}) {
 
     const chatId = String(ctx.chat.id)
     const text = ctx.message.text.trim()
-    const student = await resolveStudent(chatId)
+    const access = await chatAccess(chatId)
 
     // Unlinked chats can only send a code; linked ones may send another code
-    // to switch to a different student (e.g. a parent with two children).
-    if (!student || looksLikeLinkingCode(text)) {
+    // to switch to a different student (e.g. a parent with two children who aren't tied as siblings).
+    if (!access || looksLikeLinkingCode(text)) {
       await handleLinkingCode(ctx, chatId, text, miniAppUrl)
       return
     }
 
     // A tap on a button of the old reply keyboard brings up the Mini App menu.
     if (MENU_LABELS.has(text)) {
-      await sendMenu(ctx, student, miniAppUrl)
+      await sendMenu(ctx, access, miniAppUrl)
       return
     }
 
@@ -256,12 +295,12 @@ export function createBot(token: string, options: BotOptions = {}) {
       await ctx.reply(fmt.formatChatTooLong(CHAT_MESSAGE_MAX_LENGTH))
       return
     }
-    await handleFamilyMessage(ctx, student.id, chatId, text, miniAppUrl)
+    await handleFamilyMessage(ctx, access, chatId, text, miniAppUrl)
   })
 
   // A photo (or an image sent as a file) is homework, in groups that take it.
   bot.on(['message:photo', 'message:document'], async (ctx, next) => {
-    const student = await resolveStudent(String(ctx.chat.id))
+    const student = await homeworkSender(String(ctx.chat.id))
     if (!student) return next()
     const { photo, document } = ctx.message
     if (photo?.length) {
@@ -275,7 +314,7 @@ export function createBot(token: string, options: BotOptions = {}) {
 
   // A voice note (or an audio file, e.g. from a recorder app) is speaking homework, in groups that take homework.
   bot.on(['message:voice', 'message:audio'], async (ctx, next) => {
-    const student = await resolveStudent(String(ctx.chat.id))
+    const student = await homeworkSender(String(ctx.chat.id))
     if (!student) return next()
     const { voice, audio } = ctx.message
     const file = voice ?? audio!
@@ -292,7 +331,7 @@ export function createBot(token: string, options: BotOptions = {}) {
 
   // A video -- a round video message or a regular one -- is speaking homework too.
   bot.on(['message:video_note', 'message:video'], async (ctx, next) => {
-    const student = await resolveStudent(String(ctx.chat.id))
+    const student = await homeworkSender(String(ctx.chat.id))
     if (!student) return next()
     const { video_note: note, video } = ctx.message
     const file = note ?? video!
@@ -317,15 +356,33 @@ export function createBot(token: string, options: BotOptions = {}) {
 
   // Stickers, files … (and photos, voice notes or videos, where homework isn't handed in) aren't relayed -- a linked chat is asked to write instead.
   bot.on('message', async (ctx) => {
-    if (await resolveStudent(String(ctx.chat.id))) await ctx.reply(fmt.formatChatTextOnly())
+    if (await chatAccess(String(ctx.chat.id))) await ctx.reply(fmt.formatChatTextOnly())
+  })
+
+  // A name in the family menu: from now on the bot takes this chat's homework and messages for that child.
+  bot.callbackQuery(new RegExp(`^${CHOOSE_STUDENT}(.+)$`), async (ctx) => {
+    const chatId = ctx.chat ? String(ctx.chat.id) : null
+    let chosen = null
+    try {
+      if (chatId) chosen = await chooseChatStudent(chatId, ctx.match[1])
+    } catch (err) {
+      // E.g. untied from the family since the menu was sent -- the redrawn menu drops the name.
+      if (!(err instanceof NotFoundError)) throw err
+    }
+    await ctx.answerCallbackQuery(chosen ? { text: fmt.formatChosenStudent(fullName(chosen)) } : undefined)
+    const access = chatId ? await chatAccess(chatId) : null
+    if (!access || !miniAppUrl) return
+    // The menu redrawn in place, with the tick on the chosen name.
+    const { text, keyboard } = menuMessage(access, miniAppUrl)
+    await ctx.editMessageText(text, { parse_mode: 'HTML', reply_markup: keyboard }).catch(() => {})
   })
 
   // Buttons on messages from the old text-based bot (lesson lists, chat quizzes, …)
   // no longer do anything themselves; they point the user to the Mini App instead.
   bot.on('callback_query:data', async (ctx) => {
     await ctx.answerCallbackQuery()
-    const student = ctx.chat ? await resolveStudent(String(ctx.chat.id)) : null
-    if (student) await sendMenu(ctx, student, miniAppUrl)
+    const access = ctx.chat ? await chatAccess(String(ctx.chat.id)) : null
+    if (access) await sendMenu(ctx, access, miniAppUrl)
   })
 
   bot.catch((err) => {
@@ -339,13 +396,12 @@ export function createBot(token: string, options: BotOptions = {}) {
 export async function announceQuiz(
   bot: Bot<BotContext>,
   miniAppUrl: string,
-  chatIds: string[],
+  recipients: Recipient[],
   quiz: QuizAnnouncement,
 ) {
-  const text = fmt.formatQuizAnnouncement(quiz)
-  for (const chatId of chatIds) {
+  for (const { chatId, studentNames } of recipients) {
     try {
-      await bot.api.sendMessage(chatId, text, {
+      await bot.api.sendMessage(chatId, fmt.formatQuizAnnouncement({ ...quiz, studentNames }), {
         parse_mode: 'HTML',
         reply_markup: quizStartKeyboard(miniAppUrl, quiz.quizId),
       })
@@ -359,13 +415,12 @@ export async function announceQuiz(
 export async function announceLessonChange(
   bot: Bot<BotContext>,
   miniAppUrl: string,
-  chatIds: string[],
+  recipients: Recipient[],
   change: LessonChangeAnnouncement,
 ) {
-  const text = fmt.formatLessonChange(change)
-  for (const chatId of chatIds) {
+  for (const { chatId, studentNames } of recipients) {
     try {
-      await bot.api.sendMessage(chatId, text, {
+      await bot.api.sendMessage(chatId, fmt.formatLessonChange({ ...change, studentNames }), {
         parse_mode: 'HTML',
         ...(miniAppUrl ? { reply_markup: openMiniAppKeyboard(miniAppUrl) } : {}),
       })

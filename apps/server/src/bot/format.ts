@@ -37,14 +37,23 @@ export function formatDeadline(date: Date): string {
   return `${parts.day}.${parts.month}.${parts.year} ${parts.hour}:${parts.minute}`
 }
 
+/** Whose news a group-wide message is -- a phone siblings share may get it for more than one. */
+function forStudents(names: string[]): string {
+  return names.length > 1
+    ? `Oʻquvchilar: <b>${names.map(escapeHtml).join(', ')}</b>`
+    : `Oʻquvchi: <b>${escapeHtml(names[0] ?? '')}</b>`
+}
+
 export function formatQuizAnnouncement(quiz: {
   title: string
   questionCount: number
   maxPoints: number
   deadline: Date
+  studentNames: string[]
 }): string {
   return [
     `🧠 <b>Yangi test: ${escapeHtml(quiz.title)}</b>`,
+    forStudents(quiz.studentNames),
     '',
     `Savollar: ${quiz.questionCount} · Maksimal ball: ${quiz.maxPoints}`,
     `Muddat: ${formatDeadline(quiz.deadline)} gacha`,
@@ -59,6 +68,26 @@ Siz <b>${escapeHtml(studentName)}</b> maʼlumotlarini koʻryapsiz.
 
 Kerakli boʻlimni oching.
 💬 Oʻqituvchiga savolingiz boʻlsa, shu yerga yozing.`
+}
+
+/**
+ * The menu of a phone siblings share: the app asks whose account to open each time, and the
+ * name buttons choose whose homework and messages the bot takes.
+ */
+export function formatFamilyMenu(studentNames: string[], currentName: string): string {
+  return [
+    '👋 Xush kelibsiz!',
+    'Bu Telegram hisobi bir nechta oʻquvchiga ulangan:',
+    ...studentNames.map((name) => `• ${escapeHtml(name)}`),
+    '',
+    '📱 Ilovani ochganingizda, avval kimning hisobiga kirishni tanlaysiz.',
+    `✍️ Botga yuborilgan vazifa va xabarlar hozir <b>${escapeHtml(currentName)}</b> uchun qabul qilinadi. Boshqa farzand uchun yubormoqchi boʻlsangiz, pastdan uning ismini bosing.`,
+  ].join('\n')
+}
+
+/** The toast after a tap on a name in the family menu. */
+export function formatChosenStudent(name: string): string {
+  return `Endi botga yuborilgan vazifa va xabarlar ${name} uchun`
 }
 
 export function formatMiniAppUnavailable(): string {
@@ -77,6 +106,7 @@ export function formatLessonDay(date: Date): string {
 }
 
 export function formatLessonChange(change: {
+  studentNames: string[]
   groupName: string
   kind: 'moved' | 'restored'
   originalDate: Date
@@ -89,6 +119,7 @@ export function formatLessonChange(change: {
     return [
       `🔁 <b>Dars joyiga qaytdi</b>`,
       `Guruh: <b>${escapeHtml(change.groupName)}</b>`,
+      forStudents(change.studentNames),
       '',
       `Avval koʻchirilgan dars bekor qilindi. Dars odatdagidek boʻladi:`,
       `✅ ${formatLessonDay(change.originalDate)}, soat ${change.regularTime}`,
@@ -97,6 +128,7 @@ export function formatLessonChange(change: {
   return [
     `📅 <b>Dars vaqti oʻzgardi</b>`,
     `Guruh: <b>${escapeHtml(change.groupName)}</b>`,
+    forStudents(change.studentNames),
     '',
     `❌ <s>${formatLessonDay(change.originalDate)}, soat ${change.regularTime}</s>`,
     `✅ <b>${formatLessonDay(change.newDate)}, soat ${change.newTime}</b>`,
@@ -170,9 +202,15 @@ export function formatStaffMessage(message: { studentName: string; senderName: s
   ].join('\n')
 }
 
-/** Confirms the first of a run of family messages reached the teacher. */
-export function formatChatDelivered(): string {
-  return "✅ Xabaringiz oʻqituvchiga yuborildi. Javob shu chatga keladi.\n\nYana biror narsa qoʻshmoqchi boʻlsangiz, shu yerga yozavering."
+/** Confirms the first of a run of family messages reached the teacher -- naming whose, on a phone siblings share. */
+export function formatChatDelivered(studentName?: string): string {
+  return [
+    studentName
+      ? `✅ Xabaringiz oʻqituvchiga yuborildi (oʻquvchi: <b>${escapeHtml(studentName)}</b>). Javob shu chatga keladi.`
+      : '✅ Xabaringiz oʻqituvchiga yuborildi. Javob shu chatga keladi.',
+    '',
+    'Yana biror narsa qoʻshmoqchi boʻlsangiz, shu yerga yozavering.',
+  ].join('\n')
 }
 
 export function formatChatTextOnly(): string {
@@ -185,6 +223,8 @@ export function formatChatTooLong(max: number): string {
 
 /** Sent once the files a chat just sent are in -- an album gets one receipt, not one per photo. */
 export function formatHomeworkReceived(receipt: {
+  /** Set on a phone siblings share, so it's clear whose homework it went to. */
+  studentName?: string
   date: Date
   topic: string | null
   photoCount: number
@@ -193,12 +233,14 @@ export function formatHomeworkReceived(receipt: {
 }): string {
   return [
     '📥 <b>Uyga vazifa qabul qilindi</b>',
+    ...(receipt.studentName ? [`👤 Oʻquvchi: <b>${escapeHtml(receipt.studentName)}</b>`] : []),
     `📅 ${formatLessonDay(receipt.date)}${receipt.topic ? ` · ${escapeHtml(receipt.topic)}` : ''}`,
     ...(receipt.photoCount ? [`🖼 Rasmlar: ${receipt.photoCount} ta`] : []),
     ...(receipt.voiceCount ? [`🎤 Ovozli xabarlar: ${receipt.voiceCount} ta`] : []),
     ...(receipt.videoCount ? [`🎬 Videolar: ${receipt.videoCount} ta`] : []),
     '',
     'Ustoz tekshirgach, natija shu yerga keladi. Yuborganlaringizni ilovada koʻrish yoki oʻchirish mumkin.',
+    ...(receipt.studentName ? ['', 'Boshqa farzandniki boʻlsa, /menu orqali uning ismini tanlab, qayta yuboring.'] : []),
   ].join('\n')
 }
 
@@ -223,9 +265,15 @@ export function formatHomeworkVideoTooBig(): string {
 }
 
 /** Sent after a sad emoji when a file comes in for homework whose deadline has passed. */
-export function formatHomeworkDeadlinePassed(homework: { date: Date; topic: string | null; closesAt: Date | null }): string {
+export function formatHomeworkDeadlinePassed(homework: {
+  studentName?: string
+  date: Date
+  topic: string | null
+  closesAt: Date | null
+}): string {
   return [
     '⏰ <b>Topshirish muddati tugagan</b>',
+    ...(homework.studentName ? [`👤 Oʻquvchi: <b>${escapeHtml(homework.studentName)}</b>`] : []),
     `📅 ${formatLessonDay(homework.date)}${homework.topic ? ` · ${escapeHtml(homework.topic)}` : ''}`,
     ...(homework.closesAt ? [`Muddat: ${formatDeadline(homework.closesAt)} gacha edi`] : []),
     '',

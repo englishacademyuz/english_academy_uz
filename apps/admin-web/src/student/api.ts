@@ -1,6 +1,7 @@
 import { initData } from './telegram'
 import type {
   AttemptState,
+  MiniAccounts,
   MiniAttendance,
   MiniChat,
   MiniChatMessage,
@@ -30,11 +31,38 @@ export class MiniApiError extends Error {
   get notLinked() {
     return this.statusCode === 403 && this.message === 'NOT_LINKED'
   }
+
+  /** The account chosen in the app is no longer one this phone may open (e.g. the siblings were untied). */
+  get accountUnavailable() {
+    return this.statusCode === 403 && this.message === 'ACCOUNT_UNAVAILABLE'
+  }
+}
+
+/**
+ * Whose account is open, on a phone siblings share -- chosen on the first screen each time the
+ * app opens, so it lives only in memory: closing the app forgets it.
+ */
+let chosenStudentId: string | null = null
+let onAccountUnavailable: (() => void) | null = null
+
+export function chooseStudent(id: string | null) {
+  if (id !== chosenStudentId) {
+    // Files fetched for one child mustn't show up for another.
+    photoUrls.clear()
+    imageUrls.clear()
+  }
+  chosenStudentId = id
+}
+
+/** Called when the server no longer lets this phone open the chosen account -- the app asks again. */
+export function whenAccountUnavailable(listener: (() => void) | null) {
+  onAccountUnavailable = listener
 }
 
 /**
  * Every call carries the raw Telegram init data; the server verifies its
- * signature and decides which student this is. No student id is ever sent.
+ * signature and decides which students this phone may open. The chosen
+ * sibling's id is only a pick among those -- the server checks it.
  */
 async function send(path: string, init?: RequestInit): Promise<Response> {
   const body = init?.body
@@ -42,6 +70,7 @@ async function send(path: string, init?: RequestInit): Promise<Response> {
     ...init,
     headers: {
       authorization: `tma ${initData()}`,
+      ...(chosenStudentId ? { 'x-student-id': chosenStudentId } : {}),
       // A photo goes up as its own bytes; everything else is JSON.
       ...(body instanceof Blob ? { 'content-type': body.type } : body ? { 'content-type': 'application/json' } : {}),
     },
@@ -54,7 +83,9 @@ async function send(path: string, init?: RequestInit): Promise<Response> {
     } catch {
       // no JSON body
     }
-    throw new MiniApiError(message, res.status)
+    const error = new MiniApiError(message, res.status)
+    if (error.accountUnavailable) onAccountUnavailable?.()
+    throw error
   }
   return res
 }
@@ -82,6 +113,9 @@ function fileUrl(path: string) {
 const imageUrls = new Map<string, Promise<string>>()
 
 export const miniApi = {
+  accounts: () => request<MiniAccounts>('/student/accounts'),
+  chooseAccount: (studentId: string) =>
+    request<{ id: string }>(`/student/accounts/${studentId}/choose`, { method: 'POST' }),
   home: () => request<MiniHome>('/student/home'),
   lessons: (page: number) => request<MiniLessons>(`/student/lessons?page=${page}`),
   lesson: (id: string) => request<MiniLessonDetail>(`/student/lessons/${id}`),

@@ -10,6 +10,7 @@ import {
   listGroupQuizzes,
   sendQuiz,
   updateQuizDraft,
+  type Recipient,
 } from '@tashkurgan/domain'
 import { NotFoundError } from '@tashkurgan/shared'
 
@@ -21,8 +22,8 @@ export type QuizAnnouncement = {
   deadline: Date
 }
 
-/** Delivers "a new quiz is open" to Telegram chats -- the bot in production, a no-op or spy in tests. */
-export type QuizNotifier = (chatIds: string[], quiz: QuizAnnouncement) => Promise<void>
+/** Delivers "a new quiz is open" to Telegram chats, naming whose it is -- the bot in production, a no-op or spy in tests. */
+export type QuizNotifier = (recipients: Recipient[], quiz: QuizAnnouncement) => Promise<void>
 
 const quizSchema = z.object({
   title: z.string().min(1),
@@ -104,10 +105,10 @@ export const quizRoutes: FastifyPluginAsync<{ notifier?: QuizNotifier }> = async
     assertCan(request.actor!, { resource: 'quiz', action: 'manage', ownerTeacherId: group.teacherId })
     const { deadline } = sendSchema.parse(request.body)
 
-    const { quiz, chatIds } = await sendQuiz(id, deadline)
+    const { quiz, recipients } = await sendQuiz(id, deadline)
     // Delivery runs in the background: the quiz is already open (and listed in
     // the bot's quiz menu), so a slow or failed Telegram call mustn't fail the send.
-    notify(chatIds, {
+    notify(recipients, {
       quizId: quiz.id,
       title: quiz.title,
       questionCount: quiz._count.questions,
@@ -115,7 +116,7 @@ export const quizRoutes: FastifyPluginAsync<{ notifier?: QuizNotifier }> = async
       deadline,
     }).catch((err) => request.log.error({ err, quizId: quiz.id }, 'Quiz announcement failed'))
 
-    return { id: quiz.id, status: quiz.status, deadline: quiz.deadline, notifiedChats: chatIds.length }
+    return { id: quiz.id, status: quiz.status, deadline: quiz.deadline, notifiedChats: recipients.length }
   })
 
   app.post('/quizzes/:id/close', { preHandler: app.authenticate }, async (request) => {

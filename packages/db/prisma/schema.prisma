@@ -147,6 +147,9 @@ model Student {
   paymentRemindedAt DateTime?
   userId            String?       @unique
   user              User?         @relation(fields: [userId], references: [id])
+  // Siblings who share a phone: a chat linked to any of them may open all of them.
+  familyId          String?
+  family            Family?       @relation(fields: [familyId], references: [id], onDelete: SetNull)
   createdAt         DateTime      @default(now())
   updatedAt         DateTime      @updatedAt
 
@@ -162,7 +165,19 @@ model Student {
   pointTransactions   PointTransaction[]
   conversation        Conversation?
 
+  @@index([familyId])
   @@map("students")
+}
+
+// Students tied together by an admin because one family shares a phone (siblings).
+// Every chat linked to one of them can switch between all of them, and each
+// one's notifications reach all the family's chats, headed with their name.
+model Family {
+  id        String    @id @default(cuid())
+  createdAt DateTime  @default(now())
+  students  Student[]
+
+  @@map("families")
 }
 
 model Teacher {
@@ -197,7 +212,9 @@ model LinkingCode {
 
 // One Telegram chat bound to the Student it may view. A student and their
 // parents each link their own chat to the same Student; a chat views exactly
-// one Student at a time (redeeming another code re-points it).
+// one Student at a time (redeeming another code re-points it). When the
+// Student is in a Family, the chat may open every sibling too -- studentId is
+// then the one it last chose, which the bot hands homework and messages to.
 model TelegramLink {
   chatId    String   @id
   studentId String

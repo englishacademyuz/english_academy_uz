@@ -1,6 +1,6 @@
 import { afterAll, afterEach, beforeAll, describe, expect, it } from 'vitest'
 import { prisma } from '@tashkurgan/db'
-import { LEVEL_PALETTE, pickLevelColor } from '@tashkurgan/domain'
+import { LEVEL_PALETTE, pickLevelColor, type Recipient } from '@tashkurgan/domain'
 import { buildApp } from '../src/app'
 import type { LessonChangeAnnouncement } from '../src/routes/schedule'
 import { createAdmin, createTeacherUser, loginAs, resetDb, seedAcademicStructure } from './helpers'
@@ -12,12 +12,12 @@ const NEXT_MONDAY = '2030-01-14'
 
 describe('lesson schedule, group edit/delete, level colors', () => {
   let app: Awaited<ReturnType<typeof buildApp>>
-  const announcements: Array<{ chatIds: string[]; change: LessonChangeAnnouncement }> = []
+  const announcements: Array<{ chatIds: string[]; recipients: Recipient[]; change: LessonChangeAnnouncement }> = []
 
   beforeAll(async () => {
     app = await buildApp({
-      lessonChangeNotifier: async (chatIds, change) => {
-        announcements.push({ chatIds, change })
+      lessonChangeNotifier: async (recipients, change) => {
+        announcements.push({ chatIds: recipients.map((r) => r.chatId), recipients, change })
       },
     })
   })

@@ -1,5 +1,6 @@
 import { prisma } from '@tashkurgan/db'
 import { NotFoundError } from '@tashkurgan/shared'
+import { handOverChats, untieStudent } from '../identity/family'
 
 /**
  * Removes a student and everything recorded about them -- enrollments, attendance, marks, quiz
@@ -9,6 +10,10 @@ import { NotFoundError } from '@tashkurgan/shared'
 export async function deleteStudent(studentId: string) {
   const student = await prisma.student.findUnique({ where: { id: studentId } })
   if (!student) throw new NotFoundError('Student not found')
+
+  // A tied sibling keeps the family's phones.
+  await handOverChats(studentId)
+  await untieStudent(studentId)
 
   const where = { studentId }
   await prisma.$transaction([
