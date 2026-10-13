@@ -87,17 +87,46 @@ export function HomeworkImages({ images }: { images: MiniHomeworkImage[] }) {
   )
 }
 
+/**
+ * One picture task's picture and what to do, inside its own hand-in card (which has the title and
+ * deadline): tap the picture to see it full-screen.
+ */
+export function TaskPicture({ image, name }: { image: MiniHomeworkImage; name: string }) {
+  const [viewing, setViewing] = useState(false)
+  return (
+    <div className="overflow-hidden rounded-[18px] border-2 border-tg-line bg-white">
+      <button
+        type="button"
+        onClick={() => {
+          haptic('tap')
+          setViewing(true)
+        }}
+        className="block w-full bg-tg-sand active:opacity-90"
+        style={{ aspectRatio: aspectOf(image) }}
+        aria-label="Rasmni kattalashtirish"
+      >
+        <TeacherImage imageId={image.id} className="h-full w-full object-cover" />
+      </button>
+      {image.caption && <p className="whitespace-pre-line px-3.5 py-3 text-[15px] font-bold leading-snug text-tg-body">{image.caption}</p>}
+      {viewing && <ImageViewer images={[image]} index={0} onIndex={() => {}} onClose={() => setViewing(false)} label={() => name} />}
+    </div>
+  )
+}
+
 /** Full-screen, swipe between pictures; the title on top, the caption at the bottom where a thumb won't cover the picture. */
 function ImageViewer({
   images,
   index,
   onIndex,
   onClose,
+  label = taskLabel,
 }: {
   images: MiniHomeworkImage[]
   index: number
   onIndex: (i: number) => void
   onClose: () => void
+  /** What the picture's task is called. */
+  label?: (image: MiniHomeworkImage, index: number) => string
 }) {
   const touchX = useRef<number | null>(null)
   const image = images[index]
@@ -120,7 +149,7 @@ function ImageViewer({
     >
       <div className="flex items-center justify-between gap-3 px-4 pb-2 pt-[max(12px,env(safe-area-inset-top))] text-white">
         <div className="flex min-w-0 flex-col">
-          <span className="truncate font-tg-display text-lg font-semibold">{taskLabel(image, index)}</span>
+          <span className="truncate font-tg-display text-lg font-semibold">{label(image, index)}</span>
           <span className="text-[13px] font-bold text-white/60">
             {images.length > 1 && `${index + 1} / ${images.length}`}
             {images.length > 1 && image.dueDate && ' · '}

@@ -1,7 +1,17 @@
 import type { FastifyPluginAsync, FastifyReply } from 'fastify'
 import { z } from 'zod'
 import { prisma, type Prisma } from '@tashkurgan/db'
-import { assertCan, reviewHomeworkSubmission, studentChatIds, submissionView, SUBMISSION_FILES } from '@tashkurgan/domain'
+import {
+  assertCan,
+  HOMEWORK_TASKS,
+  homeworkTasks,
+  reviewHomeworkSubmission,
+  studentChatIds,
+  SUBMISSION_FILES,
+  SUBMISSION_TASK,
+  submissionView,
+  WRITTEN_TASK,
+} from '@tashkurgan/domain'
 import { AppError, NotFoundError } from '@tashkurgan/shared'
 import type { HomeworkFileStore } from '../telegram/fileStore'
 
@@ -10,6 +20,8 @@ export type HomeworkReviewAnnouncement = {
   studentName: string
   date: Date
   topic: string | null
+  /** The picture task's name; null for the written homework. */
+  taskName: string | null
   status: 'CHECKED' | 'RETURNED'
   comment: string | null
 }
@@ -17,10 +29,15 @@ export type HomeworkReviewAnnouncement = {
 /** Tells a student's Telegram chats their homework was checked or sent back -- the bot in production, a spy in tests. */
 export type HomeworkReviewNotifier = (chatIds: string[], review: HomeworkReviewAnnouncement) => Promise<void>
 
-/** The caption a homework photo, voice note or video carries in Telegram -- whose it is and for which lesson. */
-export function homeworkPhotoCaption(student: { firstName: string; lastName: string }, date: Date, topic: string | null) {
+/** The caption a homework photo, voice note or video carries in Telegram -- whose it is, for which lesson and task. */
+export function homeworkPhotoCaption(
+  student: { firstName: string; lastName: string },
+  date: Date,
+  topic: string | null,
+  taskName: string | null = null,
+) {
   const day = date.toISOString().slice(0, 10)
-  return `📝 ${student.firstName} ${student.lastName} · ${day}${topic ? ` · ${topic}` : ''}`
+  return `📝 ${student.firstName} ${student.lastName} · ${day}${topic ? ` · ${topic}` : ''}${taskName ? ` · ${taskName}` : ''}`
 }
 
 /** Streams a stored photo, voice note or video back. Its bytes never change, so browsers may keep it. */
@@ -60,7 +77,7 @@ export const homeworkSubmissionRoutes: FastifyPluginAsync<{
       where: { id },
       include: {
         group: { select: { teacherId: true } },
-        homework: { include: { submissions: { include: SUBMISSION_FILES } } },
+        homework: { select: { ...HOMEWORK_TASKS, submissions: { include: { ...SUBMISSION_FILES, ...SUBMISSION_TASK } } } },
       },
     })
     if (!lesson) throw new NotFoundError('Session not found')
@@ -81,17 +98,25 @@ export const homeworkSubmissionRoutes: FastifyPluginAsync<{
       : []
     const students = new Map([...enrollments.map((e) => e.student), ...submitters].map((s) => [s.id, s]))
 
+    // A submission from before homework was split into tasks counts as the written one's.
+    const tasks = lesson.homework ? homeworkTasks(lesson.homework) : []
+    if (!tasks.some((t) => t.task === WRITTEN_TASK) && submissions.some((s) => s.task === WRITTEN_TASK)) {
+      tasks.unshift({ task: WRITTEN_TASK, imageId: null, name: null, dueDate: lesson.homework!.dueDate })
+    }
+
     return {
       lessonId: lesson.id,
       date: lesson.date,
       topic: lesson.topic,
       homework: lesson.homework && { instructions: lesson.homework.instructions, dueDate: lesson.homework.dueDate },
+      // What is handed in separately: the written homework and each picture, each with its deadline.
+      tasks: tasks.map((t) => ({ task: t.task, imageId: t.imageId, name: t.name, dueDate: t.dueDate })),
       students: [...students.values()]
         .sort((a, b) => `${a.firstName} ${a.lastName}`.localeCompare(`${b.firstName} ${b.lastName}`))
-        .map((student) => {
-          const submission = submissions.find((s) => s.studentId === student.id)
-          return { student, submission: submission ? submissionView(submission, lesson.homework!.dueDate) : null }
-        }),
+        .map((student) => ({
+          student,
+          submissions: submissions.filter((s) => s.studentId === student.id).map((s) => submissionView(s)),
+        })),
     }
   })
 
@@ -125,6 +150,7 @@ export const homeworkSubmissionRoutes: FastifyPluginAsync<{
         take: PAGE_SIZE,
         include: {
           ...SUBMISSION_FILES,
+          homeworkImage: SUBMISSION_TASK.homeworkImage,
           student: { select: studentSelect },
           homework: { select: { dueDate: true, lessonSession: { select: { id: true, date: true, topic: true } } } },
         },
@@ -134,7 +160,7 @@ export const homeworkSubmissionRoutes: FastifyPluginAsync<{
     ])
     return {
       items: items.map((s) => ({
-        ...submissionView(s, s.homework.dueDate),
+        ...submissionView(s),
         student: s.student,
         lesson: s.homework.lessonSession,
       })),
@@ -186,12 +212,13 @@ export const homeworkSubmissionRoutes: FastifyPluginAsync<{
           studentName: `${submission.student.firstName} ${submission.student.lastName}`,
           date: lesson.date,
           topic: lesson.topic,
+          taskName: submissionView(reviewed).taskName,
           status: body.status,
           comment: reviewed.teacherComment,
         }),
       )
       .catch((err) => request.log.error({ err, submissionId: id }, 'Homework review notice failed'))
-    return submissionView(reviewed, reviewed.homework.dueDate)
+    return submissionView(reviewed)
   })
 
   const ownerTeacher = {

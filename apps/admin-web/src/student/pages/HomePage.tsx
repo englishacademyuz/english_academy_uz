@@ -41,10 +41,12 @@ export function HomePage() {
     unreadChat,
   } = home.data
 
-  // Homework due within a day and not handed in jumps to the top, in red.
-  const deadline = latestHomework ? homeworkDeadline(latestHomework.dueDate, latestHomework.images, now) : null
+  // A homework task due within a day and not handed in jumps to the top, in red.
+  const deadline = latestHomework
+    ? homeworkDeadline(latestHomework.dueDate, latestHomework.images, now, latestHomework.handedIn)
+    : null
   const urgency = deadline ? urgencyOf(deadline.at, now) : null
-  const hurry = !!latestHomework && !latestHomework.handedIn && (urgency === 'soon' || urgency === 'hot')
+  const hurry = !!latestHomework && (urgency === 'soon' || urgency === 'hot')
 
   return (
     <div className="flex flex-col gap-[18px] px-[18px] pb-8 pt-5">

@@ -121,8 +121,23 @@ export const miniApi = {
   lesson: (id: string) => request<MiniLessonDetail>(`/student/lessons/${id}`),
   homework: () => request<MiniHomework[]>('/student/homework'),
   homeworkDetail: (lessonId: string) => request<MiniHomeworkDetail>(`/student/homework/${lessonId}`),
-  uploadHomeworkPhoto: (lessonId: string, photo: Blob) =>
-    request<MiniSubmission>(`/student/homework/${lessonId}/photos`, { method: 'POST', body: photo }),
+  uploadHomeworkPhoto: (lessonId: string, task: string, photo: Blob) =>
+    request<MiniSubmission>(`/student/homework/${lessonId}/tasks/${task}/photos`, { method: 'POST', body: photo }),
+  /** A video picked or recorded on the phone, sent as it is (a file with no type counts as MP4). */
+  uploadHomeworkVideo: (lessonId: string, task: string, video: File) =>
+    request<MiniSubmission>(`/student/homework/${lessonId}/tasks/${task}/videos`, {
+      method: 'POST',
+      body: video.type.startsWith('video/') ? video : new Blob([video], { type: 'video/mp4' }),
+    }),
+  /** An audio recording picked on the phone (a file with no type counts as MP3). */
+  uploadHomeworkAudio: (lessonId: string, task: string, audio: File) =>
+    request<MiniSubmission>(`/student/homework/${lessonId}/tasks/${task}/audios`, {
+      method: 'POST',
+      body: audio.type.startsWith('audio/') ? audio : new Blob([audio], { type: 'audio/mpeg' }),
+    }),
+  /** Points the bot at this task: the voice notes and videos sent to the chat next go there. */
+  sendHomeworkThroughBot: (lessonId: string, task: string) =>
+    request<{ ok: true }>(`/student/homework/${lessonId}/tasks/${task}/bot`, { method: 'POST' }),
   deleteHomeworkPhoto: (photoId: string) =>
     request<{ submission: MiniSubmission | null }>(`/student/homework-photos/${photoId}`, { method: 'DELETE' }),
   homeworkPhotoUrl: (photoId: string) => fileUrl(`/student/homework-photos/${photoId}`),

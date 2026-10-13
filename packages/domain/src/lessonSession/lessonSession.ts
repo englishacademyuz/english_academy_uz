@@ -5,7 +5,7 @@ import { HOMEWORK_WITH_IMAGES, attachHomeworkImages, type HomeworkImageInput } f
 type MaterialInput = { type: LessonMaterialType; content: string }
 type AttendanceInput = { studentId: string; status: AttendanceStatus }
 /** `images` given means "exactly these, in this order"; omitted leaves the pictures as they are. */
-type HomeworkInput = { instructions: string; dueDate?: Date; images?: HomeworkImageInput[] }
+type HomeworkInput = { instructions: string; dueDate?: Date | null; images?: HomeworkImageInput[] }
 
 export type RecordLessonSessionInput = {
   groupId: string

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { deadlineLabel, endOfStoredDay, homeworkDeadline, timeLeft, urgencyOf } from '../src/student/deadline'
+import { deadlineLabel, homeworkDeadline, timeLeft, urgencyOf } from '../src/student/deadline'
 
 const HOUR = 3_600_000
 
@@ -18,30 +18,35 @@ describe('urgencyOf', () => {
 describe('homeworkDeadline', () => {
   const now = new Date('2026-10-05T10:00:00Z')
 
-  it("counts a homework's own due day to 23:59 in Tashkent", () => {
-    expect(endOfStoredDay('2026-10-07T00:00:00.000Z').toISOString()).toBe('2026-10-07T18:59:00.000Z')
-    expect(homeworkDeadline('2026-10-07T00:00:00.000Z', [], now)).toEqual({
-      at: new Date('2026-10-07T18:59:00.000Z'),
+  it("counts down to the written homework's deadline", () => {
+    expect(homeworkDeadline('2026-10-07T13:00:00.000Z', [], now)).toEqual({
+      at: new Date('2026-10-07T13:00:00.000Z'),
       task: null,
     })
   })
 
+  it('leaves out tasks already handed in', () => {
+    const images = [{ id: 'a', title: 'Listening', dueDate: '2026-10-05T12:00:00.000Z' }]
+    expect(homeworkDeadline('2026-10-05T11:00:00.000Z', images, now, ['written'])?.task).toBe('Listening')
+    expect(homeworkDeadline('2026-10-05T11:00:00.000Z', images, now, ['written', 'a'])).toBeNull()
+  })
+
   it('picks the soonest picture task still ahead, named by its title or number', () => {
     const images = [
-      { title: 'Listening', dueDate: '2026-10-06T13:00:00.000Z' },
-      { title: null, dueDate: '2026-10-05T15:00:00.000Z' },
-      { title: 'Old', dueDate: '2026-10-04T13:00:00.000Z' },
+      { id: 'a', title: 'Listening', dueDate: '2026-10-06T13:00:00.000Z' },
+      { id: 'b', title: null, dueDate: '2026-10-05T15:00:00.000Z' },
+      { id: 'c', title: 'Old', dueDate: '2026-10-04T13:00:00.000Z' },
     ]
     expect(homeworkDeadline(null, images, now)).toEqual({ at: new Date('2026-10-05T15:00:00.000Z'), task: '2-vazifa' })
   })
 
   it('falls back to the last deadline once all have passed, and to null when there are none', () => {
     const images = [
-      { title: 'A', dueDate: '2026-10-03T13:00:00.000Z' },
-      { title: 'B', dueDate: '2026-10-04T13:00:00.000Z' },
+      { id: 'a', title: 'A', dueDate: '2026-10-03T13:00:00.000Z' },
+      { id: 'b', title: 'B', dueDate: '2026-10-04T13:00:00.000Z' },
     ]
     expect(homeworkDeadline(null, images, now)?.task).toBe('B')
-    expect(homeworkDeadline(null, [{ title: 'A', dueDate: null }], now)).toBeNull()
+    expect(homeworkDeadline(null, [{ id: 'a', title: 'A', dueDate: null }], now)).toBeNull()
   })
 })
 

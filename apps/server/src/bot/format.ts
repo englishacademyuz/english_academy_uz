@@ -227,6 +227,10 @@ export function formatHomeworkReceived(receipt: {
   studentName?: string
   date: Date
   topic: string | null
+  /** Which task it went to -- set when the homework has more than one. */
+  taskName?: string | null
+  /** The homework has other tasks, so say how to send to one of those instead. */
+  otherTasks?: boolean
   photoCount: number
   voiceCount: number
   videoCount: number
@@ -235,11 +239,15 @@ export function formatHomeworkReceived(receipt: {
     '📥 <b>Uyga vazifa qabul qilindi</b>',
     ...(receipt.studentName ? [`👤 Oʻquvchi: <b>${escapeHtml(receipt.studentName)}</b>`] : []),
     `📅 ${formatLessonDay(receipt.date)}${receipt.topic ? ` · ${escapeHtml(receipt.topic)}` : ''}`,
+    ...(receipt.taskName ? [`📌 Vazifa: <b>${escapeHtml(receipt.taskName)}</b>`] : []),
     ...(receipt.photoCount ? [`🖼 Rasmlar: ${receipt.photoCount} ta`] : []),
     ...(receipt.voiceCount ? [`🎤 Ovozli xabarlar: ${receipt.voiceCount} ta`] : []),
     ...(receipt.videoCount ? [`🎬 Videolar: ${receipt.videoCount} ta`] : []),
     '',
     'Ustoz tekshirgach, natija shu yerga keladi. Yuborganlaringizni ilovada koʻrish yoki oʻchirish mumkin.',
+    ...(receipt.otherTasks
+      ? ['', 'Boshqa vazifa uchun boʻlsa: ilovada oʻsha vazifani ochib, «Botda yozish» tugmasini bosing va qayta yuboring.']
+      : []),
     ...(receipt.studentName ? ['', 'Boshqa farzandniki boʻlsa, /menu orqali uning ismini tanlab, qayta yuboring.'] : []),
   ].join('\n')
 }
@@ -269,12 +277,14 @@ export function formatHomeworkDeadlinePassed(homework: {
   studentName?: string
   date: Date
   topic: string | null
+  taskName?: string | null
   closesAt: Date | null
 }): string {
   return [
     '⏰ <b>Topshirish muddati tugagan</b>',
     ...(homework.studentName ? [`👤 Oʻquvchi: <b>${escapeHtml(homework.studentName)}</b>`] : []),
     `📅 ${formatLessonDay(homework.date)}${homework.topic ? ` · ${escapeHtml(homework.topic)}` : ''}`,
+    ...(homework.taskName ? [`📌 Vazifa: <b>${escapeHtml(homework.taskName)}</b>`] : []),
     ...(homework.closesAt ? [`Muddat: ${formatDeadline(homework.closesAt)} gacha edi`] : []),
     '',
     'Afsuski, bu vazifa endi qabul qilinmaydi. Keyingi vazifani oʻz vaqtida topshiring 💪',
@@ -289,6 +299,7 @@ export function formatHomeworkReview(review: {
   studentName: string
   date: Date
   topic: string | null
+  taskName?: string | null
   status: 'CHECKED' | 'RETURNED'
   comment: string | null
 }): string {
@@ -296,7 +307,8 @@ export function formatHomeworkReview(review: {
     review.status === 'CHECKED' ? '✅ <b>Uyga vazifa tekshirildi</b>' : '🔁 <b>Uyga vazifani qayta ishlash kerak</b>',
     `Oʻquvchi: <b>${escapeHtml(review.studentName)}</b>`,
     `📅 ${formatLessonDay(review.date)}${review.topic ? ` · ${escapeHtml(review.topic)}` : ''}`,
+    ...(review.taskName ? [`📌 Vazifa: <b>${escapeHtml(review.taskName)}</b>`] : []),
     ...(review.comment ? ['', `💬 Ustoz: ${escapeHtml(review.comment)}`] : []),
-    ...(review.status === 'RETURNED' ? ['', 'Xatolarni tuzatib, rasmlarni qaytadan yuboring.'] : []),
+    ...(review.status === 'RETURNED' ? ['', 'Xatolarni tuzatib, shu vazifaga qaytadan yuboring.'] : []),
   ].join('\n')
 }

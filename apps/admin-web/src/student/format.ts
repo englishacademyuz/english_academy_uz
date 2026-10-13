@@ -76,6 +76,21 @@ export function initialsOf(first: string, last?: string): string {
 }
 
 /** What a submission holds, for its "handed in" chip: "2 rasm", "1 ovozli", "2 rasm · 1 video". */
+/** How far along a homework's tasks are: how many there are, handed in (not sent back), checked, sent back. */
+export function tasksProgress(tasks: Array<{ submission: { status: 'SUBMITTED' | 'CHECKED' | 'RETURNED' } | null }>) {
+  const statuses = tasks.map((t) => t.submission?.status)
+  return {
+    total: tasks.length,
+    handedIn: statuses.filter((s) => s === 'SUBMITTED' || s === 'CHECKED').length,
+    checked: statuses.filter((s) => s === 'CHECKED').length,
+    returned: statuses.filter((s) => s === 'RETURNED').length,
+  }
+}
+
+/** The tasks handed in and not sent back ('written' or a picture's id) -- no deadline to hurry for on those. */
+export const doneTasks = (tasks: Array<{ task: string; submission: { status: string } | null }>) =>
+  tasks.filter((t) => t.submission && t.submission.status !== 'RETURNED').map((t) => t.task)
+
 export function submissionContents(submission: { photos: unknown[]; voices: unknown[]; videos: unknown[] }): string {
   const parts = [
     ...(submission.photos.length ? [`${submission.photos.length} rasm`] : []),

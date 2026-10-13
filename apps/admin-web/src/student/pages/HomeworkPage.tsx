@@ -7,29 +7,34 @@ import { DeadlineChip } from '../components/Deadline'
 import { homeworkPreviewText } from '../components/HomeworkImages'
 import { DayBadge, Empty, ErrorState, Loading, Screen, Section } from '../components/kit'
 import { deadlineLabel, homeworkDeadline, timeLeft, urgencyOf, useNow } from '../deadline'
-import { submissionContents, weekdayDate } from '../format'
+import { doneTasks, submissionContents, tasksProgress, weekdayDate } from '../format'
 import { richTextToPlain } from '../../lib/richText'
 import type { MiniHomework } from '../types'
 
 /** Where a homework row leads: its hand-in screen (photos, voice notes), else its lesson. */
 const homeworkLink = (h: MiniHomework) => (h.submissionEnabled ? `/student/homework/${h.lessonId}` : `/student/lessons/${h.lessonId}`)
 
-/** The hand-in state of one homework, for groups that take homework through the platform. */
+/** The hand-in state of one homework, task by task, for groups that take homework through the platform. */
 function SubmissionChip({ homework }: { homework: MiniHomework }) {
   if (!homework.submissionEnabled) return null
-  const s = homework.submission
-  const look = !s
-    ? { cls: 'bg-tg-sand text-tg-muted', text: '📷 Topshirilmagan' }
-    : s.status === 'CHECKED'
-      ? { cls: 'bg-tg-blue-soft text-tg-blue-dark', text: '⭐ Tekshirildi' }
-      : s.status === 'RETURNED'
-        ? { cls: 'bg-tg-cherry-soft text-tg-cherry', text: '🔁 Qayta ishlash' }
-        : { cls: 'bg-tg-leaf-soft text-tg-leaf-dark', text: `✅ Topshirildi · ${submissionContents(s)}` }
+  const p = tasksProgress(homework.tasks)
+  const several = p.total > 1
+  const only = homework.tasks[0]?.submission
+  const look =
+    p.returned > 0
+      ? { cls: 'bg-tg-cherry-soft text-tg-cherry', text: several ? `🔁 ${p.returned} ta vazifani qayta ishlash` : '🔁 Qayta ishlash' }
+      : p.total > 0 && p.checked === p.total
+        ? { cls: 'bg-tg-blue-soft text-tg-blue-dark', text: '⭐ Tekshirildi' }
+        : p.handedIn === 0
+          ? { cls: 'bg-tg-sand text-tg-muted', text: several ? `📷 0/${p.total} topshirildi` : '📷 Topshirilmagan' }
+          : several
+            ? { cls: 'bg-tg-leaf-soft text-tg-leaf-dark', text: `✅ ${p.handedIn}/${p.total} topshirildi` }
+            : { cls: 'bg-tg-leaf-soft text-tg-leaf-dark', text: `✅ Topshirildi · ${submissionContents(only!)}` }
   return <span className={`self-start rounded-full px-2.5 py-1 text-[13px] font-extrabold ${look.cls}`}>{look.text}</span>
 }
 
-/** Photos handed in and not sent back -- the deadline no longer needs to shout. */
-const handedIn = (h: MiniHomework) => !!h.submission && h.submission.status !== 'RETURNED'
+/** Every task handed in and none sent back -- the deadline no longer needs to shout. */
+const handedIn = (h: MiniHomework) => doneTasks(h.tasks).length === h.tasks.length
 
 /** The teacher added pictures to this homework. */
 function ImagesChip({ count }: { count: number }) {
@@ -60,9 +65,9 @@ export function HomeworkPage() {
   }
 
   const [latest, ...older] = homework.data
-  const latestDue = latest ? homeworkDeadline(latest.dueDate, latest.images, now) : null
+  const latestDue = latest ? homeworkDeadline(latest.dueDate, latest.images, now, latest.submissionEnabled ? doneTasks(latest.tasks) : []) : null
   const urgency = latestDue ? urgencyOf(latestDue.at, now) : null
-  // Less than a day left and not handed in: the card turns red and counts down.
+  // Less than a day left on a task not handed in: the card turns red and counts down.
   const hurry = !!latest && !handedIn(latest) && (urgency === 'soon' || urgency === 'hot')
   return (
     <Screen
@@ -110,7 +115,7 @@ export function HomeworkPage() {
             <Section title="Oldingi vazifalar">
               <div className="flex flex-col gap-2.5">
                 {older.map((h) => {
-                  const due = handedIn(h) ? null : homeworkDeadline(h.dueDate, h.images, now)
+                  const due = handedIn(h) ? null : homeworkDeadline(h.dueDate, h.images, now, h.submissionEnabled ? doneTasks(h.tasks) : [])
                   return (
                   <Link
                     key={h.lessonId}

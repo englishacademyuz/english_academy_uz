@@ -18,31 +18,24 @@ export function urgencyOf(due: Date, now: Date): Urgency {
   return 'later'
 }
 
-/**
- * A homework's own due date is a calendar day (stored as UTC midnight), due by the end of it in
- * Tashkent (UTC+5) -- 23:59 there. A picture task's deadline is already a moment.
- */
-export function endOfStoredDay(iso: string): Date {
-  const d = new Date(iso)
-  return new Date(Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate(), 18, 59))
-}
-
-/** The deadline a homework card counts down to, and which picture task it belongs to (null: the homework's own). */
+/** The deadline a homework card counts down to, and which picture task it belongs to (null: the written homework). */
 export type HomeworkDeadline = { at: Date; task: string | null }
 
 /**
- * When a homework is due: the soonest deadline still ahead among its own due day and its picture
- * tasks -- or, once all have passed, the last one. Null when nothing has a deadline.
+ * When a homework is due: the soonest deadline still ahead among the written homework's and its
+ * picture tasks' -- or, once all have passed, the last one. Tasks in `done` (handed in, keyed
+ * 'written' or by picture id) don't count. Null when nothing left has a deadline.
  */
 export function homeworkDeadline(
   dueDate: string | null,
-  images: Array<{ title: string | null; dueDate: string | null }>,
+  images: Array<{ id: string; title: string | null; dueDate: string | null }>,
   now: Date,
+  done: string[] = [],
 ): HomeworkDeadline | null {
   const deadlines: HomeworkDeadline[] = [
-    ...(dueDate ? [{ at: endOfStoredDay(dueDate), task: null }] : []),
+    ...(dueDate && !done.includes('written') ? [{ at: new Date(dueDate), task: null }] : []),
     ...images.flatMap((image, i) =>
-      image.dueDate ? [{ at: new Date(image.dueDate), task: image.title?.trim() || `${i + 1}-vazifa` }] : [],
+      image.dueDate && !done.includes(image.id) ? [{ at: new Date(image.dueDate), task: image.title?.trim() || `${i + 1}-vazifa` }] : [],
     ),
   ]
   if (deadlines.length === 0) return null

@@ -5,9 +5,8 @@ import {
   addHomeworkPhoto,
   addHomeworkVideo,
   addHomeworkVoice,
+  botHomeworkTarget,
   CHAT_MESSAGE_MAX_LENGTH,
-  homeworkClosesAt,
-  latestOpenHomework,
   looksLikeLinkingCode,
   MAX_HOMEWORK_PHOTOS,
   MAX_HOMEWORK_VIDEOS,
@@ -47,7 +46,7 @@ import * as fmt from './format'
 /**
  * The bot is for linking, notifications and the family chat with the teacher
  * (any other text a linked chat sends is a message to the teacher), plus homework photos,
- * voice notes and videos in groups that take them (each goes to the newest open homework); everything
+ * voice notes and videos in groups that take them (each goes to one homework task); everything
  * a student (or parent) browses -- lessons, homework, progress, attendance,
  * quizzes -- is in the Telegram Mini App at `miniAppUrl`.
  */
@@ -182,26 +181,30 @@ export function createBot(token: string, options: BotOptions = {}) {
   }
 
   /**
-   * Attaches a file a linked chat sent to the student's newest open homework: `attach` stores it
-   * (captioned with whose it is) and adds it to the submission. False when their group doesn't
-   * take homework through the platform.
+   * Attaches a file a linked chat sent to one homework task (see `botHomeworkTarget`: the one
+   * picked in the Mini App, else the open one due soonest): `attach` stores it (captioned with
+   * whose it is) and adds it to that task's submission. False when their group doesn't take
+   * homework through the platform.
    */
   async function handleHomeworkFile(
     ctx: BotContext,
     student: HomeworkSender,
-    attach: (store: HomeworkFileStore, lessonId: string, caption: string) => Promise<{ id: string }>,
+    attach: (store: HomeworkFileStore, lessonId: string, task: string, caption: string) => Promise<{ id: string }>,
   ): Promise<boolean> {
     if (!fileStore) return false
     const chatId = String(ctx.chat!.id)
     if (!(await takesHomework(student.id))) return false
 
-    const lesson = await latestOpenHomework(student.id)
-    if (!lesson) {
+    const target = await botHomeworkTarget(student.id)
+    if (!target) {
       scheduleReceipt(chatId, () => ctx.reply(fmt.formatNoOpenHomework()))
       return true
     }
+    const { lesson, task } = target
+    // The written homework is only worth naming next to picture tasks.
+    const taskName = task.name ?? (target.taskCount > 1 ? 'Yozma vazifa' : null)
     try {
-      const submission = await attach(fileStore, lesson.id, homeworkPhotoCaption(student, lesson.date, lesson.topic))
+      const submission = await attach(fileStore, lesson.id, task.task, homeworkPhotoCaption(student, lesson.date, lesson.topic, taskName))
       await ctx.react('👌').catch(() => {})
       scheduleReceipt(chatId, async () => {
         const counts = await prisma.homeworkSubmission.findUnique({
@@ -213,6 +216,8 @@ export function createBot(token: string, options: BotOptions = {}) {
           studentName: student.forName,
           date: lesson.date,
           topic: lesson.topic,
+          taskName,
+          otherTasks: target.taskCount > 1,
           photoCount: counts._count.photos,
           voiceCount: counts._count.voices,
           videoCount: counts._count.videos,
@@ -231,10 +236,18 @@ export function createBot(token: string, options: BotOptions = {}) {
         scheduleReceipt(chatId, () => ctx.reply(fmt.formatTooManyHomeworkVideos(MAX_HOMEWORK_VIDEOS)))
       } else if (err instanceof ConflictError && err.message === 'DEADLINE_PASSED') {
         // A lone emoji first -- Telegram shows it big and animated, like a sticker.
-        const closesAt = homeworkClosesAt(lesson.homework!)
         scheduleReceipt(chatId, async () => {
           await ctx.reply('😔')
-          await ctx.reply(fmt.formatHomeworkDeadlinePassed({ studentName: student.forName, date: lesson.date, topic: lesson.topic, closesAt }), { parse_mode: 'HTML' })
+          await ctx.reply(
+            fmt.formatHomeworkDeadlinePassed({
+              studentName: student.forName,
+              date: lesson.date,
+              topic: lesson.topic,
+              taskName,
+              closesAt: task.dueDate,
+            }),
+            { parse_mode: 'HTML' },
+          )
         })
       } else {
         throw err
@@ -244,20 +257,20 @@ export function createBot(token: string, options: BotOptions = {}) {
   }
 
   function handleHomeworkPhoto(ctx: BotContext, student: HomeworkSender, photo: StoredPhoto, kind: 'photo' | 'document') {
-    return handleHomeworkFile(ctx, student, async (store, lessonId, caption) =>
-      addHomeworkPhoto(student.id, lessonId, await store.keep(photo, caption, kind)),
+    return handleHomeworkFile(ctx, student, async (store, lessonId, task, caption) =>
+      addHomeworkPhoto(student.id, lessonId, task, await store.keep(photo, caption, kind)),
     )
   }
 
   function handleHomeworkVoice(ctx: BotContext, student: HomeworkSender, voice: StoredVoice, kind: 'voice' | 'audio') {
-    return handleHomeworkFile(ctx, student, async (store, lessonId, caption) =>
-      addHomeworkVoice(student.id, lessonId, await store.keepVoice(voice, caption, kind)),
+    return handleHomeworkFile(ctx, student, async (store, lessonId, task, caption) =>
+      addHomeworkVoice(student.id, lessonId, task, await store.keepVoice(voice, caption, kind)),
     )
   }
 
   function handleHomeworkVideo(ctx: BotContext, student: HomeworkSender, video: StoredVideo) {
-    return handleHomeworkFile(ctx, student, async (store, lessonId, caption) =>
-      addHomeworkVideo(student.id, lessonId, await store.keepVideo(video, caption)),
+    return handleHomeworkFile(ctx, student, async (store, lessonId, task, caption) =>
+      addHomeworkVideo(student.id, lessonId, task, await store.keepVideo(video, caption)),
     )
   }
 

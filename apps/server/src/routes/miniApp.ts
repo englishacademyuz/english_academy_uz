@@ -3,19 +3,24 @@ import { z } from 'zod'
 import { prisma, type AttendanceStatus } from '@tashkurgan/db'
 import {
   addHomeworkPhoto,
+  addHomeworkVideo,
+  addHomeworkVoice,
   answerQuizQuestion,
-  assertCanAddHomeworkPhoto,
+  assertCanAddHomeworkFile,
+  botHomeworkTarget,
   HOMEWORK_WITH_IMAGES,
-  homeworkClosesAt,
+  homeworkTasks,
   MAX_HOMEWORK_PHOTOS,
   MAX_HOMEWORK_VIDEOS,
   MAX_HOMEWORK_VOICES,
-  latestOpenHomework,
   removeHomeworkPhoto,
   removeHomeworkVideo,
   removeHomeworkVoice,
+  setBotHomeworkTask,
+  SUBMISSION_TASK,
   SUBMISSION_FILES,
   submissionView,
+  WRITTEN_TASK,
   familyUnreadCount,
   calculateAttendanceRate,
   chooseChatStudent,
@@ -34,7 +39,7 @@ import {
 } from '@tashkurgan/domain'
 import { AppError, NotFoundError, shownToStudent, ValidationError } from '@tashkurgan/shared'
 import { telegramDisplayName } from '../telegram/initData'
-import { isSupportedImage, type HomeworkFileStore } from '../telegram/fileStore'
+import { isSupportedImage, MAX_DOWNLOAD_BYTES, type HomeworkFileStore } from '../telegram/fileStore'
 import { homeworkPhotoCaption, sendHomeworkFile } from './homeworkSubmissions'
 
 /**
@@ -47,6 +52,7 @@ import { homeworkPhotoCaption, sendHomeworkFile } from './homeworkSubmissions'
 
 const LESSONS_PAGE_SIZE = 20
 const idParams = z.object({ id: z.string() })
+const taskParams = z.object({ id: z.string(), task: z.string() })
 const pageQuery = z.object({ page: z.coerce.number().int().min(0).default(0) })
 const progressQuery = z.object({ kind: z.enum(['today', 'week', 'month']).default('month') })
 const monthQuery = z.object({ year: z.coerce.number().int(), month: z.coerce.number().int().min(1).max(12) })
@@ -54,6 +60,49 @@ const answerBody = z.object({ optionId: z.string() })
 const chatMessageBody = z.object({ text: z.string() })
 /** A phone photo the app has shrunk is well under 1 MB; this leaves room for an unshrunk one. */
 const MAX_UPLOAD_BYTES = 10 * 1024 * 1024
+/** A video or audio recording is sent as it is -- up to what the Bot API can download back for playback. */
+const MAX_MEDIA_UPLOAD_BYTES = MAX_DOWNLOAD_BYTES
+
+/** A submission with what `submissionView` needs: its files and its deadline. */
+const SUBMISSION_VIEW = { ...SUBMISSION_FILES, ...SUBMISSION_TASK }
+
+/** The file extension Telegram gets for an uploaded video or audio recording, from its content type. */
+function mediaExtension(contentType: string, fallback: string) {
+  const subtype = contentType.split(';')[0].split('/')[1]?.trim().toLowerCase() ?? ''
+  const known: Record<string, string> = {
+    mp4: 'mp4',
+    quicktime: 'mov',
+    webm: 'webm',
+    '3gpp': '3gp',
+    mpeg: 'mp3',
+    mp3: 'mp3',
+    'x-m4a': 'm4a',
+    aac: 'aac',
+    ogg: 'ogg',
+    wav: 'wav',
+    'x-wav': 'wav',
+    amr: 'amr',
+  }
+  return known[subtype] ?? fallback
+}
+
+type HomeworkWithTasks = Parameters<typeof homeworkTasks>[0]
+
+/**
+ * Each task of a homework with the student's submission for it -- what they hand in, task by
+ * task. A submission from before homework was split into tasks counts as the written one's, so
+ * it still shows even on a homework of pictures only.
+ */
+function tasksWithSubmissions(homework: HomeworkWithTasks, submissions: Array<Parameters<typeof submissionView>[0]>) {
+  const tasks = homeworkTasks(homework)
+  if (!tasks.some((t) => t.task === WRITTEN_TASK) && submissions.some((s) => s.task === WRITTEN_TASK)) {
+    tasks.unshift({ task: WRITTEN_TASK, imageId: null, name: null, dueDate: homework.dueDate })
+  }
+  return tasks.map((t) => {
+    const submission = submissions.find((s) => s.task === t.task)
+    return { ...t, submission: submission ? submissionView(submission) : null }
+  })
+}
 
 const me = (request: FastifyRequest) => request.student!
 
@@ -87,10 +136,10 @@ async function enrolledGroupIds(studentId: string) {
 
 export const miniAppRoutes: FastifyPluginAsync<{ fileStore?: HomeworkFileStore }> = async (app, opts) => {
   app.addHook('preHandler', app.authenticateStudent)
-  // Homework photos are posted as the raw image bytes.
-  app.addContentTypeParser(['image/jpeg', 'image/png', 'image/webp'], { parseAs: 'buffer' }, (_request, body, done) =>
-    done(null, body),
-  )
+  // Homework photos, videos and audio recordings are posted as the raw file bytes.
+  for (const type of [['image/jpeg', 'image/png', 'image/webp'], /^video\//, /^audio\//]) {
+    app.addContentTypeParser(type, { parseAs: 'buffer' }, (_request, body, done) => done(null, body))
+  }
 
   // Whose account to open: siblings sharing a phone each have their own, and the app asks every time it opens.
   app.get('/student/accounts', async (request) => {
@@ -148,7 +197,7 @@ export const miniAppRoutes: FastifyPluginAsync<{ fileStore?: HomeworkFileStore }
                   instructions: true,
                   dueDate: true,
                   images: HOMEWORK_WITH_IMAGES.include.images,
-                  submissions: { where: { studentId: student.id }, select: { status: true } },
+                  submissions: { where: { studentId: student.id }, select: { task: true, status: true } },
                 },
               },
             },
@@ -176,8 +225,8 @@ export const miniAppRoutes: FastifyPluginAsync<{ fileStore?: HomeworkFileStore }
             instructions: latestHomework.homework.instructions,
             dueDate: latestHomework.homework.dueDate,
             images: latestHomework.homework.images,
-            // Photos handed in and not sent back -- nothing left to hurry for.
-            handedIn: latestHomework.homework.submissions.some((s) => s.status !== 'RETURNED'),
+            // Tasks handed in and not sent back -- nothing left to hurry for on those.
+            handedIn: latestHomework.homework.submissions.filter((s) => s.status !== 'RETURNED').map((s) => s.task),
           }
         : null,
       openQuizzes: quizzes.filter((q) => q.isOpen && !q.attempt?.completed),
@@ -250,7 +299,7 @@ export const miniAppRoutes: FastifyPluginAsync<{ fileStore?: HomeworkFileStore }
         homework: {
           include: {
             ...HOMEWORK_WITH_IMAGES.include,
-            submissions: { where: { studentId: student.id }, include: SUBMISSION_FILES },
+            submissions: { where: { studentId: student.id }, include: SUBMISSION_VIEW },
           },
         },
         group: { select: { name: true, homeworkSubmissionEnabled: true } },
@@ -271,11 +320,8 @@ export const miniAppRoutes: FastifyPluginAsync<{ fileStore?: HomeworkFileStore }
             instructions: lesson.homework.instructions,
             dueDate: lesson.homework.dueDate,
             images: lesson.homework.images,
-            closesAt: homeworkClosesAt(lesson.homework),
             submissionEnabled: lesson.group.homeworkSubmissionEnabled,
-            submission: lesson.homework.submissions[0]
-              ? submissionView(lesson.homework.submissions[0], lesson.homework.dueDate)
-              : null,
+            tasks: tasksWithSubmissions(lesson.homework, lesson.homework.submissions),
           }
         : null,
     }
@@ -298,7 +344,7 @@ export const miniAppRoutes: FastifyPluginAsync<{ fileStore?: HomeworkFileStore }
             instructions: true,
             dueDate: true,
             images: HOMEWORK_WITH_IMAGES.include.images,
-            submissions: { where: { studentId: student.id }, include: SUBMISSION_FILES },
+            submissions: { where: { studentId: student.id }, include: SUBMISSION_VIEW },
           },
         },
       },
@@ -311,14 +357,13 @@ export const miniAppRoutes: FastifyPluginAsync<{ fileStore?: HomeworkFileStore }
         date: l.date,
         topic: l.topic,
         ...homework,
-        closesAt: homeworkClosesAt(homework),
         submissionEnabled,
-        submission: submissions[0] ? submissionView(submissions[0], homework.dueDate) : null,
+        tasks: tasksWithSubmissions(homework, submissions),
       }
     })
   })
 
-  // Topshirish: one homework with the student's own photos and voice notes for it.
+  // Topshirish: one homework, task by task, with what the student handed in for each.
   app.get('/student/homework/:id', async (request) => {
     const student = me(request)
     const { id } = idParams.parse(request.params)
@@ -330,56 +375,96 @@ export const miniAppRoutes: FastifyPluginAsync<{ fileStore?: HomeworkFileStore }
         homework: {
           include: {
             ...HOMEWORK_WITH_IMAGES.include,
-            submissions: { where: { studentId: student.id }, include: SUBMISSION_FILES },
+            submissions: { where: { studentId: student.id }, include: SUBMISSION_VIEW },
           },
         },
       },
     })
     if (!lesson?.homework) throw new NotFoundError('Homework not found')
-    const submission = lesson.homework.submissions[0]
-    // Voice notes are recorded in the bot chat, which files them under the newest open homework.
-    const newestOpen = lesson.group.homeworkSubmissionEnabled ? await latestOpenHomework(student.id) : null
+    // A voice note or video sent to the bot lands on one task -- say which, so the student knows.
+    const botTarget = lesson.group.homeworkSubmissionEnabled ? await botHomeworkTarget(student.id) : null
     return {
       lessonId: lesson.id,
       date: lesson.date,
       topic: lesson.topic,
       group: lesson.group.name,
       instructions: lesson.homework.instructions,
-      dueDate: lesson.homework.dueDate,
       images: lesson.homework.images,
-      // After this, nothing more is taken (unless the teacher sends it back to be redone).
-      closesAt: homeworkClosesAt(lesson.homework),
       submissionEnabled: lesson.group.homeworkSubmissionEnabled,
       maxPhotos: MAX_HOMEWORK_PHOTOS,
       maxVoices: MAX_HOMEWORK_VOICES,
       maxVideos: MAX_HOMEWORK_VIDEOS,
-      // What the student sends the bot now lands on this homework.
-      botTarget: newestOpen?.id === lesson.id,
-      submission: submission ? submissionView(submission, lesson.homework.dueDate) : null,
+      tasks: tasksWithSubmissions(lesson.homework, lesson.homework.submissions).map((t) => ({
+        ...t,
+        // What the student sends the bot now lands on this task.
+        botTarget: botTarget?.lesson.id === lesson.id && botTarget.task.task === t.task,
+      })),
     }
   })
 
   // One photo per request (the app compresses it first), so a slow connection loses at most one.
-  app.post('/student/homework/:id/photos', { bodyLimit: MAX_UPLOAD_BYTES }, async (request) => {
+  app.post('/student/homework/:id/tasks/:task/photos', { bodyLimit: MAX_UPLOAD_BYTES }, async (request) => {
     const student = me(request)
-    const { id } = idParams.parse(request.params)
+    const { id, task } = taskParams.parse(request.params)
     const body = request.body
     if (!Buffer.isBuffer(body) || !isSupportedImage(body)) throw new ValidationError('Send a JPEG, PNG or WebP photo')
     if (!opts.fileStore) throw new AppError('Photo uploads are not configured', 503)
 
-    const { lesson } = await assertCanAddHomeworkPhoto(student.id, id)
+    const { lesson, task: target } = await assertCanAddHomeworkFile(student.id, id, task, 'photo')
     const stored = await opts.fileStore.upload(body, {
       ownerChatId: String(request.telegramUser!.id),
-      caption: homeworkPhotoCaption(student, lesson.date, lesson.topic),
+      caption: homeworkPhotoCaption(student, lesson.date, lesson.topic, target.name),
     })
-    const submission = await addHomeworkPhoto(student.id, id, stored)
-    return submissionView(submission, submission.homework.dueDate)
+    return submissionView(await addHomeworkPhoto(student.id, id, task, stored))
+  })
+
+  // A video picked or recorded on the phone, sent as it is.
+  app.post('/student/homework/:id/tasks/:task/videos', { bodyLimit: MAX_MEDIA_UPLOAD_BYTES }, async (request) => {
+    const student = me(request)
+    const { id, task } = taskParams.parse(request.params)
+    const body = request.body
+    const type = request.headers['content-type'] ?? ''
+    if (!Buffer.isBuffer(body) || !type.startsWith('video/')) throw new ValidationError('Send a video')
+    if (!opts.fileStore) throw new AppError('Video uploads are not configured', 503)
+
+    const { lesson, task: target } = await assertCanAddHomeworkFile(student.id, id, task, 'video')
+    const stored = await opts.fileStore.uploadVideo(body, {
+      ownerChatId: String(request.telegramUser!.id),
+      caption: homeworkPhotoCaption(student, lesson.date, lesson.topic, target.name),
+      fileName: `homework.${mediaExtension(type, 'mp4')}`,
+    })
+    return submissionView(await addHomeworkVideo(student.id, id, task, stored))
+  })
+
+  // An audio recording picked on the phone -- speaking homework, like a voice note sent to the bot.
+  app.post('/student/homework/:id/tasks/:task/audios', { bodyLimit: MAX_MEDIA_UPLOAD_BYTES }, async (request) => {
+    const student = me(request)
+    const { id, task } = taskParams.parse(request.params)
+    const body = request.body
+    const type = request.headers['content-type'] ?? ''
+    if (!Buffer.isBuffer(body) || !type.startsWith('audio/')) throw new ValidationError('Send an audio recording')
+    if (!opts.fileStore) throw new AppError('Audio uploads are not configured', 503)
+
+    const { lesson, task: target } = await assertCanAddHomeworkFile(student.id, id, task, 'voice')
+    const stored = await opts.fileStore.uploadAudio(body, {
+      ownerChatId: String(request.telegramUser!.id),
+      caption: homeworkPhotoCaption(student, lesson.date, lesson.topic, target.name),
+      fileName: `homework.${mediaExtension(type, 'mp3')}`,
+    })
+    return submissionView(await addHomeworkVoice(student.id, id, task, stored))
+  })
+
+  // "Record it in the bot": the student's next voice notes and videos in the chat go to this task.
+  app.post('/student/homework/:id/tasks/:task/bot', async (request) => {
+    const { id, task } = taskParams.parse(request.params)
+    await setBotHomeworkTask(me(request).id, id, task)
+    return { ok: true }
   })
 
   app.delete('/student/homework-photos/:id', async (request) => {
     const { id } = idParams.parse(request.params)
     const submission = await removeHomeworkPhoto(me(request).id, id)
-    return { submission: submission && submissionView(submission, submission.homework.dueDate) }
+    return { submission: submission && submissionView(submission) }
   })
 
   app.get('/student/homework-photos/:id', async (request, reply) => {
@@ -390,11 +475,11 @@ export const miniAppRoutes: FastifyPluginAsync<{ fileStore?: HomeworkFileStore }
     return sendHomeworkFile(reply, opts.fileStore, photo.telegramFileId)
   })
 
-  // Voice notes come in through the bot only; here they are played back or taken out again.
+  // Voice notes come in through the bot, or as audio files picked here; here they are played back or taken out again.
   app.delete('/student/homework-voices/:id', async (request) => {
     const { id } = idParams.parse(request.params)
     const submission = await removeHomeworkVoice(me(request).id, id)
-    return { submission: submission && submissionView(submission, submission.homework.dueDate) }
+    return { submission: submission && submissionView(submission) }
   })
 
   app.get('/student/homework-voices/:id', async (request, reply) => {
@@ -405,11 +490,11 @@ export const miniAppRoutes: FastifyPluginAsync<{ fileStore?: HomeworkFileStore }
     return sendHomeworkFile(reply, opts.fileStore, voice.telegramFileId)
   })
 
-  // Videos come in through the bot only, like voice notes.
+  // Videos come in through the bot or picked here, like voice notes.
   app.delete('/student/homework-videos/:id', async (request) => {
     const { id } = idParams.parse(request.params)
     const submission = await removeHomeworkVideo(me(request).id, id)
-    return { submission: submission && submissionView(submission, submission.homework.dueDate) }
+    return { submission: submission && submissionView(submission) }
   })
 
   app.get('/student/homework-videos/:id', async (request, reply) => {

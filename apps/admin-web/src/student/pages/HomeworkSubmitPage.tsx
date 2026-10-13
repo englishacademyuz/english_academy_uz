@@ -1,71 +1,182 @@
 import { useEffect, useRef, useState, type ReactNode } from 'react'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { useParams } from 'react-router-dom'
-import { Camera, ImagePlus, Loader2, Mic, RotateCw, Trash2, X } from 'lucide-react'
+import { Camera, Clapperboard, FileAudio, ImagePlus, Loader2, Mic, RotateCw, Send, Trash2, X } from 'lucide-react'
 import { HomeworkVideo } from '../../components/shared/HomeworkVideo'
 import { RichText } from '../../components/shared/RichText'
 import { VoiceNote } from '../../components/shared/VoiceNote'
 import { shrinkPhoto } from '../../lib/image'
 import { isRichTextEmpty } from '../../lib/richText'
 import { MiniApiError, miniApi } from '../api'
-import { CheckIcon, ClockIcon, LateSticker } from '../components/art'
+import { CheckIcon, LateSticker } from '../components/art'
+import { DeadlineBar } from '../components/Deadline'
+import { TaskPicture } from '../components/HomeworkImages'
 import { useNow } from '../deadline'
-import { HomeworkImages } from '../components/HomeworkImages'
-import { ErrorState, Loading, Screen, Section } from '../components/kit'
-import { formatDateTime, weekdayDate, weekdayDayMonth } from '../format'
+import { ErrorState, Loading, Screen } from '../components/kit'
+import { formatDateTime, weekdayDayMonth } from '../format'
 import { haptic, webApp } from '../telegram'
-import type { MiniHomeworkDetail, MiniSubmission } from '../types'
+import type { MiniHomeworkDetail, MiniHomeworkImage, MiniSubmission } from '../types'
 
-type Pending = { key: string; blob: Blob; preview: string; failed: boolean }
+type FileKind = 'photo' | 'video' | 'audio'
+
+/** A file on its way up: a photo shows its preview, a video or recording only its kind. */
+type Pending = { key: string; kind: FileKind; file: Blob; preview: string | null; failed: boolean }
+
+/** The biggest video or recording the server takes -- what Telegram can hand back for playback. */
+const MAX_MEDIA_BYTES = 20 * 1024 * 1024
 
 const UPLOAD_ERRORS: Record<string, string> = {
   TOO_MANY_PHOTOS: 'Rasmlar soni chegaraga yetdi',
+  TOO_MANY_VOICES: 'Audiolar soni chegaraga yetdi',
+  TOO_MANY_VIDEOS: 'Videolar soni chegaraga yetdi',
   ALREADY_CHECKED: 'Ustoz bu vazifani allaqachon tekshirgan',
   SUBMISSIONS_DISABLED: 'Bu guruhda vazifa platforma orqali topshirilmaydi',
   DEADLINE_PASSED: 'Topshirish muddati tugagan',
+  UNSUPPORTED_VIDEO: 'Bu videoni ochib boʻlmadi — boshqa formatda yuboring',
+  UNSUPPORTED_AUDIO: 'Bu audioni ochib boʻlmadi — botga ovozli xabar qilib yuboring',
 }
 
+const FAILED_UPLOAD: Record<FileKind, string> = {
+  photo: 'Rasmni yuborib boʻlmadi',
+  video: 'Videoni yuborib boʻlmadi',
+  audio: 'Audioni yuborib boʻlmadi',
+}
+
+type Task = MiniHomeworkDetail['tasks'][number]
+
 /**
- * Topshirish: the homework, the student's photos, voice notes and videos for it, and the camera/gallery
- * buttons to add photos. Voice notes and videos are recorded in the bot chat (Telegram's own buttons).
- * Once the deadline has passed, nothing more can be added or taken out -- unless the teacher sent
- * it back to be redone.
+ * Topshirish: one homework, task by task -- the written homework and each picture the teacher
+ * gave are handed in separately, each on its own deadline. Every task has its own card: what to
+ * do, how long is left, what the student has handed in for it, and buttons to add photos, videos
+ * and audio recordings (or to record a voice note in the bot chat). Once a task's deadline has
+ * passed, nothing more can be added to it or taken out -- unless the teacher sent it back.
  */
 export function HomeworkSubmitPage() {
   const { id } = useParams<{ id: string }>()
   const queryClient = useQueryClient()
   const queryKey = ['mini', 'homework', id]
   const homework = useQuery({ queryKey, queryFn: () => miniApi.homeworkDetail(id!), enabled: !!id })
+  const back = { to: '/student/homework', label: 'Vazifalar' }
+
+  function setSubmission(task: string, submission: MiniSubmission | null) {
+    queryClient.setQueryData<MiniHomeworkDetail>(
+      queryKey,
+      (old) => old && { ...old, tasks: old.tasks.map((t) => (t.task === task ? { ...t, submission } : t)) },
+    )
+    queryClient.invalidateQueries({ queryKey: ['mini', 'homework'], exact: true })
+    queryClient.invalidateQueries({ queryKey: ['mini', 'lesson', id] })
+    queryClient.invalidateQueries({ queryKey: ['mini', 'home'] })
+  }
+
+  if (homework.isLoading) return <Loading />
+  if (homework.error || !homework.data) {
+    return (
+      <Screen back={back} title="Uyga vazifa">
+        <ErrorState error={homework.error} onRetry={() => homework.refetch()} />
+      </Screen>
+    )
+  }
+
+  const data = homework.data
+  return (
+    <Screen back={back} eyebrow={weekdayDayMonth(new Date(data.date))} title={data.topic || 'Uyga vazifa'} subtitle={data.group}>
+      {data.tasks.length > 1 && (
+        <p className="rounded-[18px] bg-tg-sand px-4 py-3 text-center text-[14px] font-bold text-tg-muted">
+          {data.tasks.length} ta vazifa — har birini alohida topshiring, har birining oʻz muddati bor.
+        </p>
+      )}
+      {data.tasks.map((task, i) => (
+        <TaskCard
+          key={task.task}
+          lessonId={data.lessonId}
+          task={task}
+          number={data.tasks.length > 1 ? i + 1 : null}
+          instructions={data.instructions}
+          image={data.images.find((image) => image.id === task.imageId) ?? null}
+          submissionEnabled={data.submissionEnabled}
+          limits={{ photo: data.maxPhotos, audio: data.maxVoices, video: data.maxVideos }}
+          onSubmission={(submission) => setSubmission(task.task, submission)}
+          onClosed={() => homework.refetch()}
+        />
+      ))}
+    </Screen>
+  )
+}
+
+function TaskCard({
+  lessonId,
+  task,
+  number,
+  instructions,
+  image,
+  submissionEnabled,
+  limits,
+  onSubmission,
+  onClosed,
+}: {
+  lessonId: string
+  task: Task
+  /** Its number among several tasks; null when it's the only one. */
+  number: number | null
+  instructions: string
+  image: MiniHomeworkImage | null
+  submissionEnabled: boolean
+  limits: Record<FileKind, number>
+  onSubmission: (submission: MiniSubmission | null) => void
+  /** The deadline passed while the page was open -- show it closed. */
+  onClosed: () => void
+}) {
   const [pending, setPending] = useState<Pending[]>([])
   const [error, setError] = useState<string | null>(null)
   const [viewing, setViewing] = useState<number | null>(null)
-  // Photos waiting to go up, in the order they were picked -- one upload at a time.
+  const [toBot, setToBot] = useState(false)
+  // Files waiting to go up, in the order they were picked -- one upload at a time.
   const queue = useRef<Pending[]>([])
   const uploading = useRef(false)
-  const back = { to: '/student/homework', label: 'Vazifalar' }
   const now = useNow()
 
-  function setSubmission(submission: MiniSubmission | null) {
-    queryClient.setQueryData<MiniHomeworkDetail>(queryKey, (old) => old && { ...old, submission })
-    queryClient.invalidateQueries({ queryKey: ['mini', 'homework'], exact: true })
-    queryClient.invalidateQueries({ queryKey: ['mini', 'lesson', id] })
+  const { submission } = task
+  const photos = submission?.photos ?? []
+  const voices = submission?.voices ?? []
+  const videos = submission?.videos ?? []
+  // A submission sent back to be redone stays open past the deadline.
+  const late = !!task.dueDate && now.getTime() >= new Date(task.dueDate).getTime() && submission?.status !== 'RETURNED'
+  const open = submissionEnabled && submission?.status !== 'CHECKED' && !late
+  const waiting = (kind: FileKind) => pending.filter((p) => p.kind === kind && !p.failed).length
+  const room: Record<FileKind, number> = {
+    photo: limits.photo - photos.length - waiting('photo'),
+    video: limits.video - videos.length - waiting('video'),
+    audio: limits.audio - voices.length - waiting('audio'),
+  }
+  const name = task.name ?? (number ? 'Yozma vazifa' : 'Uyga vazifa')
+
+  function upload(item: Pending) {
+    if (item.kind === 'photo') return miniApi.uploadHomeworkPhoto(lessonId, task.task, item.file)
+    if (item.kind === 'video') return miniApi.uploadHomeworkVideo(lessonId, task.task, item.file as File)
+    return miniApi.uploadHomeworkAudio(lessonId, task.task, item.file as File)
   }
 
-  // A failed photo stays on screen with a retry button; the rest keep going.
+  // A failed file stays on screen with a retry button; the rest keep going.
   async function drain() {
     if (uploading.current) return
     uploading.current = true
     let failures = 0
     for (let item = queue.current.shift(); item; item = queue.current.shift()) {
       try {
-        setSubmission(await miniApi.uploadHomeworkPhoto(id!, item.blob))
-        URL.revokeObjectURL(item.preview)
+        onSubmission(await upload(item))
+        if (item.preview) URL.revokeObjectURL(item.preview)
         setPending((list) => list.filter((p) => p.key !== item.key))
       } catch (err) {
         const code = err instanceof MiniApiError ? err.message : ''
-        // The page was open as the deadline passed -- show it closed.
-        if (code === 'DEADLINE_PASSED') homework.refetch()
-        setError(UPLOAD_ERRORS[code] ?? (err instanceof TypeError ? 'Internet aloqasini tekshiring' : 'Rasmni yuborib boʻlmadi'))
+        if (code === 'DEADLINE_PASSED') onClosed()
+        setError(
+          UPLOAD_ERRORS[code] ??
+            (err instanceof MiniApiError && err.statusCode === 413
+              ? 'Fayl juda katta (20 MB gacha)'
+              : err instanceof TypeError
+                ? 'Internet aloqasini tekshiring'
+                : FAILED_UPLOAD[item.kind]),
+        )
         const failed = item
         setPending((list) => list.map((p) => (p.key === failed.key ? { ...p, failed: true } : p)))
         failures += 1
@@ -75,15 +186,22 @@ export function HomeworkSubmitPage() {
     haptic(failures ? 'error' : 'success')
   }
 
-  async function addFiles(files: FileList | null, room: number) {
+  async function addFiles(kind: FileKind, files: FileList | null) {
     if (!files?.length) return
     setError(null)
-    const picked = [...files].slice(0, room)
-    if (files.length > room) setError(`Yana faqat ${room} ta rasm qoʻshish mumkin`)
+    let picked = [...files]
+    if (kind !== 'photo') {
+      const tooBig = picked.filter((f) => f.size > MAX_MEDIA_BYTES)
+      if (tooBig.length) setError('Fayl juda katta (20 MB gacha). Qisqaroq yozib yuboring.')
+      picked = picked.filter((f) => f.size <= MAX_MEDIA_BYTES)
+    }
+    if (picked.length > room[kind]) setError(`Yana faqat ${Math.max(room[kind], 0)} ta qoʻshish mumkin`)
+    picked = picked.slice(0, Math.max(room[kind], 0))
     const items = await Promise.all(
-      picked.map(async (file, i) => {
+      picked.map(async (file, i): Promise<Pending> => {
+        if (kind !== 'photo') return { key: `${Date.now()}-${i}`, kind, file, preview: null, failed: false }
         const blob = await shrinkPhoto(file)
-        return { key: `${Date.now()}-${i}`, blob, preview: URL.createObjectURL(blob), failed: false }
+        return { key: `${Date.now()}-${i}`, kind, file: blob, preview: URL.createObjectURL(blob), failed: false }
       }),
     )
     setPending((list) => [...list, ...items])
@@ -99,90 +217,80 @@ export function HomeworkSubmitPage() {
     drain()
   }
 
-  async function remove(photoId: string) {
+  async function removeFile(kind: FileKind, fileId: string) {
     try {
-      const { submission } = await miniApi.deleteHomeworkPhoto(photoId)
-      setSubmission(submission)
+      const remove = { photo: miniApi.deleteHomeworkPhoto, audio: miniApi.deleteHomeworkVoice, video: miniApi.deleteHomeworkVideo }[kind]
+      onSubmission((await remove(fileId)).submission)
       setViewing(null)
     } catch {
-      setError('Rasmni oʻchirib boʻlmadi')
+      setError({ photo: 'Rasmni', audio: 'Audioni', video: 'Videoni' }[kind] + ' oʻchirib boʻlmadi')
     }
   }
 
-  async function removeVoice(voiceId: string) {
+  // "Record it in the bot": point the bot at this task, then hand over to the chat.
+  async function sendThroughBot() {
+    setError(null)
+    setToBot(true)
     try {
-      const { submission } = await miniApi.deleteHomeworkVoice(voiceId)
-      setSubmission(submission)
-    } catch {
-      setError('Ovozli xabarni oʻchirib boʻlmadi')
+      await miniApi.sendHomeworkThroughBot(lessonId, task.task)
+      haptic('success')
+      webApp()?.close()
+    } catch (err) {
+      const code = err instanceof MiniApiError ? err.message : ''
+      setError(UPLOAD_ERRORS[code] ?? 'Bogʻlanib boʻlmadi, qayta urinib koʻring')
+    } finally {
+      setToBot(false)
     }
   }
 
-  async function removeVideo(videoId: string) {
-    try {
-      const { submission } = await miniApi.deleteHomeworkVideo(videoId)
-      setSubmission(submission)
-    } catch {
-      setError('Videoni oʻchirib boʻlmadi')
-    }
-  }
-
-  if (homework.isLoading) return <Loading />
-  if (homework.error || !homework.data) {
-    return (
-      <Screen back={back} title="Uyga vazifa">
-        <ErrorState error={homework.error} onRetry={() => homework.refetch()} />
-      </Screen>
-    )
-  }
-
-  const { date, topic, group, instructions, dueDate, images, closesAt, submissionEnabled, submission, maxPhotos, maxVoices, maxVideos, botTarget } =
-    homework.data
-  const photos = submission?.photos ?? []
-  const voices = submission?.voices ?? []
-  const videos = submission?.videos ?? []
-  // A submission sent back to be redone stays open past the deadline.
-  const late = !!closesAt && now.getTime() >= new Date(closesAt).getTime() && submission?.status !== 'RETURNED'
-  const open = submissionEnabled && submission?.status !== 'CHECKED' && !late
-  const room = maxPhotos - photos.length - pending.length
-  const canAdd = open && room > 0
+  const pendingPhotos = pending.filter((p) => p.kind === 'photo')
+  const pendingMedia = pending.filter((p) => p.kind !== 'photo')
+  const nothingYet = photos.length + voices.length + videos.length + pending.length === 0
 
   return (
-    <Screen back={back} eyebrow={weekdayDayMonth(new Date(date))} title={topic || 'Uyga vazifa'} subtitle={group}>
-      <section className="flex flex-col gap-3 rounded-[26px] border-[3px] border-tg-sun bg-tg-sun-soft p-4">
-        <div className="flex flex-wrap items-center justify-between gap-2">
-          <span className="text-sm font-extrabold text-tg-sun-ink">USTOZ YOZDI</span>
-          {dueDate && (
-            <span className="flex items-center gap-1.5 rounded-full bg-white px-3 py-1.5 text-[14px] font-extrabold">
-              <ClockIcon size={18} strokeWidth={2.4} className="text-tg-rust" />
-              {weekdayDate(new Date(dueDate))} gacha
-            </span>
-          )}
-        </div>
-        {!isRichTextEmpty(instructions) && (
-          <div className="rounded-[18px] bg-white px-4 py-3">
-            <RichText value={instructions} variant="tg" />
-          </div>
+    <section className="flex flex-col gap-3 overflow-hidden rounded-[26px] border-[3px] border-tg-line bg-white">
+      <header className="flex items-center gap-2.5 px-4 pt-4">
+        {number !== null && (
+          <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-tg-grape-2 font-tg-display text-lg font-semibold text-white">
+            {number}
+          </span>
         )}
-        <HomeworkImages images={images} />
-      </section>
+        <span className="min-w-0 grow truncate font-tg-display text-[20px] font-semibold leading-tight text-tg-ink">
+          {task.imageId ? '🖼 ' : '📝 '}
+          {name}
+        </span>
+        {submissionEnabled && <StatusChip submission={submission} />}
+      </header>
+      {task.dueDate && <DeadlineBar due={new Date(task.dueDate)} />}
 
-      {!submissionEnabled ? (
-        <div className="flex items-center justify-center gap-2 rounded-[18px] border-[3px] border-tg-leaf bg-tg-leaf-soft px-3 py-3.5 text-base font-extrabold text-tg-leaf-dark">
-          <CheckIcon size={22} />
-          Ustoz darsda tekshiradi
-        </div>
-      ) : (
-        <>
-          <StatusBanner submission={submission} />
-          {late && submission?.status !== 'CHECKED' && <DeadlinePassed closesAt={new Date(closesAt!)} handedIn={!!submission} />}
+      <div className="flex flex-col gap-3 px-4 pb-4">
+        {image ? (
+          <TaskPicture image={image} name={name} />
+        ) : (
+          !isRichTextEmpty(instructions) && (
+            <div className="rounded-[18px] bg-tg-sun-soft px-4 py-3">
+              <RichText value={instructions} variant="tg" />
+            </div>
+          )
+        )}
 
-          <Section title={`Rasmlarim${photos.length ? ` · ${photos.length}` : ''}`}>
-            {photos.length === 0 && pending.length === 0 ? (
-              <p className="rounded-[22px] border-2 border-dashed border-tg-dash bg-white px-4 py-6 text-center text-[15px] font-bold text-tg-muted">
-                Vazifani bajarib, daftaringizni suratga oling. Rasmlar darhol ustozga boradi.
+        {!submissionEnabled ? (
+          <div className="flex items-center justify-center gap-2 rounded-[18px] border-[3px] border-tg-leaf bg-tg-leaf-soft px-3 py-3.5 text-base font-extrabold text-tg-leaf-dark">
+            <CheckIcon size={22} />
+            Ustoz darsda tekshiradi
+          </div>
+        ) : (
+          <>
+            <StatusBanner submission={submission} />
+            {late && submission?.status !== 'CHECKED' && <DeadlinePassed dueDate={new Date(task.dueDate!)} handedIn={!!submission} />}
+
+            {nothingYet && open && (
+              <p className="rounded-[18px] border-2 border-dashed border-tg-dash px-4 py-4 text-center text-[15px] font-bold text-tg-muted">
+                Vazifani bajarib, suratga oling, video yoki audio yozing — shu yerdan yuboring.
               </p>
-            ) : (
+            )}
+
+            {(photos.length > 0 || pendingPhotos.length > 0) && (
               <div className="grid grid-cols-3 gap-2">
                 {photos.map((photo, i) => (
                   <button
@@ -194,111 +302,143 @@ export function HomeworkSubmitPage() {
                     <PhotoImage photoId={photo.id} className="h-full w-full object-cover" />
                   </button>
                 ))}
-                {pending.map((item) => (
+                {pendingPhotos.map((item) => (
                   <div key={item.key} className="relative aspect-[3/4] overflow-hidden rounded-[18px] border-2 border-tg-line">
-                    <img src={item.preview} alt="" className="h-full w-full object-cover opacity-60" />
+                    <img src={item.preview!} alt="" className="h-full w-full object-cover opacity-60" />
                     <span className="absolute inset-0 flex items-center justify-center">
-                      {item.failed ? (
-                        <button
-                          type="button"
-                          onClick={() => retry(item)}
-                          aria-label="Qayta yuborish"
-                          className="flex h-12 w-12 items-center justify-center rounded-full bg-tg-cherry text-white"
-                        >
-                          <RotateCw className="h-6 w-6" strokeWidth={2.5} />
-                        </button>
-                      ) : (
-                        <Loader2 className="h-9 w-9 animate-spin text-tg-blue" />
-                      )}
+                      <PendingState item={item} onRetry={retry} />
                     </span>
                   </div>
                 ))}
               </div>
             )}
-          </Section>
 
-          {error && <p className="rounded-[18px] bg-tg-cherry-soft px-4 py-3 text-center text-[15px] font-extrabold text-tg-cherry">{error}</p>}
+            {voices.length > 0 && (
+              <div className="flex flex-col gap-2">
+                {voices.map((voice) => (
+                  <div key={voice.id} className="flex items-center gap-2 rounded-[18px] border-2 border-tg-line bg-white px-3 py-2">
+                    <VoiceNote
+                      voiceId={voice.id}
+                      load={miniApi.homeworkVoiceUrl}
+                      duration={voice.duration}
+                      className="grow"
+                      labelClassName="text-tg-muted font-bold"
+                    />
+                    {open && (
+                      <button
+                        type="button"
+                        onClick={() => removeFile('audio', voice.id)}
+                        aria-label="Audioni oʻchirish"
+                        className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full text-tg-cherry active:bg-tg-cherry-soft"
+                      >
+                        <Trash2 className="h-5 w-5" strokeWidth={2.4} />
+                      </button>
+                    )}
+                  </div>
+                ))}
+              </div>
+            )}
 
-          {canAdd && (
-            <div className="grid grid-cols-2 gap-2.5">
-              <PickButton icon={<Camera className="h-7 w-7" strokeWidth={2.4} />} label="Suratga olish" tone="blue" capture onPick={(f) => addFiles(f, room)} />
-              <PickButton icon={<ImagePlus className="h-7 w-7" strokeWidth={2.4} />} label="Galereyadan" tone="white" multiple onPick={(f) => addFiles(f, room)} />
-            </div>
-          )}
-          {open && (
-            <p className="text-center text-[13px] font-bold text-tg-faint">
-              Koʻpi bilan {maxPhotos} ta rasm.{botTarget && ' Rasmni botga yuborsangiz ham shu vazifaga qoʻshiladi.'}
-            </p>
-          )}
+            {videos.length > 0 && (
+              <div className="flex flex-col gap-2">
+                {videos.map((video) => (
+                  <div key={video.id} className="flex flex-col items-center gap-2 rounded-[18px] border-2 border-tg-line bg-white p-2">
+                    <HomeworkVideo
+                      videoId={video.id}
+                      load={miniApi.homeworkVideoUrl}
+                      duration={video.duration}
+                      round={video.round}
+                      labelClassName="text-tg-muted font-bold"
+                    />
+                    {open && (
+                      <button
+                        type="button"
+                        onClick={() => removeFile('video', video.id)}
+                        className="flex min-h-10 items-center gap-1.5 rounded-full px-4 text-[14px] font-extrabold text-tg-cherry active:bg-tg-cherry-soft"
+                      >
+                        <Trash2 className="h-4 w-4" strokeWidth={2.4} /> Oʻchirish
+                      </button>
+                    )}
+                  </div>
+                ))}
+              </div>
+            )}
 
-          {(voices.length > 0 || open) && (
-            <Section title={`Ovozli xabarlarim${voices.length ? ` · ${voices.length}` : ''}`}>
-              {voices.length > 0 && (
-                <div className="flex flex-col gap-2">
-                  {voices.map((voice) => (
-                    <div key={voice.id} className="flex items-center gap-2 rounded-[18px] border-2 border-tg-line bg-white px-3 py-2">
-                      <VoiceNote
-                        voiceId={voice.id}
-                        load={miniApi.homeworkVoiceUrl}
-                        duration={voice.duration}
-                        className="grow"
-                        labelClassName="text-tg-muted font-bold"
-                      />
-                      {open && (
-                        <button
-                          type="button"
-                          onClick={() => removeVoice(voice.id)}
-                          aria-label="Ovozli xabarni oʻchirish"
-                          className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full text-tg-cherry active:bg-tg-cherry-soft"
-                        >
-                          <Trash2 className="h-5 w-5" strokeWidth={2.4} />
-                        </button>
-                      )}
-                    </div>
-                  ))}
+            {pendingMedia.map((item) => (
+              <div key={item.key} className="flex items-center gap-3 rounded-[18px] border-2 border-tg-line bg-tg-sand px-3 py-2.5">
+                <span className="text-2xl" aria-hidden>
+                  {item.kind === 'video' ? '🎬' : '🎤'}
+                </span>
+                <span className="min-w-0 grow truncate text-[15px] font-bold text-tg-muted">
+                  {item.failed ? 'Yuborilmadi' : `${item.kind === 'video' ? 'Video' : 'Audio'} yuborilmoqda…`}
+                </span>
+                <PendingState item={item} onRetry={retry} />
+              </div>
+            ))}
+
+            {error && <p className="rounded-[18px] bg-tg-cherry-soft px-4 py-3 text-center text-[15px] font-extrabold text-tg-cherry">{error}</p>}
+
+            {open && (
+              <>
+                <div className="grid grid-cols-2 gap-2.5">
+                  <PickButton
+                    icon={<Camera className="h-7 w-7" strokeWidth={2.4} />}
+                    label="Suratga olish"
+                    tone="blue"
+                    accept="image/*"
+                    capture
+                    disabled={room.photo <= 0}
+                    onPick={(f) => addFiles('photo', f)}
+                  />
+                  <PickButton
+                    icon={<ImagePlus className="h-7 w-7" strokeWidth={2.4} />}
+                    label="Galereyadan"
+                    tone="white"
+                    accept="image/*"
+                    multiple
+                    disabled={room.photo <= 0}
+                    onPick={(f) => addFiles('photo', f)}
+                  />
+                  <PickButton
+                    icon={<Clapperboard className="h-7 w-7" strokeWidth={2.4} />}
+                    label="Video"
+                    tone="white"
+                    accept="video/*"
+                    disabled={room.video <= 0}
+                    onPick={(f) => addFiles('video', f)}
+                  />
+                  <PickButton
+                    icon={<FileAudio className="h-7 w-7" strokeWidth={2.4} />}
+                    label="Audio"
+                    tone="white"
+                    accept="audio/*"
+                    disabled={room.audio <= 0}
+                    onPick={(f) => addFiles('audio', f)}
+                  />
                 </div>
-              )}
-              {open && <VoiceHint botTarget={botTarget} full={voices.length >= maxVoices} />}
-            </Section>
-          )}
-
-          {(videos.length > 0 || open) && (
-            <Section title={`Videolarim${videos.length ? ` · ${videos.length}` : ''}`}>
-              {videos.length > 0 && (
-                <div className="flex flex-col gap-2">
-                  {videos.map((video) => (
-                    <div key={video.id} className="flex flex-col items-center gap-2 rounded-[18px] border-2 border-tg-line bg-white p-2">
-                      <HomeworkVideo
-                        videoId={video.id}
-                        load={miniApi.homeworkVideoUrl}
-                        duration={video.duration}
-                        round={video.round}
-                        labelClassName="text-tg-muted font-bold"
-                      />
-                      {open && (
-                        <button
-                          type="button"
-                          onClick={() => removeVideo(video.id)}
-                          className="flex min-h-10 items-center gap-1.5 rounded-full px-4 text-[14px] font-extrabold text-tg-cherry active:bg-tg-cherry-soft"
-                        >
-                          <Trash2 className="h-4 w-4" strokeWidth={2.4} /> Oʻchirish
-                        </button>
-                      )}
-                    </div>
-                  ))}
-                </div>
-              )}
-              {open && (
-                <p className="mt-2 text-center text-[13px] font-bold text-tg-faint">
-                  {videos.length >= maxVideos
-                    ? 'Videolar soni chegaraga yetdi.'
-                    : `Gapirayotganingizni videoga olib (yoki dumaloq video xabar) botga yuboring 🎬 Koʻpi bilan ${maxVideos} ta, har biri 20 MB gacha.`}
+                {webApp() && (
+                  <button
+                    type="button"
+                    onClick={sendThroughBot}
+                    disabled={toBot}
+                    className="flex min-h-[52px] items-center justify-center gap-2 rounded-[20px] border-2 border-tg-line-strong bg-white text-[15px] font-extrabold text-tg-blue-dark active:scale-[0.98] disabled:opacity-60"
+                  >
+                    {toBot ? <Loader2 className="h-5 w-5 animate-spin" /> : <Mic className="h-5 w-5" strokeWidth={2.4} />}
+                    Botda ovozli xabar yoki video yozish
+                    <Send className="h-4 w-4" strokeWidth={2.4} />
+                  </button>
+                )}
+                <p className="text-center text-[13px] font-bold text-tg-faint">
+                  {task.botTarget
+                    ? 'Botga yuborilgan ovozli xabar va videolar shu vazifaga qoʻshiladi. '
+                    : ''}
+                  Koʻpi bilan {limits.photo} ta rasm, {limits.video} ta video, {limits.audio} ta audio · video va audio 20 MB gacha.
                 </p>
-              )}
-            </Section>
-          )}
-        </>
-      )}
+              </>
+            )}
+          </>
+        )}
+      </div>
 
       {viewing !== null && photos[viewing] && (
         <PhotoViewer
@@ -306,20 +446,47 @@ export function HomeworkSubmitPage() {
           index={viewing}
           onIndex={setViewing}
           onClose={() => setViewing(null)}
-          onDelete={open ? remove : undefined}
+          onDelete={open ? (photoId) => removeFile('photo', photoId) : undefined}
         />
       )}
-    </Screen>
+    </section>
   )
 }
 
-/** Too late: the deadline has passed, so the buttons are gone -- said with a sad sticker. */
-function DeadlinePassed({ closesAt, handedIn }: { closesAt: Date; handedIn: boolean }) {
+/** A spinner while a file goes up; a retry button once it failed. */
+function PendingState({ item, onRetry }: { item: Pending; onRetry: (item: Pending) => void }) {
+  if (!item.failed) return <Loader2 className="h-8 w-8 shrink-0 animate-spin text-tg-blue" />
   return (
-    <section className="flex flex-col items-center gap-2 rounded-[26px] border-[3px] border-tg-cherry bg-tg-cherry-soft px-4 py-5 text-center">
-      <LateSticker size={112} />
+    <button
+      type="button"
+      onClick={() => onRetry(item)}
+      aria-label="Qayta yuborish"
+      className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-tg-cherry text-white"
+    >
+      <RotateCw className="h-5 w-5" strokeWidth={2.5} />
+    </button>
+  )
+}
+
+/** Where a task stands, at a glance in its card's corner. */
+function StatusChip({ submission }: { submission: MiniSubmission | null }) {
+  const look = !submission
+    ? { cls: 'bg-tg-sand text-tg-muted', text: 'Topshirilmagan' }
+    : {
+        SUBMITTED: { cls: 'bg-tg-leaf-soft text-tg-leaf-dark', text: '✅ Topshirildi' },
+        RETURNED: { cls: 'bg-tg-cherry-soft text-tg-cherry', text: '🔁 Qayta' },
+        CHECKED: { cls: 'bg-tg-blue-soft text-tg-blue-dark', text: '⭐ Tekshirildi' },
+      }[submission.status]
+  return <span className={`shrink-0 rounded-full px-2.5 py-1 text-[12px] font-extrabold ${look.cls}`}>{look.text}</span>
+}
+
+/** Too late: the deadline has passed, so the buttons are gone -- said with a sad sticker. */
+function DeadlinePassed({ dueDate, handedIn }: { dueDate: Date; handedIn: boolean }) {
+  return (
+    <section className="flex flex-col items-center gap-2 rounded-[22px] border-[3px] border-tg-cherry bg-tg-cherry-soft px-4 py-4 text-center">
+      <LateSticker size={88} />
       <span className="font-tg-display text-xl font-semibold leading-tight text-tg-cherry">Muddat oʻtib ketdi</span>
-      <span className="text-[14px] font-bold text-tg-muted">Muddat: {formatDateTime(closesAt.toISOString())} gacha edi</span>
+      <span className="text-[14px] font-bold text-tg-muted">Muddat: {formatDateTime(dueDate.toISOString())} gacha edi</span>
       <p className="text-[15px] font-bold text-tg-body">
         {handedIn
           ? 'Topshirganlaringiz ustozga yetib bordi. Endi yangi narsa qoʻshib yoki oʻchirib boʻlmaydi.'
@@ -357,40 +524,9 @@ function StatusBanner({ submission }: { submission: MiniSubmission | null }) {
         </p>
       )}
       {submission.status === 'RETURNED' && (
-        <p className="text-[14px] font-bold text-tg-body">Xatolarni tuzating va yangi rasm yoki ovozli xabar qoʻshing — vazifa yana ustozga boradi.</p>
+        <p className="text-[14px] font-bold text-tg-body">Xatolarni tuzating va yangi rasm, video yoki audio qoʻshing — vazifa yana ustozga boradi.</p>
       )}
     </section>
-  )
-}
-
-/**
- * How to hand in a voice note: record it in the bot chat. The bot files it under the newest open
- * homework, so on an older one the student is told so instead of being sent off to record.
- */
-function VoiceHint({ botTarget, full }: { botTarget: boolean; full: boolean }) {
-  if (full) return <p className="mt-2 text-center text-[13px] font-bold text-tg-faint">Ovozli xabarlar soni chegaraga yetdi.</p>
-  if (!botTarget) {
-    return (
-      <p className="mt-2 rounded-[18px] bg-tg-sand px-4 py-3 text-center text-[14px] font-bold text-tg-muted">
-        Botga yuborilgan ovozli xabar eng yangi vazifaga qoʻshiladi.
-      </p>
-    )
-  }
-  return (
-    <div className="mt-2 flex flex-col gap-2">
-      <p className="rounded-[18px] border-2 border-dashed border-tg-dash bg-white px-4 py-3 text-center text-[14px] font-bold text-tg-muted">
-        Speaking vazifasi uchun botga ovozli xabar yozib yuboring 🎤 — u darhol shu vazifaga qoʻshiladi.
-      </p>
-      {webApp() && (
-        <button
-          type="button"
-          onClick={() => webApp()?.close()}
-          className="flex min-h-[56px] items-center justify-center gap-2 rounded-[22px] border-2 border-tg-line-strong bg-white text-base font-extrabold text-tg-blue-dark active:scale-[0.98]"
-        >
-          <Mic className="h-6 w-6" strokeWidth={2.4} /> Botga oʻtib yozish
-        </button>
-      )}
-    </div>
   )
 }
 
@@ -398,29 +534,35 @@ function PickButton({
   icon,
   label,
   tone,
+  accept,
   capture,
   multiple,
+  disabled,
   onPick,
 }: {
   icon: ReactNode
   label: string
   tone: 'blue' | 'white'
+  accept: string
   capture?: boolean
   multiple?: boolean
+  disabled?: boolean
   onPick: (files: FileList | null) => void
 }) {
   return (
     <label
-      className={`flex min-h-[88px] cursor-pointer flex-col items-center justify-center gap-1.5 rounded-[22px] text-base font-extrabold active:scale-[0.98] ${
-        tone === 'blue' ? 'bg-tg-blue text-white' : 'border-2 border-tg-line-strong bg-white text-tg-blue-dark'
-      }`}
+      aria-disabled={disabled}
+      className={`flex min-h-[80px] flex-col items-center justify-center gap-1.5 rounded-[22px] text-base font-extrabold ${
+        disabled ? 'pointer-events-none opacity-40' : 'cursor-pointer active:scale-[0.98]'
+      } ${tone === 'blue' ? 'bg-tg-blue text-white' : 'border-2 border-tg-line-strong bg-white text-tg-blue-dark'}`}
     >
       {icon}
       {label}
       <input
         type="file"
-        accept="image/*"
+        accept={accept}
         className="hidden"
+        disabled={disabled}
         {...(capture ? { capture: 'environment' as const } : {})}
         multiple={multiple}
         onChange={(e) => {

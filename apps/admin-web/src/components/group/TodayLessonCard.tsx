@@ -1,8 +1,8 @@
 import { lazy, Suspense, useEffect, useMemo, useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { CheckCircle2 } from 'lucide-react'
+import { CalendarClock, CheckCircle2 } from 'lucide-react'
 import { reschedules as reschedulesApi, sessions as sessionsApi } from '../../lib/api'
-import { toDateInputValue, toDateTimeInputValue, todayInputValue } from '../../lib/format'
+import { formatDate, formatTime, toDateInputValue, toDateTimeInputValue, todayInputValue } from '../../lib/format'
 import { notifyError, notifySuccess } from '../../lib/toast'
 import type { Group } from '../../lib/types'
 import { MaterialsEditor, type MaterialDraft } from '../shared/MaterialsEditor'
@@ -25,6 +25,9 @@ export function TodayLessonCard({ group, initialDate }: { group: Group; initialD
   const [topic, setTopic] = useState('')
   const [notes, setNotes] = useState('')
   const [homeworkInstructions, setHomeworkInstructions] = useState('')
+  // The written homework's deadline, as a datetime-local value: '' for none, null until it's set --
+  // then it's when the group's next lesson starts.
+  const [homeworkDueDate, setHomeworkDueDate] = useState<string | null>(null)
   const [homeworkImages, setHomeworkImages] = useState<HomeworkImageDraft[]>([])
   const [uploadingImages, setUploadingImages] = useState(false)
   const [materials, setMaterials] = useState<MaterialDraft[]>([])
@@ -49,12 +52,16 @@ export function TodayLessonCard({ group, initialDate }: { group: Group; initialD
   })
   const nextLesson = nextLessonAfter(group, reschedulesQuery.data ?? [], date)
   const nextLessonStart = nextLesson ? `${nextLesson.day}T${nextLesson.time}` : null
+  const writtenDueDate = homeworkDueDate ?? nextLessonStart ?? ''
 
   useEffect(() => {
     if (existingSession) {
       setTopic(existingSession.topic ?? '')
       setNotes(existingSession.notes ?? '')
       setHomeworkInstructions(existingSession.homework?.instructions ?? '')
+      setHomeworkDueDate(
+        existingSession.homework ? (existingSession.homework.dueDate ? toDateTimeInputValue(existingSession.homework.dueDate) : '') : null,
+      )
       setHomeworkImages(
         existingSession.homework?.images.map((i) => ({
           id: i.id,
@@ -68,6 +75,7 @@ export function TodayLessonCard({ group, initialDate }: { group: Group; initialD
       setTopic('')
       setNotes('')
       setHomeworkInstructions('')
+      setHomeworkDueDate(null)
       setHomeworkImages([])
       setMaterials([])
     }
@@ -88,6 +96,7 @@ export function TodayLessonCard({ group, initialDate }: { group: Group; initialD
             ? undefined
             : {
                 instructions: isRichTextEmpty(homeworkInstructions) ? '' : homeworkInstructions,
+                dueDate: !isRichTextEmpty(homeworkInstructions) && writtenDueDate ? new Date(writtenDueDate).toISOString() : null,
                 images: homeworkImages.map((i) => ({
                   id: i.id,
                   title: i.title.trim() || null,
@@ -153,6 +162,30 @@ export function TodayLessonCard({ group, initialDate }: { group: Group; initialD
               placeholder="Ish daftari, 5-bob, 4–7-mashqlar — yoki «Lugʻat» tugmasi bilan soʻzlar jadvali"
             />
           </Suspense>
+          {!isRichTextEmpty(homeworkInstructions) && (
+            <div className="mt-2 flex flex-wrap items-center gap-2">
+              <label htmlFor="hw-written-due" className="flex items-center gap-1 text-xs font-medium text-slate-600 dark:text-slate-400">
+                <CalendarClock className="h-3.5 w-3.5" /> Muddat
+              </label>
+              <Input
+                id="hw-written-due"
+                type="datetime-local"
+                value={writtenDueDate}
+                onChange={(e) => setHomeworkDueDate(e.target.value)}
+                className="w-auto! py-1! text-xs"
+              />
+              {nextLessonStart && writtenDueDate !== nextLessonStart && (
+                <button
+                  type="button"
+                  onClick={() => setHomeworkDueDate(nextLessonStart)}
+                  className="text-xs font-medium text-brand-600 hover:underline dark:text-brand-400"
+                >
+                  Keyingi dars ({formatDate(nextLessonStart)} {formatTime(nextLessonStart)})
+                </button>
+              )}
+              {!writtenDueDate && <span className="text-xs text-slate-400">muddatsiz</span>}
+            </div>
+          )}
           <div className="mt-3">
             <HomeworkImagesEditor
               groupId={group.id}

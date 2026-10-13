@@ -222,9 +222,14 @@ export function SubmissionReviewModal({
             {formatDate(item.lesson.date)}
             {item.lesson.topic ? ` · ${item.lesson.topic}` : ''}
           </p>
+          {item.submission.taskName && (
+            <p className="mt-1 inline-flex rounded-md bg-violet-50 px-2 py-0.5 text-xs font-semibold text-violet-700 dark:bg-violet-500/10 dark:text-violet-300">
+              🖼 {item.submission.taskName}
+            </p>
+          )}
         </div>
 
-        {item.lesson.instructions && (
+        {item.lesson.instructions && !item.submission.taskName && (
           <div className="rounded-lg bg-slate-50 p-3 text-sm text-slate-600 dark:bg-slate-800/60 dark:text-slate-300">
             <span className="mb-1 block text-[11px] font-semibold uppercase tracking-wide text-slate-400">Vazifa</span>
             <span className="line-clamp-6 whitespace-pre-line">{richTextToPlain(item.lesson.instructions)}</span>

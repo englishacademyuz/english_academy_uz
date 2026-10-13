@@ -145,6 +145,10 @@ model Student {
   joinedAt          DateTime      @default(now())
   // When a payment reminder was last sent to their Telegram chats.
   paymentRemindedAt DateTime?
+  // The homework task the student last chose to hand in through the bot ("lessonSessionId:task")
+  // and when -- where their next voice note or video goes.
+  botHomeworkTask   String?
+  botHomeworkTaskAt DateTime?
   userId            String?       @unique
   user              User?         @relation(fields: [userId], references: [id])
   // Siblings who share a phone: a chat linked to any of them may open all of them.
@@ -391,6 +395,8 @@ model Homework {
   lessonSessionId String        @unique
   lessonSession   LessonSession @relation(fields: [lessonSessionId], references: [id])
   instructions    String
+  // The moment the written homework (the instructions) is due, day and time -- by default when
+  // the group's next lesson starts. Each picture task has its own (HomeworkImage.dueDate).
   dueDate         DateTime?
   createdAt       DateTime      @default(now())
 
@@ -406,7 +412,7 @@ model Homework {
 // "Vocabulary"), caption and deadline. Stored on Telegram like HomeworkPhoto
 // (only file ids here). It is uploaded before the lesson is saved, so it starts
 // with no `homeworkId` (`groupId` says whose it is meanwhile) and the lesson
-// save attaches it.
+// save attaches it. Students hand in each picture task separately (HomeworkSubmission).
 model HomeworkImage {
   id                   String    @id @default(cuid())
   groupId              String
@@ -426,32 +432,41 @@ model HomeworkImage {
   size                 Int?
   createdAt            DateTime  @default(now())
 
+  submissions HomeworkSubmission[]
+
   @@index([homeworkId])
   @@map("homework_images")
 }
 
-// One student's photos, voice notes and videos for one Homework. The files themselves
-// live on Telegram's servers -- only their file ids are stored here (see
-// apps/server/src/telegram/fileStore.ts).
+// One student's photos, voice notes and videos for one task of a Homework: one of
+// its pictures, or the written homework (no picture). Each task has its own deadline
+// and is checked on its own. The files themselves live on Telegram's servers -- only
+// their file ids are stored here (see apps/server/src/telegram/fileStore.ts).
 model HomeworkSubmission {
-  id             String                   @id @default(cuid())
-  homeworkId     String
-  homework       Homework                 @relation(fields: [homeworkId], references: [id], onDelete: Cascade)
-  studentId      String
-  student        Student                  @relation(fields: [studentId], references: [id], onDelete: Cascade)
-  status         HomeworkSubmissionStatus @default(SUBMITTED)
+  id              String                   @id @default(cuid())
+  homeworkId      String
+  homework        Homework                 @relation(fields: [homeworkId], references: [id], onDelete: Cascade)
+  // The picture task this is for; null for the written homework.
+  homeworkImageId String?
+  homeworkImage   HomeworkImage?           @relation(fields: [homeworkImageId], references: [id], onDelete: Cascade)
+  // homeworkImageId, or "written" for the written homework -- what keeps it to one submission per
+  // task (two nulls would never clash in a unique index).
+  task            String                   @default("written")
+  studentId       String
+  student         Student                  @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  status          HomeworkSubmissionStatus @default(SUBMITTED)
   // When a file was last added -- "late" compares it with the homework's due date.
-  submittedAt    DateTime                 @default(now())
-  checkedAt      DateTime?
-  teacherComment String?
-  createdAt      DateTime                 @default(now())
-  updatedAt      DateTime                 @updatedAt
+  submittedAt     DateTime                 @default(now())
+  checkedAt       DateTime?
+  teacherComment  String?
+  createdAt       DateTime                 @default(now())
+  updatedAt       DateTime                 @updatedAt
 
   photos HomeworkPhoto[]
   voices HomeworkVoice[]
   videos HomeworkVideo[]
 
-  @@unique([homeworkId, studentId])
+  @@unique([homeworkId, studentId, task])
   @@index([submittedAt])
   @@map("homework_submissions")
 }

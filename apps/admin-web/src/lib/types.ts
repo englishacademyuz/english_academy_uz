@@ -94,6 +94,10 @@ export type HomeworkSubmissionStatus = 'SUBMITTED' | 'CHECKED' | 'RETURNED'
 /** One student's photos, voice notes and videos for one homework, as the teacher reviews them. */
 export type HomeworkSubmission = {
   id: string
+  /** Which task it's for: 'written' (the written homework), or a picture task's id. */
+  task: string
+  /** The picture task's name; null for the written homework. */
+  taskName: string | null
   status: HomeworkSubmissionStatus
   submittedAt: string
   checkedAt: string | null
@@ -117,8 +121,14 @@ export type LessonHomeworkSubmissions = {
   date: string
   topic: string | null
   homework: { instructions: string; dueDate: string | null } | null
-  students: Array<{ student: SubmissionStudent; submission: HomeworkSubmission | null }>
+  /** What is handed in separately -- the written homework first, then each picture. */
+  tasks: HomeworkTaskInfo[]
+  /** Each student with what they handed in, one submission per task. */
+  students: Array<{ student: SubmissionStudent; submissions: HomeworkSubmission[] }>
 }
+
+/** One thing to hand in: the written homework (`task` 'written', no name) or a picture task. */
+export type HomeworkTaskInfo = { task: string; imageId: string | null; name: string | null; dueDate: string | null }
 
 export type HomeworkFeedItem = HomeworkSubmission & {
   student: SubmissionStudent

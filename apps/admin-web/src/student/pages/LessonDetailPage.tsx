@@ -10,7 +10,8 @@ import { miniApi } from '../api'
 import { CheckIcon, ClockIcon, DocIcon, HomeworkScene, PlayIcon } from '../components/art'
 import { HomeworkImages } from '../components/HomeworkImages'
 import { ErrorState, Loading, Screen, Section } from '../components/kit'
-import { submissionContents, weekdayDate, weekdayDayMonth } from '../format'
+import { deadlineLabel } from '../deadline'
+import { submissionContents, tasksProgress, weekdayDayMonth } from '../format'
 import type { MiniLessonDetail } from '../types'
 
 type Material = MiniLessonDetail['materials'][number]
@@ -140,15 +141,16 @@ function Materials({ materials }: { materials: Material[] }) {
 }
 
 function Homework({ homework, lessonId }: { homework: NonNullable<MiniLessonDetail['homework']>; lessonId: string }) {
-  const submission = homework.submission
+  const progress = tasksProgress(homework.tasks)
+  const only = homework.tasks.length === 1 ? homework.tasks[0].submission : null
   return (
     <section className="flex flex-col items-center gap-3.5 rounded-[30px] border-[3px] border-tg-sun bg-tg-sun-soft px-[18px] py-[22px] text-center">
       <HomeworkScene />
       <span className="text-sm font-extrabold text-tg-sun-ink">UYGA VAZIFA</span>
-      {homework.dueDate && (
+      {homework.dueDate && !isRichTextEmpty(homework.instructions) && (
         <div className="flex items-center gap-2 rounded-full bg-white px-3.5 py-2 text-[15px] font-extrabold">
           <ClockIcon size={20} strokeWidth={2.4} className="text-tg-rust" />
-          {weekdayDate(new Date(homework.dueDate))} gacha
+          {deadlineLabel(new Date(homework.dueDate), new Date())}
         </div>
       )}
       {!isRichTextEmpty(homework.instructions) && (
@@ -164,13 +166,15 @@ function Homework({ homework, lessonId }: { homework: NonNullable<MiniLessonDeta
           to={`/student/homework/${lessonId}`}
           className="flex min-h-14 w-full items-center justify-center gap-2 rounded-[18px] bg-tg-blue px-4 text-lg font-extrabold text-white active:scale-[0.99]"
         >
-          {!submission
-            ? '📷 Vazifani topshirish'
-            : submission.status === 'CHECKED'
+          {progress.returned > 0
+            ? '🔁 Qayta topshirish'
+            : progress.total > 0 && progress.checked === progress.total
               ? '⭐ Tekshirildi — koʻrish'
-              : submission.status === 'RETURNED'
-                ? '🔁 Qayta topshirish'
-                : `✅ Topshirildi · ${submissionContents(submission)}`}
+              : progress.handedIn === 0
+                ? '📷 Vazifani topshirish'
+                : only
+                  ? `✅ Topshirildi · ${submissionContents(only)}`
+                  : `✅ ${progress.handedIn}/${progress.total} topshirildi — davom etish`}
         </Link>
       ) : (
         // Otherwise it's checked by the teacher in class (CONTEXT.md: HomeworkResult), so there's no "done" button here.

@@ -54,8 +54,8 @@ export type MiniHome = {
     instructions: string
     dueDate: string | null
     images: MiniHomeworkImage[]
-    /** The student handed in photos and they weren't sent back -- no need to hurry them. */
-    handedIn: boolean
+    /** Tasks the student handed in that weren't sent back -- no need to hurry them on those. */
+    handedIn: string[]
   } | null
   openQuizzes: MiniQuiz[]
   monthProgress: MiniProgressSnapshot
@@ -95,7 +95,7 @@ export type MiniLessonDetail = {
         dueDate: string | null
         images: MiniHomeworkImage[]
         submissionEnabled: boolean
-        submission: MiniSubmission | null
+        tasks: MiniHomeworkTask[]
       }
     | null
 }
@@ -110,9 +110,26 @@ export type MiniHomeworkImage = {
   height: number | null
 }
 
-/** The student's photos, voice notes and videos for one homework: waiting for the teacher, checked, or sent back to redo. */
+/** The task key of the written homework -- a picture task's key is the picture's id. */
+export const WRITTEN_TASK = 'written'
+
+/**
+ * One thing to hand in, on its own deadline: the written homework (no name) or one picture
+ * task -- with what the student handed in for it.
+ */
+export type MiniHomeworkTask = {
+  task: string
+  imageId: string | null
+  /** The picture's title, else "2-vazifa"; null for the written homework. */
+  name: string | null
+  dueDate: string | null
+  submission: MiniSubmission | null
+}
+
+/** The student's photos, voice notes and videos for one homework task: waiting for the teacher, checked, or sent back to redo. */
 export type MiniSubmission = {
   id: string
+  task: string
   status: 'SUBMITTED' | 'CHECKED' | 'RETURNED'
   submittedAt: string
   checkedAt: string | null
@@ -133,20 +150,19 @@ export type MiniHomework = {
   instructions: string
   dueDate: string | null
   images: MiniHomeworkImage[]
-  /** When it stops taking files -- the last of its deadlines; null when it has none. */
-  closesAt: string | null
   /** The group takes homework through the platform (photos, voice notes, videos) -- otherwise it's only checked in class. */
   submissionEnabled: boolean
-  submission: MiniSubmission | null
+  /** Handed in task by task, the written homework first. */
+  tasks: MiniHomeworkTask[]
 }
 
-export type MiniHomeworkDetail = MiniHomework & {
+export type MiniHomeworkDetail = Omit<MiniHomework, 'dueDate' | 'tasks'> & {
   group: string
   maxPhotos: number
   maxVoices: number
   maxVideos: number
-  /** A voice note (or photo) sent to the bot now lands on this homework -- it's the newest open one. */
-  botTarget: boolean
+  /** botTarget: a voice note or video sent to the bot now lands on this task. */
+  tasks: Array<MiniHomeworkTask & { botTarget: boolean }>
 }
 
 export type MiniMark = {

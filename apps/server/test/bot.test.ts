@@ -249,6 +249,12 @@ describe('telegram bot', () => {
     upload: async () => {
       throw new Error('not used by the bot')
     },
+    uploadVideo: async () => {
+      throw new Error('not used by the bot')
+    },
+    uploadAudio: async () => {
+      throw new Error('not used by the bot')
+    },
     keep: async (photo) => photo,
     keepVoice: async (voice) => voice,
     keepVideo: async (video) => video,
@@ -360,7 +366,7 @@ describe('telegram bot', () => {
   })
 
   it('turns files away with a sad face once the deadline has passed', async () => {
-    await seedSpeakingHomework('673', new Date('2026-09-28'))
+    await seedSpeakingHomework('673', new Date('2026-09-28T18:59:00Z'))
     // A real (short) wait for the rest of the album, so its files get one answer.
     const { bot, calls } = buildBot({ fileStore: keepingStore, homeworkReceiptDelayMs: 300 })
     await bot.init()
@@ -371,7 +377,7 @@ describe('telegram bot', () => {
     expect(await prisma.homeworkSubmission.count()).toBe(0)
     expect(sentText(calls, '😔')).toBe(true)
     expect(sentText(calls, 'muddati tugagan')).toBe(true)
-    // Due 28 September, by 23:59 in Tashkent.
+    // Due 28 September at 23:59 in Tashkent.
     expect(sentText(calls, '28.09.2026 23:59')).toBe(true)
     // An album gets one answer, not one per file.
     expect(calls.filter((c) => c.method === 'sendMessage' && c.payload.text === '😔')).toHaveLength(1)

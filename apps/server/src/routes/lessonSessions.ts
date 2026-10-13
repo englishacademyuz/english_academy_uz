@@ -25,7 +25,8 @@ const recordSessionSchema = z.object({
   homework: z
     .object({
       instructions: z.string().default(''),
-      dueDate: z.coerce.date().optional(),
+      // When the written homework is due (day and time); null clears it, leaving it out keeps it.
+      dueDate: z.coerce.date().nullable().optional(),
       // Pictures uploaded first (POST /groups/:groupId/homework-images), listed in order.
       images: z
         .array(

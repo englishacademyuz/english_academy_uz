@@ -18,6 +18,10 @@ export type HomeworkFileStore = {
    * own chat with the bot). With neither -- a teacher's upload without a storage chat -- it fails.
    */
   upload(photo: Buffer, options: { ownerChatId?: string; caption: string }): Promise<StoredPhoto>
+  /** Puts a video picked in the Mini App on Telegram, where `upload` puts a photo. */
+  uploadVideo(video: Buffer, options: { ownerChatId?: string; caption: string; fileName: string }): Promise<StoredVideo>
+  /** Puts an audio recording picked in the Mini App on Telegram, where `upload` puts a photo. */
+  uploadAudio(audio: Buffer, options: { ownerChatId?: string; caption: string; fileName: string }): Promise<StoredVoice>
   /**
    * Keeps a photo someone already sent the bot -- copied to the storage chat when there is one.
    * `kind` is how it was sent: as a photo, or as an image file (uncompressed).
@@ -116,6 +120,29 @@ export function telegramFileStore(api: Api, token: string, storageChatId?: strin
         api.sendPhoto(chatId, new InputFile(photo, 'homework.jpg'), { caption, disable_notification: true }),
       )
       return largestPhoto(message.photo)
+    },
+
+    async uploadVideo(video, { ownerChatId, caption, fileName }) {
+      const chatId = storageChatId ?? ownerChatId
+      if (!chatId) throw new AppError('Set TELEGRAM_STORAGE_CHAT_ID to upload videos', 503)
+      const message = await askTelegram(() =>
+        api.sendVideo(chatId, new InputFile(video, fileName), { caption, disable_notification: true, supports_streaming: true }),
+      )
+      // Telegram keeps a file it can't read as a video as a plain document -- no length, nothing to play.
+      if (!message.video) throw new AppError('UNSUPPORTED_VIDEO', 422)
+      const v = message.video
+      return { fileId: v.file_id, fileUniqueId: v.file_unique_id, round: false, duration: v.duration, width: v.width, height: v.height, size: v.file_size ?? null }
+    },
+
+    async uploadAudio(audio, { ownerChatId, caption, fileName }) {
+      const chatId = storageChatId ?? ownerChatId
+      if (!chatId) throw new AppError('Set TELEGRAM_STORAGE_CHAT_ID to upload audio', 503)
+      const message = await askTelegram(() =>
+        api.sendAudio(chatId, new InputFile(audio, fileName), { caption, disable_notification: true }),
+      )
+      const file = message.audio
+      if (!file) throw new AppError('UNSUPPORTED_AUDIO', 422)
+      return { fileId: file.file_id, fileUniqueId: file.file_unique_id, duration: file.duration, size: file.file_size ?? null }
     },
 
     async keep(photo, caption, kind) {

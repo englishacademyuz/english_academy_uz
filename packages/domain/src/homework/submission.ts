@@ -1,12 +1,15 @@
 import { prisma, type HomeworkSubmissionStatus, type Prisma } from '@tashkurgan/db'
-import { ConflictError, ForbiddenError, NotFoundError, tashkentToday, toStoredDate } from '@tashkurgan/shared'
+import { ConflictError, ForbiddenError, NotFoundError } from '@tashkurgan/shared'
 
-/** How many photos one student may hand in for one homework. */
+/** How many photos one student may hand in for one homework task. */
 export const MAX_HOMEWORK_PHOTOS = 10
-/** How many voice notes one student may hand in for one homework. */
+/** How many voice notes one student may hand in for one homework task. */
 export const MAX_HOMEWORK_VOICES = 10
-/** How many videos one student may hand in for one homework. */
+/** How many videos one student may hand in for one homework task. */
 export const MAX_HOMEWORK_VIDEOS = 5
+
+/** The task key of a homework's written part (its instructions) -- a picture task's key is the picture's id. */
+export const WRITTEN_TASK = 'written'
 
 /** A submission's photos, voice notes and videos, in the order they were added -- what `submissionView` needs. */
 export const SUBMISSION_FILES = {
@@ -15,17 +18,64 @@ export const SUBMISSION_FILES = {
   videos: { orderBy: { createdAt: 'asc' } },
 } satisfies Prisma.HomeworkSubmissionInclude
 
-/** What a submission is read with: its files and its due date. */
-const SUBMISSION_INCLUDE = {
-  ...SUBMISSION_FILES,
+/** Which task a submission is for and when that's due: its picture task's, else the written homework's. */
+export const SUBMISSION_TASK = {
   homework: { select: { dueDate: true } },
+  homeworkImage: { select: { dueDate: true, title: true, position: true } },
 } satisfies Prisma.HomeworkSubmissionInclude
 
-/** A homework's deadlines -- its own due day and each picture task's -- what `homeworkClosesAt` needs. */
-export const HOMEWORK_DEADLINES = {
+/** What a submission is read with: its files and its task. */
+const SUBMISSION_INCLUDE = { ...SUBMISSION_FILES, ...SUBMISSION_TASK } satisfies Prisma.HomeworkSubmissionInclude
+
+/** What a picture task is called: its title, else its place among the pictures ("2-vazifa"). */
+export const pictureTaskName = (image: { title: string | null; position: number }) =>
+  image.title?.trim() || `${image.position + 1}-vazifa`
+
+/** When a submission's task is due: its picture's deadline, or the written homework's. */
+export function submissionDueDate(submission: {
+  homework: { dueDate: Date | null }
+  homeworkImage: { dueDate: Date | null } | null
+}): Date | null {
+  return submission.homeworkImage ? submission.homeworkImage.dueDate : submission.homework.dueDate
+}
+
+/** A homework read with what its tasks are: the instructions, and each picture's title and deadline. */
+export const HOMEWORK_TASKS = {
+  instructions: true,
   dueDate: true,
-  images: { select: { dueDate: true } },
+  images: { orderBy: { position: 'asc' }, select: { id: true, title: true, dueDate: true } },
 } satisfies Prisma.HomeworkSelect
+
+/** One thing to hand in: the written homework, or one picture task. */
+export type HomeworkTask = {
+  /** `WRITTEN_TASK`, or the picture's id. */
+  task: string
+  imageId: string | null
+  /** What the task is called: the picture's title, else "2-vazifa"; null for the written homework. */
+  name: string | null
+  dueDate: Date | null
+}
+
+/**
+ * The tasks of a homework, the written one first: the instructions are a task when there are any
+ * (or when there are no pictures at all), and each picture is one -- each handed in on its own.
+ */
+export function homeworkTasks(homework: {
+  instructions: string
+  dueDate: Date | null
+  images: Array<{ id: string; title: string | null; dueDate: Date | null }>
+}): HomeworkTask[] {
+  const written = homework.instructions.trim() !== '' || homework.images.length === 0
+  return [
+    ...(written ? [{ task: WRITTEN_TASK, imageId: null, name: null, dueDate: homework.dueDate }] : []),
+    ...homework.images.map((image, i) => ({
+      task: image.id,
+      imageId: image.id,
+      name: pictureTaskName({ title: image.title, position: i }),
+      dueDate: image.dueDate,
+    })),
+  ]
+}
 
 /** A photo already stored on Telegram -- only its ids and size are kept here. */
 export type StoredPhoto = {
@@ -57,59 +107,47 @@ export type StoredVideo = {
   size?: number | null
 }
 
-/**
- * Handed in after the due date (a calendar day in Tashkent) -- flagged for the teacher.
- * No due date means it can't be late.
- */
+/** Handed in after the task's deadline -- flagged for the teacher. No deadline means it can't be late. */
 export function isLateSubmission(submittedAt: Date, dueDate: Date | null): boolean {
   if (!dueDate) return false
-  return toStoredDate(tashkentToday(submittedAt)).getTime() > dueDate.getTime()
-}
-
-/** A homework's due day (stored as UTC midnight) is due by 23:59 that day in Tashkent (UTC+5) -- as the Mini App shows it. */
-const DUE_DAY_ENDS_AFTER_MS = (18 * 60 + 59) * 60 * 1000
-
-/**
- * When a homework stops taking files: once the last of its deadlines has passed -- the end of
- * its own due day in Tashkent, and each picture task's deadline. Null when nothing has one.
- */
-export function homeworkClosesAt(homework: { dueDate: Date | null; images: Array<{ dueDate: Date | null }> }): Date | null {
-  const deadlines = [
-    ...(homework.dueDate ? [homework.dueDate.getTime() + DUE_DAY_ENDS_AFTER_MS] : []),
-    ...homework.images.flatMap((image) => (image.dueDate ? [image.dueDate.getTime()] : [])),
-  ]
-  return deadlines.length ? new Date(Math.max(...deadlines)) : null
+  return submittedAt.getTime() > dueDate.getTime()
 }
 
 /**
  * The deadline has passed for this student: nothing more may be added or taken out. A submission
  * the teacher sent back to be redone stays open regardless -- they asked for it.
  */
-export function isPastDeadline(closesAt: Date | null, status: HomeworkSubmissionStatus | null | undefined, now = new Date()) {
-  if (status === 'RETURNED' || !closesAt) return false
-  return now.getTime() >= closesAt.getTime()
+export function isPastDeadline(dueDate: Date | null, status: HomeworkSubmissionStatus | null | undefined, now = new Date()) {
+  if (status === 'RETURNED' || !dueDate) return false
+  return now.getTime() >= dueDate.getTime()
 }
 
 type SubmissionWithFiles = {
   id: string
+  task: string
   status: HomeworkSubmissionStatus
   submittedAt: Date
   checkedAt: Date | null
   teacherComment: string | null
+  homework: { dueDate: Date | null }
+  homeworkImage: { dueDate: Date | null; title: string | null; position: number } | null
   photos: Array<{ id: string; width: number | null; height: number | null }>
   voices: Array<{ id: string; duration: number }>
   videos: Array<{ id: string; duration: number; round: boolean; width: number | null; height: number | null }>
 }
 
 /** A submission as both apps show it -- file ids of ours only, never Telegram's. */
-export function submissionView(submission: SubmissionWithFiles, dueDate: Date | null) {
+export function submissionView(submission: SubmissionWithFiles) {
   return {
     id: submission.id,
+    task: submission.task,
+    /** The picture task's name; null for the written homework. */
+    taskName: submission.homeworkImage ? pictureTaskName(submission.homeworkImage) : null,
     status: submission.status,
     submittedAt: submission.submittedAt,
     checkedAt: submission.checkedAt,
     teacherComment: submission.teacherComment,
-    late: isLateSubmission(submission.submittedAt, dueDate),
+    late: isLateSubmission(submission.submittedAt, submissionDueDate(submission)),
     photos: submission.photos.map((p) => ({ id: p.id, width: p.width, height: p.height })),
     voices: submission.voices.map((v) => ({ id: v.id, duration: v.duration })),
     videos: submission.videos.map((v) => ({ id: v.id, duration: v.duration, round: v.round, width: v.width, height: v.height })),
@@ -117,26 +155,28 @@ export function submissionView(submission: SubmissionWithFiles, dueDate: Date | 
 }
 
 /**
- * The homework of `lessonSessionId`, if `studentId` may hand it in: they were enrolled in the
- * lesson's group, the group takes submissions, and the lesson has homework.
- * "Not found" for lessons that aren't the student's -- nothing to probe.
+ * One task of the homework of `lessonSessionId`, if `studentId` may hand it in: they were
+ * enrolled in the lesson's group, the group takes submissions, and the lesson's homework has
+ * that task. "Not found" for lessons that aren't the student's -- nothing to probe.
  */
-export async function submittableHomework(studentId: string, lessonSessionId: string) {
+export async function submittableTask(studentId: string, lessonSessionId: string, task: string) {
   const lesson = await prisma.lessonSession.findFirst({
     where: { id: lessonSessionId, group: { enrollments: { some: { studentId } } } },
     include: {
-      homework: { include: { images: { select: { dueDate: true } } } },
+      homework: { select: { id: true, ...HOMEWORK_TASKS } },
       group: { select: { homeworkSubmissionEnabled: true } },
     },
   })
   if (!lesson?.homework) throw new NotFoundError('Homework not found')
+  const target = homeworkTasks(lesson.homework).find((t) => t.task === task)
+  if (!target) throw new NotFoundError('Homework task not found')
   if (!lesson.group.homeworkSubmissionEnabled) throw new ForbiddenError('SUBMISSIONS_DISABLED')
-  return { lesson, homework: lesson.homework }
+  return { lesson, homework: lesson.homework, task: target }
 }
 
-type FileKind = 'photo' | 'voice' | 'video'
+export type HomeworkFileKind = 'photo' | 'voice' | 'video'
 
-const FILE_LIMITS: Record<FileKind, { max: number; error: string }> = {
+const FILE_LIMITS: Record<HomeworkFileKind, { max: number; error: string }> = {
   photo: { max: MAX_HOMEWORK_PHOTOS, error: 'TOO_MANY_PHOTOS' },
   voice: { max: MAX_HOMEWORK_VOICES, error: 'TOO_MANY_VOICES' },
   video: { max: MAX_HOMEWORK_VIDEOS, error: 'TOO_MANY_VIDEOS' },
@@ -146,42 +186,50 @@ const FILE_COUNT = { _count: { select: { photos: true, voices: true, videos: tru
 const COUNT_KEY = { photo: 'photos', voice: 'voices', video: 'videos' } as const
 
 /**
- * Checks a file may still be added before it is stored anywhere: the homework is
+ * Checks a file may still be added to a task before it is stored anywhere: the task is
  * submittable, not already checked, its deadline hasn't passed, and it has room for another
  * file of that kind.
  */
-async function assertCanAddHomeworkFile(studentId: string, lessonSessionId: string, kind: FileKind, now = new Date()) {
-  const target = await submittableHomework(studentId, lessonSessionId)
+export async function assertCanAddHomeworkFile(
+  studentId: string,
+  lessonSessionId: string,
+  task: string,
+  kind: HomeworkFileKind,
+  now = new Date(),
+) {
+  const target = await submittableTask(studentId, lessonSessionId, task)
   const submission = await prisma.homeworkSubmission.findUnique({
-    where: { homeworkId_studentId: { homeworkId: target.homework.id, studentId } },
+    where: { homeworkId_studentId_task: { homeworkId: target.homework.id, studentId, task } },
     include: FILE_COUNT,
   })
   if (submission?.status === 'CHECKED') throw new ConflictError('ALREADY_CHECKED')
-  const closesAt = homeworkClosesAt(target.homework)
-  if (isPastDeadline(closesAt, submission?.status, now)) throw new ConflictError('DEADLINE_PASSED')
+  if (isPastDeadline(target.task.dueDate, submission?.status, now)) throw new ConflictError('DEADLINE_PASSED')
   if ((submission?._count[COUNT_KEY[kind]] ?? 0) >= FILE_LIMITS[kind].max) throw new ConflictError(FILE_LIMITS[kind].error)
-  return { ...target, closesAt }
+  return target
 }
 
-export const assertCanAddHomeworkPhoto = (studentId: string, lessonSessionId: string) =>
-  assertCanAddHomeworkFile(studentId, lessonSessionId, 'photo')
-
 /**
- * The student's submission for that lesson's homework, ready for one more file (created on the
- * first one). A submission sent back to be redone goes back to the teacher's queue.
+ * The student's submission for that task, ready for one more file (created on the first one).
+ * A submission sent back to be redone goes back to the teacher's queue.
  */
-async function openSubmission(studentId: string, lessonSessionId: string, kind: FileKind, now: Date) {
-  const { homework } = await assertCanAddHomeworkFile(studentId, lessonSessionId, kind, now)
+async function openSubmission(studentId: string, lessonSessionId: string, task: string, kind: HomeworkFileKind, now: Date) {
+  const { homework, task: target } = await assertCanAddHomeworkFile(studentId, lessonSessionId, task, kind, now)
   return prisma.homeworkSubmission.upsert({
-    where: { homeworkId_studentId: { homeworkId: homework.id, studentId } },
+    where: { homeworkId_studentId_task: { homeworkId: homework.id, studentId, task } },
     update: { status: 'SUBMITTED', submittedAt: now, checkedAt: null },
-    create: { homeworkId: homework.id, studentId, submittedAt: now },
+    create: { homeworkId: homework.id, homeworkImageId: target.imageId, task, studentId, submittedAt: now },
   })
 }
 
-/** Adds one photo to the student's submission for that lesson's homework. */
-export async function addHomeworkPhoto(studentId: string, lessonSessionId: string, photo: StoredPhoto, now = new Date()) {
-  const submission = await openSubmission(studentId, lessonSessionId, 'photo', now)
+/** Adds one photo to the student's submission for one task of that lesson's homework. */
+export async function addHomeworkPhoto(
+  studentId: string,
+  lessonSessionId: string,
+  task: string,
+  photo: StoredPhoto,
+  now = new Date(),
+) {
+  const submission = await openSubmission(studentId, lessonSessionId, task, 'photo', now)
   await prisma.homeworkPhoto.create({
     data: {
       submissionId: submission.id,
@@ -195,9 +243,15 @@ export async function addHomeworkPhoto(studentId: string, lessonSessionId: strin
   return getHomeworkSubmission(submission.id)
 }
 
-/** Adds one voice note to the student's submission for that lesson's homework. */
-export async function addHomeworkVoice(studentId: string, lessonSessionId: string, voice: StoredVoice, now = new Date()) {
-  const submission = await openSubmission(studentId, lessonSessionId, 'voice', now)
+/** Adds one voice note (or audio file) to the student's submission for one task of that lesson's homework. */
+export async function addHomeworkVoice(
+  studentId: string,
+  lessonSessionId: string,
+  task: string,
+  voice: StoredVoice,
+  now = new Date(),
+) {
+  const submission = await openSubmission(studentId, lessonSessionId, task, 'voice', now)
   await prisma.homeworkVoice.create({
     data: {
       submissionId: submission.id,
@@ -210,9 +264,15 @@ export async function addHomeworkVoice(studentId: string, lessonSessionId: strin
   return getHomeworkSubmission(submission.id)
 }
 
-/** Adds one video to the student's submission for that lesson's homework. */
-export async function addHomeworkVideo(studentId: string, lessonSessionId: string, video: StoredVideo, now = new Date()) {
-  const submission = await openSubmission(studentId, lessonSessionId, 'video', now)
+/** Adds one video to the student's submission for one task of that lesson's homework. */
+export async function addHomeworkVideo(
+  studentId: string,
+  lessonSessionId: string,
+  task: string,
+  video: StoredVideo,
+  now = new Date(),
+) {
+  const submission = await openSubmission(studentId, lessonSessionId, task, 'video', now)
   await prisma.homeworkVideo.create({
     data: {
       submissionId: submission.id,
@@ -228,9 +288,9 @@ export async function addHomeworkVideo(studentId: string, lessonSessionId: strin
   return getHomeworkSubmission(submission.id)
 }
 
-/** What taking a file back out needs to know about its submission: its status, file count and deadlines. */
+/** What taking a file back out needs to know about its submission: its status, file count and deadline. */
 const REMOVAL_CONTEXT = {
-  submission: { include: { ...FILE_COUNT, homework: { select: HOMEWORK_DEADLINES } } },
+  submission: { include: { ...FILE_COUNT, ...SUBMISSION_TASK } },
 } satisfies Prisma.HomeworkPhotoInclude & Prisma.HomeworkVoiceInclude & Prisma.HomeworkVideoInclude
 
 type RemovableFile = {
@@ -238,19 +298,20 @@ type RemovableFile = {
   submission: {
     status: HomeworkSubmissionStatus
     _count: { photos: number; voices: number; videos: number }
-    homework: { dueDate: Date | null; images: Array<{ dueDate: Date | null }> }
+    homework: { dueDate: Date | null }
+    homeworkImage: { dueDate: Date | null } | null
   }
 }
 
 /**
  * Removes a file the student took back; the submission goes with its last file. Not once it's
- * checked, nor once the deadline has passed.
+ * checked, nor once the task's deadline has passed.
  */
 async function removeHomeworkFile(file: RemovableFile | null, remove: () => Promise<unknown>, now = new Date()) {
   if (!file) throw new NotFoundError('File not found')
   const { submission } = file
   if (submission.status === 'CHECKED') throw new ConflictError('ALREADY_CHECKED')
-  if (isPastDeadline(homeworkClosesAt(submission.homework), submission.status, now)) throw new ConflictError('DEADLINE_PASSED')
+  if (isPastDeadline(submissionDueDate(submission), submission.status, now)) throw new ConflictError('DEADLINE_PASSED')
 
   if (submission._count.photos + submission._count.voices + submission._count.videos <= 1) {
     await prisma.homeworkSubmission.delete({ where: { id: file.submissionId } })
@@ -294,25 +355,89 @@ export function getHomeworkSubmission(id: string) {
   })
 }
 
+/** How long "send it through the bot" in the Mini App points the bot at that task. */
+export const BOT_TASK_TTL_MS = 3 * 60 * 60 * 1000
+
 /**
- * The homework a file sent straight to the bot is for: the newest homework of the student's
- * current group that is still open to them (not already checked). Null when the group doesn't
- * take submissions or nothing is open. Its deadline may have passed -- adding to it then says so.
+ * Points the bot at one task: what the student sends the chat next goes there (for
+ * `BOT_TASK_TTL_MS`) -- the Mini App's "record it in the bot" button. The task must still take
+ * files.
  */
-export async function latestOpenHomework(studentId: string) {
+export async function setBotHomeworkTask(studentId: string, lessonSessionId: string, task: string, now = new Date()) {
+  await assertCanAddHomeworkFile(studentId, lessonSessionId, task, 'voice', now).catch((err) => {
+    // A full list of voice notes doesn't stop videos.
+    if (!(err instanceof ConflictError && err.message === 'TOO_MANY_VOICES')) throw err
+  })
+  await prisma.student.update({
+    where: { id: studentId },
+    data: { botHomeworkTask: `${lessonSessionId}:${task}`, botHomeworkTaskAt: now },
+  })
+}
+
+/** A lesson as the bot needs it to file a homework file: when and what, for the caption and receipt. */
+type BotLesson = { id: string; date: Date; topic: string | null }
+
+export type BotHomeworkTarget = { lesson: BotLesson; task: HomeworkTask; taskCount: number }
+
+/**
+ * Where a file sent straight to the bot goes: the task the student last picked in the Mini App
+ * (within `BOT_TASK_TTL_MS`, while it still takes files), else the newest homework of their
+ * current group with a task not yet checked -- of those tasks, the open one due soonest (one with
+ * no deadline after those with one), or, when all have closed, the last to close, so the student
+ * is told it's too late. Null when the group doesn't take submissions or nothing is left.
+ */
+export async function botHomeworkTarget(studentId: string, now = new Date()): Promise<BotHomeworkTarget | null> {
+  const student = await prisma.student.findUnique({
+    where: { id: studentId },
+    select: { botHomeworkTask: true, botHomeworkTaskAt: true },
+  })
+  if (
+    student?.botHomeworkTask &&
+    student.botHomeworkTaskAt &&
+    now.getTime() - student.botHomeworkTaskAt.getTime() < BOT_TASK_TTL_MS
+  ) {
+    const [lessonId, task] = student.botHomeworkTask.split(':')
+    const picked = await submittableTask(studentId, lessonId, task).catch(() => null)
+    if (picked) {
+      const submission = await prisma.homeworkSubmission.findUnique({
+        where: { homeworkId_studentId_task: { homeworkId: picked.homework.id, studentId, task } },
+        select: { status: true },
+      })
+      if (submission?.status !== 'CHECKED' && !isPastDeadline(picked.task.dueDate, submission?.status, now)) {
+        const lesson = { id: picked.lesson.id, date: picked.lesson.date, topic: picked.lesson.topic }
+        return { lesson, task: picked.task, taskCount: homeworkTasks(picked.homework).length }
+      }
+    }
+  }
+
   const enrollment = await prisma.enrollment.findFirst({
     where: { studentId, status: 'ACTIVE', group: { homeworkSubmissionEnabled: true } },
     orderBy: { startDate: 'desc' },
   })
   if (!enrollment) return null
-  return prisma.lessonSession.findFirst({
-    where: {
-      groupId: enrollment.groupId,
-      homework: { is: { submissions: { none: { studentId, status: 'CHECKED' } } } },
-    },
+  const lessons = await prisma.lessonSession.findMany({
+    where: { groupId: enrollment.groupId, homework: { isNot: null } },
     orderBy: { date: 'desc' },
-    include: { homework: { include: { images: { select: { dueDate: true } } } } },
+    take: 10,
+    select: {
+      id: true,
+      date: true,
+      topic: true,
+      homework: { select: { ...HOMEWORK_TASKS, submissions: { where: { studentId }, select: { task: true, status: true } } } },
+    },
   })
+  for (const lesson of lessons) {
+    const { submissions, ...homework } = lesson.homework!
+    const tasks = homeworkTasks(homework)
+    const statusOf = (t: HomeworkTask) => submissions.find((s) => s.task === t.task)?.status
+    const left = tasks.filter((t) => statusOf(t) !== 'CHECKED')
+    if (left.length === 0) continue
+    const due = (t: HomeworkTask) => t.dueDate?.getTime() ?? Infinity
+    const open = left.filter((t) => !isPastDeadline(t.dueDate, statusOf(t), now)).sort((a, b) => due(a) - due(b))
+    const task = open[0] ?? left.reduce((a, b) => (due(b) > due(a) ? b : a))
+    return { lesson: { id: lesson.id, date: lesson.date, topic: lesson.topic }, task, taskCount: tasks.length }
+  }
+  return null
 }
 
 export type HomeworkReviewInput = {

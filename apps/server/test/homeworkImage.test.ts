@@ -18,6 +18,12 @@ function fakeFileStore() {
       uploads.push(options)
       return { fileId, fileUniqueId: `u-${fileId}`, width: 1200, height: 900, size: photo.length }
     },
+    async uploadVideo() {
+      throw new Error('not used here')
+    },
+    async uploadAudio() {
+      throw new Error('not used here')
+    },
     async keepVideo(video) {
       return video
     },

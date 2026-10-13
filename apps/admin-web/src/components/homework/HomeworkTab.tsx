@@ -1,10 +1,11 @@
 import { useEffect, useMemo, useState } from 'react'
 import { useInfiniteQuery, useQuery, useQueryClient } from '@tanstack/react-query'
-import { Camera, ChevronLeft, ChevronRight, Mic, Search, Video } from 'lucide-react'
+import { Camera, ChevronLeft, ChevronRight, FileText, Image as ImageIcon, Mic, Search, Video } from 'lucide-react'
 import { homeworkSubmissions as submissionsApi, sessions as sessionsApi } from '../../lib/api'
 import { formatDate, formatTime, toDateInputValue } from '../../lib/format'
 import { richTextToPlain } from '../../lib/richText'
-import type { Group, HomeworkSubmission, HomeworkSubmissionStatus } from '../../lib/types'
+import type { Group, HomeworkSubmission, HomeworkSubmissionStatus, HomeworkTaskInfo } from '../../lib/types'
+import { HomeworkImageView } from './HomeworkImages'
 import { Badge, Button, Card, EmptyState, Input, Select, Spinner, Tabs } from '../ui'
 import { HomeworkPhoto, SubmissionReviewModal, SubmissionStatusBadge, type ReviewItem } from './SubmissionReviewModal'
 
@@ -81,6 +82,9 @@ function ByLesson({ group, onReviewed }: { group: Group; onReviewed: () => void 
     enabled: !!lessonId,
   })
   const [reviewing, setReviewing] = useState<number | null>(null)
+  // Each task (the written homework, each picture) is handed in and checked on its own.
+  const [taskKey, setTaskKey] = useState<string | null>(null)
+  useEffect(() => setTaskKey(null), [lessonId])
 
   if (lessonsQuery.isLoading) return <Spinner />
   if (lessons.length === 0) {
@@ -88,13 +92,20 @@ function ByLesson({ group, onReviewed }: { group: Group; onReviewed: () => void 
   }
 
   const index = lessons.findIndex((l) => l.id === lessonId)
-  const rows = roster.data?.students ?? []
+  const tasks = roster.data?.tasks ?? []
+  const task = tasks.find((t) => t.task === taskKey) ?? tasks[0]
+  const rows = (roster.data?.students ?? []).map((r) => ({
+    student: r.student,
+    submission: r.submissions.find((s) => s.task === task?.task) ?? null,
+  }))
   const submitted = rows.filter((r) => r.submission)
   const reviewItems: ReviewItem[] = submitted.map((r) => ({
     submission: r.submission!,
     student: r.student,
     lesson: { date: roster.data!.date, topic: roster.data!.topic, instructions: roster.data!.homework?.instructions },
   }))
+  const handedIn = (t: HomeworkTaskInfo) => (roster.data?.students ?? []).filter((r) => r.submissions.some((s) => s.task === t.task))
+  const waitingOn = (t: HomeworkTaskInfo) => handedIn(t).filter((r) => r.submissions.some((s) => s.task === t.task && s.status === 'SUBMITTED')).length
 
   return (
     <div className="space-y-4">
@@ -134,13 +145,49 @@ function ByLesson({ group, onReviewed }: { group: Group; onReviewed: () => void 
         )}
       </div>
 
-      {roster.data?.homework && (
-        <div className="rounded-lg bg-slate-50 px-4 py-3 text-sm text-slate-600 dark:bg-slate-800/60 dark:text-slate-300">
-          <span className="font-medium text-slate-800 dark:text-slate-200">Vazifa: </span>
-          {richTextToPlain(roster.data.homework.instructions)}
-          {roster.data.homework.dueDate && (
-            <span className="text-slate-400"> · muddat {formatDate(roster.data.homework.dueDate)}</span>
+      {tasks.length > 1 && (
+        <div className="flex flex-wrap gap-1.5" role="tablist" aria-label="Vazifalar">
+          {tasks.map((t) => {
+            const active = t.task === task?.task
+            const waiting = waitingOn(t)
+            return (
+              <button
+                key={t.task}
+                type="button"
+                role="tab"
+                aria-selected={active}
+                onClick={() => setTaskKey(t.task)}
+                className={`flex items-center gap-1.5 rounded-lg border px-3 py-1.5 text-xs font-medium ${
+                  active
+                    ? 'border-brand-500 bg-brand-50 text-brand-700 dark:border-brand-400 dark:bg-brand-500/10 dark:text-brand-300'
+                    : 'border-slate-200 text-slate-600 hover:bg-slate-50 dark:border-slate-700 dark:text-slate-300 dark:hover:bg-slate-800'
+                }`}
+              >
+                {t.imageId ? <ImageIcon className="h-3.5 w-3.5" /> : <FileText className="h-3.5 w-3.5" />}
+                {t.name ?? 'Yozma vazifa'}
+                <span className="text-slate-400">
+                  {handedIn(t).length}/{roster.data!.students.length}
+                </span>
+                {waiting > 0 && <span className="rounded-full bg-amber-100 px-1.5 text-amber-700 dark:bg-amber-500/15 dark:text-amber-300">{waiting}</span>}
+              </button>
+            )
+          })}
+        </div>
+      )}
+
+      {roster.data?.homework && task && (
+        <div className="flex gap-3 rounded-lg bg-slate-50 px-4 py-3 text-sm text-slate-600 dark:bg-slate-800/60 dark:text-slate-300">
+          {task.imageId && (
+            <HomeworkImageView imageId={task.imageId} className="h-16 w-12 shrink-0 rounded-md object-cover" />
           )}
+          <div className="min-w-0">
+            <span className="font-medium text-slate-800 dark:text-slate-200">{task.name ?? 'Vazifa'}: </span>
+            {task.imageId ? 'rasmdagi vazifa' : richTextToPlain(roster.data.homework.instructions)}
+            <span className="text-slate-400">
+              {' · '}
+              {task.dueDate ? `muddat ${formatDate(task.dueDate)} ${formatTime(task.dueDate)}` : 'muddatsiz'}
+            </span>
+          </div>
         </div>
       )}
 
@@ -304,6 +351,7 @@ function AllSubmissions({ group, onReviewed }: { group: Group; onReviewed: () =>
                         </span>
                         <span className="block truncate text-xs text-slate-500 dark:text-slate-400">
                           {formatDate(item.lesson.date)} dars · {item.lesson.topic || 'Mavzusiz'}
+                          {item.taskName && ` · 🖼 ${item.taskName}`}
                           {item.voices.length > 0 && ` · 🎤 ${item.voices.length}`}
                           {item.videos.length > 0 && ` · 🎬 ${item.videos.length}`}
                         </span>

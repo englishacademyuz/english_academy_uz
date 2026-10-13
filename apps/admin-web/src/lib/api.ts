@@ -204,7 +204,8 @@ export const sessions = {
       // `images` lists the homework's pictures in order; leaving it out keeps them as they are.
       homework?: {
         instructions: string
-        dueDate?: string
+        // When the written homework is due; null for no deadline.
+        dueDate?: string | null
         images?: Array<{ id: string; title: string | null; caption: string | null; dueDate: string | null }>
       }
       attendance?: Array<{ studentId: string; status: AttendanceStatus }>
