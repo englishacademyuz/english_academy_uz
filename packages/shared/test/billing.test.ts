@@ -1,5 +1,13 @@
 import { describe, expect, it } from 'vitest'
-import { billingCycles, billingMonthOf, paymentDay, paymentReminder, reminderStage, tashkentToday } from '../src/billing'
+import {
+  billingCycles,
+  billingMonthOf,
+  paymentDay,
+  paymentReminder,
+  reminderStage,
+  shownToStudent,
+  tashkentToday,
+} from '../src/billing'
 
 // A student who joined on 15 September pays on the 15th of every month, from that day -- each month ahead.
 const JOINED = '2026-09-15T00:00:00.000Z'
@@ -75,6 +83,23 @@ describe('paymentReminder', () => {
     expect(paymentReminder(JOINED, [], day(2026, 12, 16))).toMatchObject({ stage: 'debtor', month: 9, unpaidCycles: 4 })
     expect(paymentReminder(JOINED, [sep], day(2026, 12, 16))).toMatchObject({ month: 10, unpaidCycles: 3 })
     expect(paymentReminder(JOINED, [sep, oct], day(2026, 12, 16))).toMatchObject({ month: 11, unpaidCycles: 2 })
+  })
+})
+
+describe('shownToStudent', () => {
+  const shown = (paid: Array<{ year: number; month: number }>, today: ReturnType<typeof day>) =>
+    shownToStudent(JOINED, paymentReminder(JOINED, paid, today)!)
+
+  it("keeps a new student's unpaid first month from them for five days", () => {
+    expect(shown([], day(2026, 9, 15))).toBe(false)
+    expect(shown([], day(2026, 9, 19))).toBe(false)
+    expect(shown([], day(2026, 9, 20))).toBe(true)
+    expect(shown([], day(2026, 9, 21))).toBe(true)
+  })
+
+  it('shows every later month from the first warning', () => {
+    expect(shown([{ year: 2026, month: 9 }], day(2026, 10, 12))).toBe(true)
+    expect(shown([{ year: 2026, month: 9 }], day(2026, 10, 15))).toBe(true)
   })
 })
 

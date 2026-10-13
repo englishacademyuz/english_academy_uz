@@ -32,7 +32,7 @@ import {
   toPercentage,
   upcomingReschedules,
 } from '@tashkurgan/domain'
-import { AppError, NotFoundError, ValidationError } from '@tashkurgan/shared'
+import { AppError, NotFoundError, shownToStudent, ValidationError } from '@tashkurgan/shared'
 import { telegramDisplayName } from '../telegram/initData'
 import { isSupportedImage, type HomeworkFileStore } from '../telegram/fileStore'
 import { homeworkPhotoCaption, sendHomeworkFile } from './homeworkSubmissions'
@@ -184,14 +184,18 @@ export const miniAppRoutes: FastifyPluginAsync<{ fileStore?: HomeworkFileStore }
       monthProgress: progress,
       totalPoints: sumPoints(points),
       groupRanking: ranking,
-      // Upcoming or overdue payment -- null when nothing is due within three days.
-      payment: payment && {
-        stage: payment.stage,
-        dueDate: payment.dueDate,
-        daysLeft: payment.daysLeft,
-        unpaidCycles: payment.unpaidCycles,
-        amount: payment.amount,
-      },
+      // Upcoming or overdue payment -- null when nothing is due within three days, or while a new
+      // student's first month is still in its quiet days.
+      payment:
+        payment && shownToStudent(student.joinedAt, payment)
+          ? {
+              stage: payment.stage,
+              dueDate: payment.dueDate,
+              daysLeft: payment.daysLeft,
+              unpaidCycles: payment.unpaidCycles,
+              amount: payment.amount,
+            }
+          : null,
       // Teacher answers not yet opened in the Mini App's chat.
       unreadChat,
     }

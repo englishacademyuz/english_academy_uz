@@ -103,15 +103,23 @@ describe('payment reminders', () => {
       daysLeft: 0,
       amount: 400_000,
     })
+    // ...but the new student is left in peace in the Mini App for their first five days.
     const home = await app.inject({ method: 'GET', url: '/student/home', headers: miniAppAuth('777') })
-    expect(home.json().payment).toMatchObject({ stage: 'due', daysLeft: 0 })
+    expect(home.json().payment).toBeNull()
+  })
+
+  it("keeps a new student's first month out of the Mini App until five days in", async () => {
+    await setup(joinedWithFirstDue(4))
+    const res = await app.inject({ method: 'GET', url: '/student/home', headers: miniAppAuth('777') })
+    expect(res.statusCode).toBe(200)
+    expect(res.json().payment).toBeNull()
   })
 
   it('warns the student on the Mini App home screen', async () => {
-    await setup(joinedWithFirstDue(1))
+    await setup(joinedWithFirstDue(5))
     const res = await app.inject({ method: 'GET', url: '/student/home', headers: miniAppAuth('777') })
     expect(res.statusCode).toBe(200)
-    expect(res.json().payment).toMatchObject({ stage: 'overdue', daysLeft: -1, amount: 400_000 })
+    expect(res.json().payment).toMatchObject({ stage: 'overdue', daysLeft: -5, amount: 400_000 })
   })
 })
 

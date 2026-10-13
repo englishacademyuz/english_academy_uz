@@ -143,6 +143,20 @@ export function paymentReminder(
   }
 }
 
+/** How many days a new student is left in peace in the Mini App before their unpaid first month shows. */
+export const NEW_STUDENT_QUIET_DAYS = 5
+
+/**
+ * Whether the student themself sees `reminder` in the Mini App. A new student's first month is
+ * owed the day they join, but whether they'll keep coming is only clear a few days in -- so it
+ * stays hidden from them for five days after joining; the admin sees it from day one regardless.
+ */
+export function shownToStudent(joinedAt: string | Date, reminder: PaymentReminder): boolean {
+  const first = calendarDayOf(joinedAt)
+  const isFirstCycle = reminder.year === first.year && reminder.month === first.month
+  return !isFirstCycle || -reminder.daysLeft >= NEW_STUDENT_QUIET_DAYS
+}
+
 export type CycleState =
   /** Fully paid. */
   | 'paid'
