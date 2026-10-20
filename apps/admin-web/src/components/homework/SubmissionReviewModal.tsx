@@ -1,4 +1,4 @@
-import { useEffect, useState, type CSSProperties, type ReactNode } from 'react'
+import { useCallback, useEffect, useState, type CSSProperties, type ReactNode } from 'react'
 import { useMutation } from '@tanstack/react-query'
 import { Check, ChevronLeft, ChevronRight, Loader2, Mic, RotateCcw, RotateCw, Video, X, ZoomIn, ZoomOut } from 'lucide-react'
 import { homeworkSubmissions as submissionsApi } from '../../lib/api'
@@ -8,6 +8,7 @@ import { notifyError, notifySuccess } from '../../lib/toast'
 import type { HomeworkSubmission, HomeworkSubmissionStatus, SubmissionStudent } from '../../lib/types'
 import { HomeworkVideo } from '../shared/HomeworkVideo'
 import { VoiceNote } from '../shared/VoiceNote'
+import { FeedbackVoiceRecorder } from './FeedbackVoiceRecorder'
 import { Badge, Button } from '../ui'
 
 /** A stored homework photo -- fetched with the login cookie, then shown from memory. */
@@ -58,7 +59,7 @@ export type ReviewItem = {
 
 /**
  * Looks through one student's photos (zoom, rotate, ←/→) and voice notes at a time, and records the verdict:
- * checked, or sent back to redo with a comment. Moves on to the next unchecked one after.
+ * checked, or sent back to redo with a comment -- typed, spoken, or both. Moves on to the next unchecked one after.
  */
 export function SubmissionReviewModal({
   items: initialItems,
@@ -79,6 +80,8 @@ export function SubmissionReviewModal({
   const [rotation, setRotation] = useState(0)
   const item = items[index]
   const [comment, setComment] = useState(item?.submission.teacherComment ?? '')
+  // Recording or saving spoken feedback -- the verdict would go out without it.
+  const [voiceBusy, setVoiceBusy] = useState(false)
 
   useEffect(() => {
     setPhotoIndex(0)
@@ -107,6 +110,15 @@ export function SubmissionReviewModal({
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
   }, [onClose, photos.length])
+
+  /** A submission changed here (its spoken feedback recorded or removed) -- kept in the list and the page behind. */
+  const replaceSubmission = useCallback(
+    (updated: HomeworkSubmission) => {
+      onReviewed(updated)
+      setItems((list) => list.map((it) => (it.submission.id === updated.id ? { ...it, submission: updated } : it)))
+    },
+    [onReviewed],
+  )
 
   const review = useMutation({
     mutationFn: (status: 'CHECKED' | 'RETURNED') => submissionsApi.review(item.submission.id, status, comment),
@@ -277,13 +289,21 @@ export function SubmissionReviewModal({
           />
         </label>
 
+        <FeedbackVoiceRecorder key={item.submission.id} submission={item.submission} onChange={replaceSubmission} onBusyChange={setVoiceBusy} />
+
         <div className="mt-auto space-y-2">
-          <Button className="w-full justify-center" loading={review.isPending && review.variables === 'CHECKED'} onClick={() => review.mutate('CHECKED')}>
+          <Button
+            className="w-full justify-center"
+            disabled={voiceBusy}
+            loading={review.isPending && review.variables === 'CHECKED'}
+            onClick={() => review.mutate('CHECKED')}
+          >
             <Check className="h-4 w-4" /> Tekshirildi
           </Button>
           <Button
             variant="secondary"
             className="w-full justify-center"
+            disabled={voiceBusy}
             loading={review.isPending && review.variables === 'RETURNED'}
             onClick={() => review.mutate('RETURNED')}
           >

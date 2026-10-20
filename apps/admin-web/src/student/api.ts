@@ -147,6 +147,7 @@ export const miniApi = {
   deleteHomeworkVideo: (videoId: string) =>
     request<{ submission: MiniSubmission | null }>(`/student/homework-videos/${videoId}`, { method: 'DELETE' }),
   homeworkVideoUrl: (videoId: string) => fileUrl(`/student/homework-videos/${videoId}`),
+  homeworkFeedbackVoiceUrl: (voiceId: string) => fileUrl(`/student/homework-feedback-voices/${voiceId}`),
   homeworkImageUrl: (imageId: string) => {
     let url = imageUrls.get(imageId)
     if (!url) {

@@ -490,6 +490,15 @@ export const miniAppRoutes: FastifyPluginAsync<{ fileStore?: HomeworkFileStore }
     return sendHomeworkFile(reply, opts.fileStore, voice.telegramFileId)
   })
 
+  // The teacher's spoken feedback on one of the student's submissions.
+  app.get('/student/homework-feedback-voices/:id', async (request, reply) => {
+    const student = me(request)
+    const { id } = idParams.parse(request.params)
+    const voice = await prisma.homeworkFeedbackVoice.findFirst({ where: { id, submission: { studentId: student.id } } })
+    if (!voice) throw new NotFoundError('Voice note not found')
+    return sendHomeworkFile(reply, opts.fileStore, voice.telegramFileId)
+  })
+
   // Videos come in through the bot or picked here, like voice notes.
   app.delete('/student/homework-videos/:id', async (request) => {
     const { id } = idParams.parse(request.params)

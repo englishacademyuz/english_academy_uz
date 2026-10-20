@@ -523,6 +523,18 @@ function StatusBanner({ submission }: { submission: MiniSubmission | null }) {
           {submission.teacherComment}
         </p>
       )}
+      {/* While it waits for the teacher, a recording may be their draft for the coming verdict. */}
+      {submission.feedbackVoice && submission.status !== 'SUBMITTED' && (
+        <div className="flex flex-col gap-1 rounded-[16px] bg-white px-3.5 py-2.5">
+          <span className="text-[15px] font-bold text-tg-muted">🎙 Ustozning ovozli izohi</span>
+          <VoiceNote
+            voiceId={submission.feedbackVoice.id}
+            load={miniApi.homeworkFeedbackVoiceUrl}
+            duration={submission.feedbackVoice.duration}
+            labelClassName="text-tg-muted font-bold"
+          />
+        </div>
+      )}
       {submission.status === 'RETURNED' && (
         <p className="text-[14px] font-bold text-tg-body">Xatolarni tuzating va yangi rasm, video yoki audio qoʻshing — vazifa yana ustozga boradi.</p>
       )}

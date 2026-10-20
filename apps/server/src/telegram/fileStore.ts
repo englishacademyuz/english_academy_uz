@@ -2,6 +2,7 @@ import { GrammyError, InputFile, type Api } from 'grammy'
 import type { PhotoSize } from 'grammy/types'
 import type { StoredPhoto, StoredVideo, StoredVoice } from '@tashkurgan/domain'
 import { AppError } from '@tashkurgan/shared'
+import { isWebm, webmOpusToOgg } from './webmOpus'
 
 /**
  * Where homework photos and voice notes live: on Telegram's servers, not ours. The database keeps
@@ -22,6 +23,11 @@ export type HomeworkFileStore = {
   uploadVideo(video: Buffer, options: { ownerChatId?: string; caption: string; fileName: string }): Promise<StoredVideo>
   /** Puts an audio recording picked in the Mini App on Telegram, where `upload` puts a photo. */
   uploadAudio(audio: Buffer, options: { ownerChatId?: string; caption: string; fileName: string }): Promise<StoredVoice>
+  /**
+   * Puts a voice recorded in the browser (a teacher's spoken feedback) in the storage chat as a
+   * Telegram voice note -- one that plays in the chat, so the family can be sent it as it is.
+   */
+  uploadVoice(audio: Buffer, options: { caption: string; contentType: string }): Promise<StoredVoice>
   /**
    * Keeps a photo someone already sent the bot -- copied to the storage chat when there is one.
    * `kind` is how it was sent: as a photo, or as an image file (uncompressed).
@@ -143,6 +149,27 @@ export function telegramFileStore(api: Api, token: string, storageChatId?: strin
       const file = message.audio
       if (!file) throw new AppError('UNSUPPORTED_AUDIO', 422)
       return { fileId: file.file_id, fileUniqueId: file.file_unique_id, duration: file.duration, size: file.file_size ?? null }
+    },
+
+    async uploadVoice(audio, { caption, contentType }) {
+      if (!storageChatId) throw new AppError('Set TELEGRAM_STORAGE_CHAT_ID to record voice feedback', 503)
+      // Chrome and Edge record WebM, which Telegram would keep as a plain file; Firefox records Ogg and Safari MP4, which it takes.
+      let file: InputFile
+      if (isWebm(audio)) {
+        let converted: Buffer
+        try {
+          converted = webmOpusToOgg(audio).ogg
+        } catch {
+          throw new AppError('UNSUPPORTED_AUDIO', 422)
+        }
+        file = new InputFile(converted, 'feedback.ogg')
+      } else {
+        file = new InputFile(audio, contentType.includes('mp4') ? 'feedback.m4a' : 'feedback.ogg')
+      }
+      const message = await askTelegram(() => api.sendVoice(storageChatId, file, { caption, disable_notification: true }))
+      if (!message.voice) throw new AppError('UNSUPPORTED_AUDIO', 422)
+      const v = message.voice
+      return { fileId: v.file_id, fileUniqueId: v.file_unique_id, duration: v.duration, size: v.file_size ?? null }
     },
 
     async keep(photo, caption, kind) {

@@ -324,6 +324,15 @@ export const homeworkSubmissions = {
   photoUrl: (photoId: string) => submissionFileUrl(`/homework-photos/${photoId}`),
   voiceUrl: (voiceId: string) => submissionFileUrl(`/homework-voices/${voiceId}`),
   videoUrl: (videoId: string) => submissionFileUrl(`/homework-videos/${videoId}`),
+  /** Spoken feedback recorded in the browser -- kept on the submission, sent to the family with the verdict. */
+  recordFeedbackVoice: (id: string, recording: Blob) =>
+    apiFetch<HomeworkSubmission>(`/homework-submissions/${id}/feedback-voice`, {
+      method: 'POST',
+      headers: { 'Content-Type': recording.type || 'audio/webm' },
+      body: recording,
+    }),
+  removeFeedbackVoice: (id: string) => del<HomeworkSubmission>(`/homework-submissions/${id}/feedback-voice`),
+  feedbackVoiceUrl: (voiceId: string) => submissionFileUrl(`/homework-feedback-voices/${voiceId}`),
 }
 
 function submissionFileUrl(path: string) {

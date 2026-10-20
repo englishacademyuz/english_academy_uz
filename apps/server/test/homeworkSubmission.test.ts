@@ -40,6 +40,10 @@ function fakeFileStore() {
       const fileId = keepUpload('voice', audio, options)
       return { fileId, fileUniqueId: `u-${fileId}`, duration: 33, size: audio.length }
     },
+    async uploadVoice(audio, options) {
+      const fileId = keepUpload('voice', audio, options)
+      return { fileId, fileUniqueId: `u-${fileId}`, duration: 7, size: audio.length }
+    },
     async keepVideo(video) {
       return video
     },
@@ -391,6 +395,57 @@ describe('homework submissions', () => {
     const late = await upload(lesson.id)
     expect(late.statusCode).toBe(409)
     expect(late.json().error).toBe('ALREADY_CHECKED')
+  })
+
+  it('sends the teacher’s spoken feedback with the verdict, and plays it to the student', async () => {
+    const { lesson } = await seedLesson()
+    const submission = (await upload(lesson.id)).json()
+    const cookie = await loginAs(app, 'teacher1', 'teacher12345')
+    const record = (body: Buffer) =>
+      app.inject({
+        method: 'POST',
+        url: `/homework-submissions/${submission.id}/feedback-voice`,
+        headers: { cookie, 'content-type': 'audio/ogg' },
+        payload: body,
+      })
+
+    const first = await record(OGG)
+    expect(first.statusCode).toBe(200)
+    expect(first.json()).toMatchObject({ status: 'SUBMITTED', feedbackVoice: { duration: 7 } })
+    expect(uploads.at(-1)!.caption).toMatch(/^🎙 Ustoz izohi · 📝 .* · Present Simple$/)
+    // Recording again replaces it, under a new id.
+    const second = (await record(Buffer.from('OggS second take'))).json()
+    expect(second.feedbackVoice.id).not.toBe(first.json().feedbackVoice.id)
+    expect(await prisma.homeworkFeedbackVoice.count()).toBe(1)
+
+    await app.inject({ method: 'POST', url: `/homework-submissions/${submission.id}/review`, headers: { cookie }, payload: { status: 'CHECKED' } })
+    await new Promise((resolve) => setTimeout(resolve, 20))
+    const fileId = (await prisma.homeworkFeedbackVoice.findFirstOrThrow()).telegramFileId
+    expect(reviews[0].review).toMatchObject({ status: 'CHECKED', comment: null, feedbackVoiceFileId: fileId })
+
+    const teacherPlays = await app.inject({ method: 'GET', url: `/homework-feedback-voices/${second.feedbackVoice.id}`, headers: { cookie } })
+    expect(teacherPlays.body).toBe('OggS second take')
+    const studentPlays = await app.inject({ method: 'GET', url: `/student/homework-feedback-voices/${second.feedbackVoice.id}`, headers: miniAppAuth(700) })
+    expect(studentPlays.headers['content-type']).toBe('audio/ogg')
+    expect((await detail(lesson.id)).json().tasks[0].submission.feedbackVoice).toEqual(second.feedbackVoice)
+
+    const removed = await app.inject({ method: 'DELETE', url: `/homework-submissions/${submission.id}/feedback-voice`, headers: { cookie } })
+    expect(removed.json().feedbackVoice).toBeNull()
+  })
+
+  it('keeps other teachers from recording feedback on a submission', async () => {
+    const { lesson } = await seedLesson()
+    const submission = (await upload(lesson.id)).json()
+    await createTeacherUser('teacher2', 'teacher12345')
+    const cookie = await loginAs(app, 'teacher2', 'teacher12345')
+    const res = await app.inject({
+      method: 'POST',
+      url: `/homework-submissions/${submission.id}/feedback-voice`,
+      headers: { cookie, 'content-type': 'audio/ogg' },
+      payload: OGG,
+    })
+    expect(res.statusCode).toBe(403)
+    expect(uploads).toHaveLength(1)
   })
 
   it('closes a task once its deadline has passed, unless the teacher sends it back', async () => {

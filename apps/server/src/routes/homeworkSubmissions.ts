@@ -3,17 +3,21 @@ import { z } from 'zod'
 import { prisma, type Prisma } from '@tashkurgan/db'
 import {
   assertCan,
+  type Actor,
   HOMEWORK_TASKS,
   homeworkTasks,
+  pictureTaskName,
+  removeHomeworkFeedbackVoice,
   reviewHomeworkSubmission,
+  setHomeworkFeedbackVoice,
   studentChatIds,
   SUBMISSION_FILES,
   SUBMISSION_TASK,
   submissionView,
   WRITTEN_TASK,
 } from '@tashkurgan/domain'
-import { AppError, NotFoundError } from '@tashkurgan/shared'
-import type { HomeworkFileStore } from '../telegram/fileStore'
+import { AppError, NotFoundError, ValidationError } from '@tashkurgan/shared'
+import { MAX_DOWNLOAD_BYTES, type HomeworkFileStore } from '../telegram/fileStore'
 
 export type HomeworkReviewAnnouncement = {
   lessonId: string
@@ -24,6 +28,8 @@ export type HomeworkReviewAnnouncement = {
   taskName: string | null
   status: 'CHECKED' | 'RETURNED'
   comment: string | null
+  /** The teacher's spoken feedback (its Telegram file id), sent after the text; null when they only typed. */
+  feedbackVoiceFileId: string | null
 }
 
 /** Tells a student's Telegram chats their homework was checked or sent back -- the bot in production, a spy in tests. */
@@ -69,6 +75,23 @@ export const homeworkSubmissionRoutes: FastifyPluginAsync<{
   notifier?: HomeworkReviewNotifier
 }> = async (app, opts) => {
   const notifier: HomeworkReviewNotifier = opts.notifier ?? (async () => {})
+  // A teacher's spoken feedback is posted as the raw recording.
+  app.addContentTypeParser(/^audio\//, { parseAs: 'buffer' }, (_request, body, done) => done(null, body))
+
+  /** A submission a teacher is about to give a verdict or feedback on, if this teacher may. */
+  async function reviewableSubmission(actor: Actor, id: string) {
+    const submission = await prisma.homeworkSubmission.findUnique({
+      where: { id },
+      include: {
+        student: { select: studentSelect },
+        homeworkImage: SUBMISSION_TASK.homeworkImage,
+        homework: { select: { lessonSession: { select: { id: true, date: true, topic: true, group: { select: { teacherId: true } } } } } },
+      },
+    })
+    if (!submission) throw new NotFoundError('Submission not found')
+    assertCan(actor, { resource: 'homeworkResult', action: 'manage', ownerTeacherId: submission.homework.lessonSession.group.teacherId })
+    return submission
+  }
 
   // One lesson's homework: every student of the group then, with what they handed in.
   app.get('/sessions/:id/homework-submissions', { preHandler: app.authenticate }, async (request) => {
@@ -191,16 +214,8 @@ export const homeworkSubmissionRoutes: FastifyPluginAsync<{
 
   app.post('/homework-submissions/:id/review', { preHandler: app.authenticate }, async (request) => {
     const { id } = idParams.parse(request.params)
-    const submission = await prisma.homeworkSubmission.findUnique({
-      where: { id },
-      include: {
-        student: { select: studentSelect },
-        homework: { select: { lessonSession: { select: { id: true, date: true, topic: true, group: { select: { teacherId: true } } } } } },
-      },
-    })
-    if (!submission) throw new NotFoundError('Submission not found')
+    const submission = await reviewableSubmission(request.actor!, id)
     const lesson = submission.homework.lessonSession
-    assertCan(request.actor!, { resource: 'homeworkResult', action: 'manage', ownerTeacherId: lesson.group.teacherId })
 
     const body = reviewBody.parse(request.body)
     const reviewed = await reviewHomeworkSubmission(id, body)
@@ -215,15 +230,43 @@ export const homeworkSubmissionRoutes: FastifyPluginAsync<{
           taskName: submissionView(reviewed).taskName,
           status: body.status,
           comment: reviewed.teacherComment,
+          feedbackVoiceFileId: reviewed.feedbackVoice?.telegramFileId ?? null,
         }),
       )
       .catch((err) => request.log.error({ err, submissionId: id }, 'Homework review notice failed'))
     return submissionView(reviewed)
   })
 
+  // Spoken feedback, recorded in the review screen: kept on the submission until the verdict sends it.
+  app.post(
+    '/homework-submissions/:id/feedback-voice',
+    { preHandler: app.authenticate, bodyLimit: MAX_DOWNLOAD_BYTES },
+    async (request) => {
+      const { id } = idParams.parse(request.params)
+      const body = request.body
+      const contentType = request.headers['content-type'] ?? ''
+      if (!Buffer.isBuffer(body) || !contentType.startsWith('audio/')) throw new ValidationError('Send an audio recording')
+      if (!opts.fileStore) throw new AppError('File storage is not configured', 503)
+      const submission = await reviewableSubmission(request.actor!, id)
+      const lesson = submission.homework.lessonSession
+      const taskName = submission.homeworkImage && pictureTaskName(submission.homeworkImage)
+      const stored = await opts.fileStore.uploadVoice(body, {
+        caption: `🎙 Ustoz izohi · ${homeworkPhotoCaption(submission.student, lesson.date, lesson.topic, taskName)}`,
+        contentType,
+      })
+      return submissionView(await setHomeworkFeedbackVoice(id, stored))
+    },
+  )
+
+  app.delete('/homework-submissions/:id/feedback-voice', { preHandler: app.authenticate }, async (request) => {
+    const { id } = idParams.parse(request.params)
+    await reviewableSubmission(request.actor!, id)
+    return submissionView(await removeHomeworkFeedbackVoice(id))
+  })
+
   const ownerTeacher = {
     submission: { select: { homework: { select: { lessonSession: { select: { group: { select: { teacherId: true } } } } } } } },
-  } satisfies Prisma.HomeworkPhotoInclude & Prisma.HomeworkVoiceInclude & Prisma.HomeworkVideoInclude
+  } satisfies Prisma.HomeworkPhotoInclude & Prisma.HomeworkVoiceInclude & Prisma.HomeworkVideoInclude & Prisma.HomeworkFeedbackVoiceInclude
 
   app.get('/homework-photos/:id', { preHandler: app.authenticate }, async (request, reply) => {
     const { id } = idParams.parse(request.params)
@@ -259,5 +302,17 @@ export const homeworkSubmissionRoutes: FastifyPluginAsync<{
       ownerTeacherId: video.submission.homework.lessonSession.group.teacherId,
     })
     return sendHomeworkFile(reply, opts.fileStore, video.telegramFileId)
+  })
+
+  app.get('/homework-feedback-voices/:id', { preHandler: app.authenticate }, async (request, reply) => {
+    const { id } = idParams.parse(request.params)
+    const voice = await prisma.homeworkFeedbackVoice.findUnique({ where: { id }, include: ownerTeacher })
+    if (!voice) throw new NotFoundError('Voice note not found')
+    assertCan(request.actor!, {
+      resource: 'lessonSession',
+      action: 'view',
+      ownerTeacherId: voice.submission.homework.lessonSession.group.teacherId,
+    })
+    return sendHomeworkFile(reply, opts.fileStore, voice.telegramFileId)
   })
 }

@@ -462,9 +462,10 @@ model HomeworkSubmission {
   createdAt       DateTime                 @default(now())
   updatedAt       DateTime                 @updatedAt
 
-  photos HomeworkPhoto[]
-  voices HomeworkVoice[]
-  videos HomeworkVideo[]
+  photos        HomeworkPhoto[]
+  voices        HomeworkVoice[]
+  videos        HomeworkVideo[]
+  feedbackVoice HomeworkFeedbackVoice?
 
   @@unique([homeworkId, studentId, task])
   @@index([submittedAt])
@@ -525,6 +526,24 @@ model HomeworkVideo {
 
   @@index([submissionId])
   @@map("homework_videos")
+}
+
+// The teacher's spoken feedback on a submission -- recorded in the review screen instead of (or
+// as well as) typing the comment, and sent to the family with the verdict. One per submission:
+// recording again replaces it.
+model HomeworkFeedbackVoice {
+  id                   String             @id @default(cuid())
+  submissionId         String             @unique
+  submission           HomeworkSubmission @relation(fields: [submissionId], references: [id], onDelete: Cascade)
+  // Telegram's id for downloading the file again (see HomeworkSubmission).
+  telegramFileId       String
+  telegramFileUniqueId String
+  // Length in seconds, as Telegram reports it.
+  duration             Int
+  size                 Int?
+  createdAt            DateTime           @default(now())
+
+  @@map("homework_feedback_voices")
 }
 
 // A completion status is always required; `score` is optional and, when

@@ -109,6 +109,8 @@ export type HomeworkSubmission = {
   voices: Array<{ id: string; duration: number }>
   /** Videos (round video messages or regular ones); `duration` in seconds. */
   videos: HomeworkVideoFile[]
+  /** The teacher's spoken feedback, if they recorded one; `duration` in seconds. */
+  feedbackVoice: { id: string; duration: number } | null
 }
 
 export type HomeworkVideoFile = { id: string; duration: number; round: boolean; width: number | null; height: number | null }

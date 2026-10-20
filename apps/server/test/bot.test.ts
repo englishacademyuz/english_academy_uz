@@ -1,6 +1,6 @@
 import { afterAll, beforeEach, describe, expect, it } from 'vitest'
 import { prisma } from '@tashkurgan/db'
-import { createBot, type BotOptions } from '../src/bot/client'
+import { announceHomeworkReview, createBot, type BotOptions } from '../src/bot/client'
 import type { HomeworkFileStore } from '../src/telegram/fileStore'
 import { resetDb, seedAcademicStructure } from './helpers'
 
@@ -255,6 +255,9 @@ describe('telegram bot', () => {
     uploadAudio: async () => {
       throw new Error('not used by the bot')
     },
+    uploadVoice: async () => {
+      throw new Error('not used by the bot')
+    },
     keep: async (photo) => photo,
     keepVoice: async (voice) => voice,
     keepVideo: async (video) => video,
@@ -492,5 +495,35 @@ describe('telegram bot', () => {
     await bot.handleUpdate(textUpdate(555, '/start'))
     expect(sentText(calls, 'kodini yuboring')).toBe(true)
     expect(webAppUrls(calls)).toHaveLength(0)
+  })
+})
+
+describe('homework review notices', () => {
+  const review = {
+    lessonId: 'lesson-1',
+    studentName: 'Ali Valiyev',
+    date: new Date('2026-10-20'),
+    topic: 'Present Simple',
+    taskName: null,
+    status: 'CHECKED' as const,
+    comment: null,
+  }
+
+  it('plays the teacher’s spoken feedback under the verdict', async () => {
+    const { bot, calls } = buildBot()
+    await announceHomeworkReview(bot, MINI_APP_URL, ['700', '701'], { ...review, feedbackVoiceFileId: 'voice-file' })
+    expect(calls.map((c) => [c.method, c.payload.chat_id])).toEqual([
+      ['sendMessage', '700'],
+      ['sendVoice', '700'],
+      ['sendMessage', '701'],
+      ['sendVoice', '701'],
+    ])
+    expect(calls[1].payload).toMatchObject({ voice: 'voice-file', caption: '🎙 Ustozning ovozli izohi' })
+  })
+
+  it('sends only the message when the teacher just typed', async () => {
+    const { bot, calls } = buildBot()
+    await announceHomeworkReview(bot, MINI_APP_URL, ['700'], { ...review, comment: 'Barakalla!', feedbackVoiceFileId: null })
+    expect(calls.map((c) => c.method)).toEqual(['sendMessage'])
   })
 })

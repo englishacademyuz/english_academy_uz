@@ -11,11 +11,15 @@ export const MAX_HOMEWORK_VIDEOS = 5
 /** The task key of a homework's written part (its instructions) -- a picture task's key is the picture's id. */
 export const WRITTEN_TASK = 'written'
 
-/** A submission's photos, voice notes and videos, in the order they were added -- what `submissionView` needs. */
+/**
+ * A submission's photos, voice notes and videos, in the order they were added, and the teacher's
+ * spoken feedback -- what `submissionView` needs.
+ */
 export const SUBMISSION_FILES = {
   photos: { orderBy: { createdAt: 'asc' } },
   voices: { orderBy: { createdAt: 'asc' } },
   videos: { orderBy: { createdAt: 'asc' } },
+  feedbackVoice: true,
 } satisfies Prisma.HomeworkSubmissionInclude
 
 /** Which task a submission is for and when that's due: its picture task's, else the written homework's. */
@@ -134,6 +138,7 @@ type SubmissionWithFiles = {
   photos: Array<{ id: string; width: number | null; height: number | null }>
   voices: Array<{ id: string; duration: number }>
   videos: Array<{ id: string; duration: number; round: boolean; width: number | null; height: number | null }>
+  feedbackVoice: { id: string; duration: number } | null
 }
 
 /** A submission as both apps show it -- file ids of ours only, never Telegram's. */
@@ -151,6 +156,8 @@ export function submissionView(submission: SubmissionWithFiles) {
     photos: submission.photos.map((p) => ({ id: p.id, width: p.width, height: p.height })),
     voices: submission.voices.map((v) => ({ id: v.id, duration: v.duration })),
     videos: submission.videos.map((v) => ({ id: v.id, duration: v.duration, round: v.round, width: v.width, height: v.height })),
+    /** The teacher's spoken feedback, if they recorded one. */
+    feedbackVoice: submission.feedbackVoice && { id: submission.feedbackVoice.id, duration: submission.feedbackVoice.duration },
   }
 }
 
@@ -453,4 +460,29 @@ export async function reviewHomeworkSubmission(submissionId: string, input: Home
     data: { status: input.status, teacherComment: comment, checkedAt: now },
     include: SUBMISSION_INCLUDE,
   })
+}
+
+/**
+ * The teacher's spoken feedback on a submission, already stored on Telegram -- replacing the one
+ * recorded before, if any. It reaches the family with the next verdict.
+ */
+export async function setHomeworkFeedbackVoice(submissionId: string, voice: StoredVoice) {
+  const data = {
+    telegramFileId: voice.fileId,
+    telegramFileUniqueId: voice.fileUniqueId,
+    duration: voice.duration,
+    size: voice.size ?? null,
+  }
+  // Deleted and created anew, not updated: a new id is a new address, so no app plays the old one from its cache.
+  await prisma.$transaction([
+    prisma.homeworkFeedbackVoice.deleteMany({ where: { submissionId } }),
+    prisma.homeworkFeedbackVoice.create({ data: { submissionId, ...data } }),
+  ])
+  return getHomeworkSubmission(submissionId)
+}
+
+/** Takes the teacher's spoken feedback off a submission. */
+export async function removeHomeworkFeedbackVoice(submissionId: string) {
+  await prisma.homeworkFeedbackVoice.deleteMany({ where: { submissionId } })
+  return getHomeworkSubmission(submissionId)
 }

@@ -24,6 +24,9 @@ function fakeFileStore() {
     async uploadAudio() {
       throw new Error('not used here')
     },
+    async uploadVoice() {
+      throw new Error('not used here')
+    },
     async keepVideo(video) {
       return video
     },

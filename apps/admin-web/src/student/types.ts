@@ -141,6 +141,8 @@ export type MiniSubmission = {
   voices: Array<{ id: string; duration: number }>
   /** `round` for a round video message; `duration` in seconds. */
   videos: Array<{ id: string; duration: number; round: boolean; width: number | null; height: number | null }>
+  /** The teacher's spoken feedback, if they recorded one; `duration` in seconds. */
+  feedbackVoice: { id: string; duration: number } | null
 }
 
 export type MiniHomework = {

@@ -503,7 +503,10 @@ export async function announceStaffMessage(
   }
 }
 
-/** Tells every chat of the student their homework photos were checked or sent back; one failed chat doesn't stop the rest. */
+/**
+ * Tells every chat of the student their homework was checked or sent back -- and plays them the
+ * teacher's spoken feedback, as a voice note under the message. One failed chat doesn't stop the rest.
+ */
 export async function announceHomeworkReview(
   bot: Bot<BotContext>,
   miniAppUrl: string,
@@ -513,10 +516,16 @@ export async function announceHomeworkReview(
   const text = fmt.formatHomeworkReview(review)
   for (const chatId of chatIds) {
     try {
-      await bot.api.sendMessage(chatId, text, {
+      const message = await bot.api.sendMessage(chatId, text, {
         parse_mode: 'HTML',
         ...(miniAppUrl ? { reply_markup: openHomeworkKeyboard(miniAppUrl, review.lessonId) } : {}),
       })
+      if (review.feedbackVoiceFileId) {
+        await bot.api.sendVoice(chatId, review.feedbackVoiceFileId, {
+          caption: '🎙 Ustozning ovozli izohi',
+          reply_parameters: { message_id: message.message_id },
+        })
+      }
     } catch (err) {
       console.error(`Homework review notice to chat ${chatId} failed:`, err)
     }
