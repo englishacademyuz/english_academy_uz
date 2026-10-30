@@ -6,6 +6,7 @@ import { signTelegramInitData } from '../src/telegram/initData'
 type App = Awaited<ReturnType<typeof buildApp>>
 
 export async function resetDb() {
+  await prisma.announcement.deleteMany()
   await prisma.conversation.deleteMany()
   await prisma.payment.deleteMany()
   await prisma.pointTransaction.deleteMany()

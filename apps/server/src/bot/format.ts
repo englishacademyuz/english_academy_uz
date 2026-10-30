@@ -312,3 +312,41 @@ export function formatHomeworkReview(review: {
     ...(review.status === 'RETURNED' ? ['', 'Xatolarni tuzatib, shu vazifaga qaytadan yuboring.'] : []),
   ].join('\n')
 }
+
+/** Tashkent has no daylight saving: its clock is always UTC+5. */
+const TASHKENT_OFFSET_MS = 5 * 60 * 60 * 1000
+
+/** A moment (an event's start) as "Shanba, 8-noyabr, soat 15:00" in Tashkent time. */
+export function formatEventTime(date: Date): string {
+  const local = new Date(date.getTime() + TASHKENT_OFFSET_MS)
+  const time = `${String(local.getUTCHours()).padStart(2, '0')}:${String(local.getUTCMinutes()).padStart(2, '0')}`
+  return `${formatLessonDay(local)}, soat ${time}`
+}
+
+const ANNOUNCEMENT_HEADLINE = {
+  NEWS: '📰 <b>YANGILIK</b>',
+  EVENT: '🎉 <b>TADBIR</b>',
+  ORGANIZATIONAL: '📣 <b>TASHKILIY EʼLON</b>',
+} as const
+
+/** News, an event or an organizational notice, sent to every chat of the groups it went to. */
+export function formatAnnouncement(announcement: {
+  kind: keyof typeof ANNOUNCEMENT_HEADLINE
+  title: string
+  body: string
+  eventAt: Date | null
+  amount: number | null
+  authorName: string
+}): string {
+  return [
+    ANNOUNCEMENT_HEADLINE[announcement.kind],
+    '',
+    `<b>${escapeHtml(announcement.title)}</b>`,
+    ...(announcement.eventAt ? [`🗓 ${formatEventTime(announcement.eventAt)}`] : []),
+    '',
+    escapeHtml(announcement.body),
+    ...(announcement.amount ? ['', `💰 Har bir oʻquvchidan: <b>${formatSum(announcement.amount)}</b>`] : []),
+    '',
+    `<i>— ${escapeHtml(announcement.authorName)}</i>`,
+  ].join('\n')
+}

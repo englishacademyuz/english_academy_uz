@@ -371,3 +371,36 @@ export type ChatUnreadSummary = {
   messages: number
   latest: { studentId: string; studentName: string; senderName: string; text: string; createdAt: string } | null
 }
+
+/** News, an event, or an organizational notice (e.g. collecting for a new whiteboard). */
+export type AnnouncementKind = 'NEWS' | 'EVENT' | 'ORGANIZATIONAL'
+
+export type Announcement = {
+  id: string
+  kind: AnnouncementKind
+  title: string
+  body: string
+  /** EVENT: when it happens. */
+  eventAt: string | null
+  /** ORGANIZATIONAL: what each family is asked to bring, in so'm; null when nothing is collected. */
+  amount: number | null
+  image: { width: number | null; height: number | null } | null
+  /** The teacher's full name, or "Administratsiya". */
+  authorName: string
+  createdAt: string
+  groups: Array<{ id: string; name: string; levelColor: string }>
+  /** Telegram messages it went out as. */
+  sentMessages: number
+  canDelete: boolean
+}
+
+export type AnnouncementInput = {
+  kind: AnnouncementKind
+  title: string
+  body: string
+  eventAt: string | null
+  amount: number | null
+  groupIds: string[]
+  /** The picture as a data URL, shrunk in the browser first. */
+  image: string | null
+}

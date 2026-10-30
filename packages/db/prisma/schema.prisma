@@ -115,6 +115,14 @@ enum PointActivityType {
   OTHER
 }
 
+// What an announcement is about -- each kind has its own look in the Mini App and the bot.
+// EVENT carries when it happens; ORGANIZATIONAL may ask each family for an amount (a collection).
+enum AnnouncementKind {
+  NEWS
+  EVENT
+  ORGANIZATIONAL
+}
+
 // One authenticated identity. Admin/Teacher log in with username+password;
 // students reach the Telegram bot through TelegramLink, not through a User.
 model User {
@@ -130,6 +138,7 @@ model User {
 
   chatMessages      ChatMessage[]
   conversationReads ConversationRead[]
+  announcements     Announcement[]
 
   @@map("users")
 }
@@ -325,6 +334,7 @@ model Group {
   pointTransactions PointTransaction[]
   reschedules       LessonReschedule[]
   homeworkImages    HomeworkImage[]
+  announcements     AnnouncementGroup[]
 
   @@map("groups")
 }
@@ -836,4 +846,58 @@ model ConversationRead {
 
   @@id([conversationId, userId])
   @@map("conversation_reads")
+}
+
+// News, an event or an organizational notice staff send to some or all groups: shown at the top
+// of the Mini App's home screen for the groups' students and sent to their Telegram chats.
+// Deleting one takes it out of the app and (where Telegram still allows) out of the chats.
+model Announcement {
+  id                String           @id @default(cuid())
+  kind              AnnouncementKind
+  title             String
+  body              String
+  // EVENT: when it happens.
+  eventAt           DateTime?
+  // ORGANIZATIONAL: what each family is asked to bring, in so'm -- null when nothing is collected.
+  amount            Int?
+  // An optional picture, kept on Telegram like homework pictures (see apps/server/src/telegram/fileStore.ts).
+  imageFileId       String?
+  imageFileUniqueId String?
+  imageWidth        Int?
+  imageHeight       Int?
+  authorUserId      String?
+  author            User?            @relation(fields: [authorUserId], references: [id], onDelete: SetNull)
+  // The teacher's full name, or "Administratsiya".
+  authorName        String
+  createdAt         DateTime         @default(now())
+
+  groups   AnnouncementGroup[]
+  messages AnnouncementMessage[]
+
+  @@index([createdAt])
+  @@map("announcements")
+}
+
+// A group an announcement was sent to. "All groups" is saved as every group at the time.
+model AnnouncementGroup {
+  announcementId String
+  announcement   Announcement @relation(fields: [announcementId], references: [id], onDelete: Cascade)
+  groupId        String
+  group          Group        @relation(fields: [groupId], references: [id], onDelete: Cascade)
+
+  @@id([announcementId, groupId])
+  @@index([groupId])
+  @@map("announcement_groups")
+}
+
+// A Telegram message the announcement went out as -- kept so deleting it can take it back.
+model AnnouncementMessage {
+  announcementId String
+  announcement   Announcement @relation(fields: [announcementId], references: [id], onDelete: Cascade)
+  chatId         String
+  messageId      Int
+
+  @@id([chatId, messageId])
+  @@index([announcementId])
+  @@map("announcement_messages")
 }

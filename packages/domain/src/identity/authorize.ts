@@ -36,6 +36,10 @@ export type Permission =
   // Reading and answering a student's family chat -- a Teacher only for students in one of
   // their current groups (`ownerTeacherIds` are the teachers of the student's active groups).
   | { resource: 'conversation'; action: 'manage'; ownerTeacherIds: string[] }
+  // News, events and organizational notices -- a Teacher sends them only to groups they teach
+  // (`groupTeacherIds`: the teachers of every group it goes to) and deletes only their own.
+  | { resource: 'announcement'; action: 'publish'; groupTeacherIds: string[] }
+  | { resource: 'announcement'; action: 'delete'; authorUserId: string | null }
 
 export function can(actor: Actor, permission: Permission): boolean {
   if (actor.role === 'ADMIN') return true
@@ -62,6 +66,10 @@ export function can(actor: Actor, permission: Permission): boolean {
         return permission.action === 'view' || permission.ownerTeacherId === actor.teacherId
       case 'conversation':
         return !!actor.teacherId && permission.ownerTeacherIds.includes(actor.teacherId)
+      case 'announcement':
+        return permission.action === 'publish'
+          ? !!actor.teacherId && permission.groupTeacherIds.every((id) => id === actor.teacherId)
+          : permission.authorUserId === actor.userId
       case 'student':
       case 'teacher':
       case 'subject':

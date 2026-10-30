@@ -64,6 +64,23 @@ export type MiniHome = {
   payment: MiniPaymentReminder | null
   /** Teacher answers in the family chat not yet opened here. */
   unreadChat: number
+  /** The newest news, events and notices still worth a place on the home screen. */
+  announcements: MiniAnnouncement[]
+}
+
+/** News, an event, or an organizational notice (e.g. collecting for a new whiteboard) sent to the student's group. */
+export type MiniAnnouncement = {
+  id: string
+  kind: 'NEWS' | 'EVENT' | 'ORGANIZATIONAL'
+  title: string
+  body: string
+  /** EVENT: when it happens. */
+  eventAt: string | null
+  /** ORGANIZATIONAL: what each family is asked to bring, in so'm. */
+  amount: number | null
+  image: { width: number | null; height: number | null } | null
+  authorName: string
+  createdAt: string
 }
 
 /** A payment coming up in 3 days or less, or overdue -- `debtor` once 5 days past the payment day. */

@@ -72,3 +72,7 @@ export function openChatKeyboard(miniAppUrl: string) {
 export function openHomeworkKeyboard(miniAppUrl: string, lessonId: string) {
   return new InlineKeyboard().webApp('📝 Vazifani ochish', `${miniAppUrl}/homework/${lessonId}`)
 }
+
+export function openAnnouncementKeyboard(miniAppUrl: string, announcementId: string) {
+  return new InlineKeyboard().webApp('📖 Ilovada ochish', `${miniAppUrl}/news/${announcementId}`)
+}

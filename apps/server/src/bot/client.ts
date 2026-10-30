@@ -26,6 +26,7 @@ import type { PaymentReminderAnnouncement } from '../routes/payments'
 import type { AbsenceAnnouncement } from '../routes/absences'
 import type { LessonChangeAnnouncement } from '../routes/schedule'
 import type { StaffMessageAnnouncement } from '../routes/conversations'
+import type { AnnouncementBroadcast, SentMessage } from '../routes/announcements'
 import { homeworkPhotoCaption, type HomeworkReviewAnnouncement } from '../routes/homeworkSubmissions'
 import { largestPhoto, MAX_DOWNLOAD_BYTES, type HomeworkFileStore } from '../telegram/fileStore'
 import { telegramDisplayName } from '../telegram/initData'
@@ -35,6 +36,7 @@ import {
   familyMenuKeyboard,
   MENU_LABELS,
   miniAppMenuKeyboard,
+  openAnnouncementKeyboard,
   openChatKeyboard,
   openHomeKeyboard,
   openHomeworkKeyboard,
@@ -528,6 +530,56 @@ export async function announceHomeworkReview(
       }
     } catch (err) {
       console.error(`Homework review notice to chat ${chatId} failed:`, err)
+    }
+  }
+}
+
+/** The longest caption Telegram puts under a photo -- a longer announcement goes as a photo, then a message. */
+const CAPTION_LIMIT = 1024
+
+/**
+ * Sends an announcement to every chat -- with its picture when it has one -- and returns the
+ * messages it went out as, so deleting it can take them back. One failed chat doesn't stop the rest.
+ */
+export async function announceAnnouncement(
+  bot: Bot<BotContext>,
+  miniAppUrl: string,
+  chatIds: string[],
+  announcement: AnnouncementBroadcast,
+): Promise<SentMessage[]> {
+  const text = fmt.formatAnnouncement(announcement)
+  const button = miniAppUrl ? { reply_markup: openAnnouncementKeyboard(miniAppUrl, announcement.id) } : {}
+  const sent: SentMessage[] = []
+  for (const chatId of chatIds) {
+    try {
+      if (announcement.imageFileId && text.length <= CAPTION_LIMIT) {
+        const photo = await bot.api.sendPhoto(chatId, announcement.imageFileId, { caption: text, parse_mode: 'HTML', ...button })
+        sent.push({ chatId, messageId: photo.message_id })
+        continue
+      }
+      if (announcement.imageFileId) {
+        const photo = await bot.api.sendPhoto(chatId, announcement.imageFileId)
+        sent.push({ chatId, messageId: photo.message_id })
+      }
+      const message = await bot.api.sendMessage(chatId, text, { parse_mode: 'HTML', ...button })
+      sent.push({ chatId, messageId: message.message_id })
+    } catch (err) {
+      console.error(`Announcement to chat ${chatId} failed:`, err)
+    }
+  }
+  return sent
+}
+
+/**
+ * Deletes a deleted announcement's messages from the chats. Telegram may refuse old ones (it lets
+ * a bot delete only recent messages); those stay, and the rest still go.
+ */
+export async function retractAnnouncement(bot: Bot<BotContext>, messages: SentMessage[]) {
+  for (const { chatId, messageId } of messages) {
+    try {
+      await bot.api.deleteMessage(chatId, messageId)
+    } catch (err) {
+      console.error(`Deleting announcement message ${messageId} in chat ${chatId} failed:`, err)
     }
   }
 }

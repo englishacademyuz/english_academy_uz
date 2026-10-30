@@ -28,7 +28,10 @@ import {
   getPaymentReminder,
   getFamilyThread,
   getProgress,
+  listAnnouncementsForStudent,
   listQuizzesForStudent,
+  studentAnnouncement,
+  studentAnnouncementImage,
   placesByPoints,
   postFamilyMessage,
   startQuizAttempt,
@@ -176,7 +179,7 @@ export const miniAppRoutes: FastifyPluginAsync<{ fileStore?: HomeworkFileStore }
     const enrollment = await activeEnrollment(student.id)
     const now = new Date()
 
-    const [lastLesson, latestHomework, quizzes, progress, points, changes, ranking, payment, unreadChat] = await Promise.all([
+    const [lastLesson, latestHomework, quizzes, progress, points, changes, ranking, payment, unreadChat, announcements] = await Promise.all([
       enrollment
         ? prisma.lessonSession.findFirst({
             where: { groupId: enrollment.groupId, date: { lte: now } },
@@ -210,6 +213,7 @@ export const miniAppRoutes: FastifyPluginAsync<{ fileStore?: HomeworkFileStore }
       groupRanking(enrollment, student.id),
       getPaymentReminder(student.id),
       familyUnreadCount(student.id),
+      listAnnouncementsForStudent(student.id, { home: true, now }),
     ])
 
     return {
@@ -247,7 +251,22 @@ export const miniAppRoutes: FastifyPluginAsync<{ fileStore?: HomeworkFileStore }
           : null,
       // Teacher answers not yet opened in the Mini App's chat.
       unreadChat,
+      // The newest news, events and notices to the student's group -- first thing on the screen.
+      announcements,
     }
+  })
+
+  // Every announcement to the student's group, newest first.
+  app.get('/student/announcements', async (request) => listAnnouncementsForStudent(me(request).id))
+
+  app.get('/student/announcements/:id', async (request) => {
+    const { id } = idParams.parse(request.params)
+    return studentAnnouncement(me(request).id, id)
+  })
+
+  app.get('/student/announcements/:id/image', async (request, reply) => {
+    const { id } = idParams.parse(request.params)
+    return sendHomeworkFile(reply, opts.fileStore, await studentAnnouncementImage(me(request).id, id))
   })
 
   app.get('/student/lessons', async (request) => {

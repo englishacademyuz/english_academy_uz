@@ -23,3 +23,13 @@ export async function shrinkPhoto(file: File): Promise<Blob> {
     return file
   }
 }
+
+/** A picture as a data URL -- how an announcement's picture goes up, inside the JSON with its text. */
+export function blobToDataUrl(blob: Blob): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader()
+    reader.onload = () => resolve(reader.result as string)
+    reader.onerror = () => reject(reader.error)
+    reader.readAsDataURL(blob)
+  })
+}

@@ -6,6 +6,7 @@ import { dayKeyOf } from '../../lib/schedule'
 import { toDateInputValue } from '../../lib/format'
 import { miniApi } from '../api'
 import { richTextToPlain } from '../../lib/richText'
+import { AnnouncementCard } from '../components/announcement'
 import { ClockIcon, CupTile, GradeFace, HomeworkTile, MEDAL, TrophyIcon, isPodium, type Podium } from '../components/art'
 import { homeworkPreviewText } from '../components/HomeworkImages'
 import { deadlineLabel, homeworkDeadline, timeLeft, urgencyOf, useNow, type HomeworkDeadline } from '../deadline'
@@ -39,6 +40,7 @@ export function HomePage() {
     groupRanking,
     payment,
     unreadChat,
+    announcements,
   } = home.data
 
   // A homework task due within a day and not handed in jumps to the top, in red.
@@ -63,6 +65,11 @@ export function HomePage() {
           {initialsOf(student.firstName, student.lastName)}
         </Link>
       </header>
+
+      {/* News, events and notices from the center come first -- they're what staff want everyone to see. */}
+      {announcements.map((a) => (
+        <AnnouncementCard key={a.id} announcement={a} />
+      ))}
 
       {payment && <PaymentCard payment={payment} />}
 
@@ -101,6 +108,8 @@ export function HomePage() {
       <MonthTiles progress={monthProgress} />
 
       {unreadChat === 0 && <LinkRow to="/student/chat">💬 Oʻqituvchi bilan muloqot</LinkRow>}
+
+      <LinkRow to="/student/news">📣 Barcha eʼlonlar</LinkRow>
 
     </div>
   )

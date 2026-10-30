@@ -2,6 +2,7 @@ import { initData } from './telegram'
 import type {
   AttemptState,
   MiniAccounts,
+  MiniAnnouncement,
   MiniAttendance,
   MiniChat,
   MiniChatMessage,
@@ -117,6 +118,9 @@ export const miniApi = {
   chooseAccount: (studentId: string) =>
     request<{ id: string }>(`/student/accounts/${studentId}/choose`, { method: 'POST' }),
   home: () => request<MiniHome>('/student/home'),
+  announcements: () => request<MiniAnnouncement[]>('/student/announcements'),
+  announcement: (id: string) => request<MiniAnnouncement>(`/student/announcements/${id}`),
+  announcementImageUrl: (id: string) => fileUrl(`/student/announcements/${id}/image`),
   lessons: (page: number) => request<MiniLessons>(`/student/lessons?page=${page}`),
   lesson: (id: string) => request<MiniLessonDetail>(`/student/lessons/${id}`),
   homework: () => request<MiniHomework[]>('/student/homework'),

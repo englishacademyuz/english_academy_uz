@@ -15,6 +15,7 @@ import { ProfilePage } from './pages/ProfilePage'
 import { QuizzesPage } from './pages/QuizzesPage'
 import { QuizPage } from './pages/QuizPage'
 import { ChatPage } from './pages/ChatPage'
+import { NewsDetailPage, NewsPage } from './pages/NewsPage'
 import { AccountPickerPage } from './pages/AccountPickerPage'
 import './student.css'
 
@@ -196,6 +197,8 @@ export function StudentApp() {
         <Route path="quizzes" element={<QuizzesPage />} />
         <Route path="quizzes/:id" element={<QuizPage />} />
         <Route path="chat" element={<ChatPage />} />
+        <Route path="news" element={<NewsPage />} />
+        <Route path="news/:id" element={<NewsDetailPage />} />
         <Route path="*" element={<Navigate to="/student" replace />} />
       </Routes>
 

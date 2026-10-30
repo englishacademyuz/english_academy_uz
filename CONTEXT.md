@@ -134,6 +134,10 @@ Shown on the students list while a Student's latest recorded lesson is one they 
 The one message thread between a Student's family and staff ("Oʻqituvchi bilan muloqot"). The family is every TelegramLink of the Student — in practice mostly parents — writing from the bot (any text that isn't a code) or the Mini App. Staff are the Teacher of one of the Student's current Groups, or an Admin; an answer goes to every linked chat. Unread is tracked per staff member.
 _Avoid_: Live chat (nothing is real-time — the panel checks every few seconds), support ticket
 
+**Announcement** ("Eʼlon"):
+News, an event, or an organizational notice (a collection for a new whiteboard, a rule, a reminder) that staff send to some or all Groups, optionally with one picture. An *event* carries its date and time; an *organizational* notice may ask each family for an amount. It shows at the top of the Mini App's home screen for the Groups' current Students — news and notices for two weeks, an event until it has happened — stays in the Mini App's list, and is sent to their Telegram chats. A Teacher sends only to Groups they teach and deletes only their own; an Admin may do both for any. Deleting one removes it from the Mini App and takes its bot messages back where Telegram still allows. "All groups" is saved as every Group at the time, not as a rule — a Group created later doesn't get it.
+_Avoid_: Broadcast, post, notification (a notification is how it reaches the chat, not the thing itself)
+
 ### Cross-Cutting
 
 **Progress**:

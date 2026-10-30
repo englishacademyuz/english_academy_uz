@@ -10,6 +10,7 @@ import { StudentsPage } from './pages/StudentsPage'
 import { StudentDetailPage } from './pages/StudentDetailPage'
 import { TeachersPage } from './pages/TeachersPage'
 import { SubjectsPage } from './pages/SubjectsPage'
+import { AnnouncementsPage } from './pages/AnnouncementsPage'
 import { useTheme } from './lib/theme'
 import 'react-toastify/dist/ReactToastify.css'
 
@@ -28,6 +29,7 @@ export function App() {
             <Route path="groups/:id" element={<GroupDetailPage />} />
             <Route path="students" element={<StudentsPage />} />
             <Route path="students/:id" element={<StudentDetailPage />} />
+            <Route path="announcements" element={<AnnouncementsPage />} />
 
             <Route element={<AdminOnlyRoute />}>
               <Route path="teachers" element={<TeachersPage />} />

@@ -1,5 +1,7 @@
 import type {
   Actor,
+  Announcement,
+  AnnouncementInput,
   Assessment,
   AssessmentCategory,
   AssessmentCategoryCadence,
@@ -388,4 +390,28 @@ export const conversations = {
   /** Saves the message and delivers it to every Telegram chat linked to the student. */
   send: (studentId: string, text: string) =>
     post<ChatMessage & { deliveredChats: number }>(`/students/${studentId}/conversation/messages`, { text }),
+}
+
+/** Object URLs of announcement pictures already fetched this session -- they never change. */
+const announcementImageUrls = new Map<string, Promise<string>>()
+
+/** News, events and organizational notices sent to groups -- shown in the Mini App and sent to the bot chats. */
+export const announcements = {
+  list: () => get<Announcement[]>('/announcements'),
+  /** Saves it and sends it to every Telegram chat of the chosen groups' students. */
+  create: (data: AnnouncementInput) => post<Announcement & { notifiedChats: number }>('/announcements', data),
+  /** Takes it out of the Mini App, and out of the chats where Telegram still allows. */
+  remove: (id: string) => del<{ ok: true }>(`/announcements/${id}`),
+  imageUrl: (id: string) => {
+    let url = announcementImageUrls.get(id)
+    if (!url) {
+      url = fetch(`${BASE_URL}/announcements/${id}/image`, { credentials: 'include' }).then(async (res) => {
+        if (!res.ok) throw new ApiError(res.statusText, res.status)
+        return URL.createObjectURL(await res.blob())
+      })
+      url.catch(() => announcementImageUrls.delete(id))
+      announcementImageUrls.set(id, url)
+    }
+    return url
+  },
 }

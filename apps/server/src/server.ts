@@ -5,12 +5,14 @@ import { buildApp } from './app'
 import { config } from './config'
 import {
   announceAbsence,
+  announceAnnouncement,
   announceHomeworkReview,
   announceLessonChange,
   announcePaymentReminder,
   announceQuiz,
   announceStaffMessage,
   createBot,
+  retractAnnouncement,
 } from './bot/client'
 
 // Long polling for now (no public HTTPS URL to receive webhooks in local
@@ -37,6 +39,12 @@ const app = await buildApp({
   chatNotifier: bot ? (chatIds, message) => announceStaffMessage(bot, config.miniAppUrl, chatIds, message) : undefined,
   homeworkReviewNotifier: bot
     ? (chatIds, review) => announceHomeworkReview(bot, config.miniAppUrl, chatIds, review)
+    : undefined,
+  announcementNotifier: bot
+    ? {
+        send: (chatIds, announcement) => announceAnnouncement(bot, config.miniAppUrl, chatIds, announcement),
+        retract: (messages) => retractAnnouncement(bot, messages),
+      }
     : undefined,
   homeworkFileStore: fileStore,
 })

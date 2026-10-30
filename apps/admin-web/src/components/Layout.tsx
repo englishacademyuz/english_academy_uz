@@ -5,6 +5,7 @@ import {
   GraduationCap,
   LayoutDashboard,
   LogOut,
+  Megaphone,
   Menu,
   Moon,
   School,
@@ -21,6 +22,7 @@ const navItems = [
   { to: '/', label: 'Bosh sahifa', icon: LayoutDashboard, end: true },
   { to: '/groups', label: 'Guruhlar', icon: School, end: false },
   { to: '/students', label: "Oʻquvchilar", icon: GraduationCap, end: false },
+  { to: '/announcements', label: 'Eʼlonlar', icon: Megaphone, end: false },
   { to: '/teachers', label: "Oʻqituvchilar", icon: Users, end: false, adminOnly: true },
   { to: '/subjects', label: "Oʻquv dasturi", icon: BookOpen, end: false, adminOnly: true },
 ]
