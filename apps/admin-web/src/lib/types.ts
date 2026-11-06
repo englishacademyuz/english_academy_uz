@@ -418,6 +418,7 @@ export type AccountingLine = {
   studentName: string
   groupId: string | null
   groupName: string | null
+  teacherName: string | null
   dueDate: string
   amountDue: number
   amountPaid: number
@@ -429,7 +430,13 @@ export type AccountingSummary = {
   expected: number
   collected: number
   missing: number
+  /** Why `missing` is what it is -- these three add up to it. */
+  unpaidAmount: number
+  partialAmount: number
+  upcomingAmount: number
+  /** Missing money whose payment day has passed -- what to collect now. */
   overdue: number
+  overdueStudents: number
   students: number
   paid: number
   partial: number
@@ -437,13 +444,20 @@ export type AccountingSummary = {
   upcoming: number
   noFee: number
 }
+/** Last month: the share in by this same day (current month only), and all told. */
+export type AccountingPrevious = { year: number; month: number; sameDayPercent: number | null; finalPercent: number }
+export type AccountingGroup = AccountingSummary & {
+  groupId: string | null
+  groupName: string | null
+  teacherName: string | null
+  previous: AccountingPrevious
+}
 export type Accounting = {
   month: { year: number; month: number }
+  today: { year: number; month: number; day: number }
   summary: AccountingSummary
-  groups: Array<AccountingSummary & { groupId: string | null; groupName: string | null }>
+  previous: AccountingPrevious
+  /** Biggest shortfall first. */
+  groups: AccountingGroup[]
   lines: AccountingLine[]
-  trend: Array<{ year: number; month: number; expected: number; collected: number }>
-  forecast: AccountingSummary & { year: number; month: number }
-  totalDebt: number
-  debtors: Array<{ studentId: string; studentName: string; groupName: string | null; months: number; amount: number }>
 }

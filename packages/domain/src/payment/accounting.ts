@@ -11,7 +11,7 @@ import {
 } from '@tashkurgan/shared'
 
 /**
- * Accounting: what each month should have brought in, what it did, and who still owes.
+ * Accounting: what a month should have brought in, what it did, why it's short, and who owes.
  *
  * A student pays for each month on their own payment day (see billing.ts). For a month, a student
  * is *billed* when they had joined by then and were in a group during that cycle -- or simply when
@@ -22,7 +22,7 @@ import {
 
 export type AccountingStudent = { id: string; firstName: string; lastName: string; joinedAt: Date; status: StudentStatus }
 export type AccountingEnrollment = { studentId: string; groupId: string; startDate: Date; endDate: Date | null }
-export type AccountingGroup = { id: string; name: string; monthlyFee: number }
+export type AccountingGroup = { id: string; name: string; monthlyFee: number; teacherName: string | null }
 export type AccountingPayment = {
   id: string
   studentId: string
@@ -31,6 +31,9 @@ export type AccountingPayment = {
   amountDue: number
   amountPaid: number
   note: string | null
+  /** When it was paid in full -- null while it isn't. */
+  paidAt: Date | null
+  createdAt: Date
 }
 
 export type AccountingData = {
@@ -58,6 +61,7 @@ export type AccountingLine = {
   studentName: string
   groupId: string | null
   groupName: string | null
+  teacherName: string | null
   /** The payment day, as a stored date (midnight UTC of the day). */
   dueDate: Date
   amountDue: number
@@ -74,8 +78,13 @@ export type AccountingSummary = {
   collected: number
   /** Still to come in -- expected minus collected, per student (an overpayment doesn't cover someone else). */
   missing: number
-  /** The part of `missing` whose payment day has already passed. */
+  /** Why `missing` is what it is -- these three add up to it. */
+  unpaidAmount: number
+  partialAmount: number
+  upcomingAmount: number
+  /** The part of `missing` whose payment day has already passed -- what to collect now. */
   overdue: number
+  overdueStudents: number
   students: number
   paid: number
   partial: number
@@ -84,8 +93,19 @@ export type AccountingSummary = {
   noFee: number
 }
 
+/** Last month, to compare with: how much of it was in by this same day, and by its end. */
+export type PreviousMonth = BillingMonth & {
+  /** Share collected by the same day of that month -- null unless the month shown is the current one. */
+  sameDayPercent: number | null
+  /** Share collected for it all told, as of today. */
+  finalPercent: number
+}
+
 const monthIndex = (m: BillingMonth) => m.year * 12 + m.month
 const fullName = (s: { firstName: string; lastName: string }) => `${s.firstName} ${s.lastName}`.trim()
+const percent = (part: number, whole: number) => (whole > 0 ? Math.round((part / whole) * 100) : 0)
+/** Uzbekistan has no daylight saving -- a fixed UTC+5. */
+const TASHKENT_OFFSET_MS = 5 * 60 * 60 * 1000
 
 /**
  * Every billed student's line for `month`. `groupIds` limits it to those groups (a teacher's own);
@@ -145,6 +165,7 @@ export function monthLines(
       studentName: fullName(student),
       groupId: group?.id ?? null,
       groupName: group?.name ?? null,
+      teacherName: group?.teacherName ?? null,
       dueDate: startAt,
       amountDue,
       amountPaid,
@@ -161,7 +182,11 @@ export function summarize(lines: AccountingLine[], today: CalendarDay): Accounti
     expected: 0,
     collected: 0,
     missing: 0,
+    unpaidAmount: 0,
+    partialAmount: 0,
+    upcomingAmount: 0,
     overdue: 0,
+    overdueStudents: 0,
     students: lines.length,
     paid: 0,
     partial: 0,
@@ -174,27 +199,52 @@ export function summarize(lines: AccountingLine[], today: CalendarDay): Accounti
     summary.expected += line.amountDue
     summary.collected += line.amountPaid
     summary.missing += left
-    if (daysBetween(calendarDayOf(line.dueDate), today) >= 0) summary.overdue += left
+    if (line.state === 'unpaid') summary.unpaidAmount += left
+    if (line.state === 'partial') summary.partialAmount += left
+    if (line.state === 'upcoming') summary.upcomingAmount += left
+    if (left > 0 && daysBetween(calendarDayOf(line.dueDate), today) >= 0) {
+      summary.overdue += left
+      summary.overdueStudents += 1
+    }
     summary[line.state] += 1
   }
   return summary
 }
 
-export type GroupAccounting = AccountingSummary & { groupId: string | null; groupName: string | null }
+/**
+ * The share of a month's expected money that was in by the end of `cutoff` (a Tashkent day). A
+ * payment counts from when it was paid in full, else from when it was first recorded -- a partial
+ * payment completed later counts in full only from then.
+ */
+function collectedPercentBy(lines: AccountingLine[], payments: AccountingPayment[], cutoff: CalendarDay) {
+  const end = Date.UTC(cutoff.year, cutoff.month - 1, cutoff.day + 1) - TASHKENT_OFFSET_MS
+  const byId = new Map(payments.map((p) => [p.id, p]))
+  let collected = 0
+  let expected = 0
+  for (const line of lines) {
+    expected += line.amountDue
+    const row = line.paymentId ? byId.get(line.paymentId) : undefined
+    if (row && (row.paidAt ?? row.createdAt).getTime() < end) collected += line.amountPaid
+  }
+  return percent(collected, expected)
+}
+
+export type GroupAccounting = AccountingSummary & {
+  groupId: string | null
+  groupName: string | null
+  teacherName: string | null
+  previous: PreviousMonth
+}
 
 export type Accounting = {
   month: BillingMonth
+  /** The day the figures are as of (Tashkent). */
+  today: CalendarDay
   summary: AccountingSummary
+  previous: PreviousMonth
+  /** Biggest shortfall first. */
   groups: GroupAccounting[]
   lines: AccountingLine[]
-  /** The six months up to the chosen one, oldest first. */
-  trend: Array<BillingMonth & { expected: number; collected: number }>
-  /** Next month (after today's), as it looks now -- what the center should expect to bring in. */
-  forecast: BillingMonth & AccountingSummary
-  /** Owed for every month whose payment day has passed, all months together. */
-  totalDebt: number
-  /** Students who owe for at least one month whose payment day has passed. */
-  debtors: Array<{ studentId: string; studentName: string; groupName: string | null; months: number; amount: number }>
 }
 
 /** The whole accounting view, from data already loaded -- pure, so it's tested without a database. */
@@ -208,56 +258,38 @@ export function buildAccounting(
     (a, b) => (a.groupName ?? '').localeCompare(b.groupName ?? '') || a.studentName.localeCompare(b.studentName),
   )
 
+  const prevMonth = addMonths(month, -1)
+  const prevLines = monthLines(data, prevMonth, today, groupIds)
+  const isCurrent = month.year === today.year && month.month === today.month
+  const lastDayOfPrev = new Date(Date.UTC(prevMonth.year, prevMonth.month, 0)).getUTCDate()
+  const sameDay = { ...prevMonth, day: Math.min(today.day, lastDayOfPrev) }
+  const previousOf = (own: AccountingLine[]): PreviousMonth => {
+    const s = summarize(own, today)
+    return {
+      ...prevMonth,
+      sameDayPercent: isCurrent ? collectedPercentBy(own, data.payments, sameDay) : null,
+      finalPercent: percent(s.collected, s.expected),
+    }
+  }
+
   const byGroup = new Map<string | null, AccountingLine[]>()
   for (const line of lines) byGroup.set(line.groupId, [...(byGroup.get(line.groupId) ?? []), line])
   const groups = [...byGroup].map(([groupId, own]) => ({
     groupId,
     groupName: own[0].groupName,
+    teacherName: own[0].teacherName,
     ...summarize(own, today),
+    previous: previousOf(prevLines.filter((l) => l.groupId === groupId)),
   }))
-  groups.sort((a, b) => b.expected - a.expected)
-
-  const trend = Array.from({ length: 6 }, (_, i) => {
-    const m = addMonths(month, i - 5)
-    const s = summarize(monthLines(data, m, today, groupIds), today)
-    return { ...m, expected: s.expected, collected: s.collected }
-  })
-
-  const current: BillingMonth = { year: today.year, month: today.month }
-  const next = addMonths(current, 1)
-  const forecast = { ...next, ...summarize(monthLines(data, next, today, groupIds), today) }
-
-  // Every month from the earliest join to today's -- the debt is whatever came due and wasn't paid.
-  const debtByStudent = new Map<string, { studentName: string; groupName: string | null; months: number; amount: number }>()
-  const earliest = data.students.reduce<BillingMonth>((min, s) => {
-    const j = calendarDayOf(s.joinedAt)
-    return monthIndex(j) < monthIndex(min) ? { year: j.year, month: j.month } : min
-  }, current)
-  for (let m = earliest; monthIndex(m) <= monthIndex(current); m = addMonths(m, 1)) {
-    for (const line of monthLines(data, m, today, groupIds)) {
-      const left = Math.max(line.amountDue - line.amountPaid, 0)
-      if (left === 0 || daysBetween(calendarDayOf(line.dueDate), today) < 0) continue
-      const entry = debtByStudent.get(line.studentId) ?? { studentName: line.studentName, groupName: line.groupName, months: 0, amount: 0 }
-      entry.months += 1
-      entry.amount += left
-      // The group shown is the one they owe for most recently.
-      entry.groupName = line.groupName
-      debtByStudent.set(line.studentId, entry)
-    }
-  }
-  const debtors = [...debtByStudent]
-    .map(([studentId, d]) => ({ studentId, ...d }))
-    .sort((a, b) => b.amount - a.amount)
+  groups.sort((a, b) => b.missing - a.missing || (a.groupName ?? '').localeCompare(b.groupName ?? ''))
 
   return {
     month,
+    today,
     summary: summarize(lines, today),
+    previous: previousOf(prevLines),
     groups,
     lines,
-    trend,
-    forecast,
-    totalDebt: debtors.reduce((sum, d) => sum + d.amount, 0),
-    debtors,
   }
 }
 
@@ -282,14 +314,38 @@ export async function getAccounting(
       select: { studentId: true, groupId: true, startDate: true, endDate: true },
     }),
     prisma.payment.findMany({
-      where: { studentId: { in: studentIds } },
-      select: { id: true, studentId: true, year: true, month: true, amountDue: true, amountPaid: true, note: true },
+      // Only the two months the page reads.
+      where: {
+        studentId: { in: studentIds },
+        OR: [month, addMonths(month, -1)].map((m) => ({ year: m.year, month: m.month })),
+      },
+      select: {
+        id: true,
+        studentId: true,
+        year: true,
+        month: true,
+        amountDue: true,
+        amountPaid: true,
+        note: true,
+        paidAt: true,
+        createdAt: true,
+      },
     }),
   ])
   const groups = await prisma.group.findMany({
     where: { id: { in: [...new Set(enrollments.map((e) => e.groupId))] } },
-    select: { id: true, name: true, monthlyFee: true },
+    select: { id: true, name: true, monthlyFee: true, teacher: { select: { fullName: true } } },
   })
 
-  return buildAccounting({ students, enrollments, groups, payments }, month, today, groupIds ? new Set(groupIds) : null)
+  return buildAccounting(
+    {
+      students,
+      enrollments,
+      groups: groups.map((g) => ({ id: g.id, name: g.name, monthlyFee: g.monthlyFee, teacherName: g.teacher?.fullName ?? null })),
+      payments,
+    },
+    month,
+    today,
+    groupIds ? new Set(groupIds) : null,
+  )
 }

@@ -13,8 +13,8 @@ const TODAY = day(2026, 11, 6)
 function center(): AccountingData {
   return {
     groups: [
-      { id: 'g1', name: 'IELTS 1', monthlyFee: FEE },
-      { id: 'g2', name: 'Kids', monthlyFee: 300_000 },
+      { id: 'g1', name: 'IELTS 1', monthlyFee: FEE, teacherName: 'Aziza Karimova' },
+      { id: 'g2', name: 'Kids', monthlyFee: 300_000, teacherName: 'Rustam Nazarov' },
     ],
     students: [
       { id: 'ali', firstName: 'Ali', lastName: 'A', joinedAt: d('2026-09-01'), status: 'ACTIVE' },
@@ -27,8 +27,9 @@ function center(): AccountingData {
       { studentId: 'sami', groupId: 'g2', startDate: d('2026-10-10'), endDate: null },
     ],
     payments: [
-      { id: 'p1', studentId: 'ali', year: 2026, month: 10, amountDue: FEE, amountPaid: FEE, note: null },
-      { id: 'p2', studentId: 'vali', year: 2026, month: 10, amountDue: FEE, amountPaid: 200_000, note: null },
+      // Ali paid October on 3 October; Vali paid 200k of it on 20 October.
+      { id: 'p1', studentId: 'ali', year: 2026, month: 10, amountDue: FEE, amountPaid: FEE, note: null, paidAt: d('2026-10-03'), createdAt: d('2026-10-03') },
+      { id: 'p2', studentId: 'vali', year: 2026, month: 10, amountDue: FEE, amountPaid: 200_000, note: null, paidAt: null, createdAt: d('2026-10-20') },
     ],
   }
 }
@@ -38,21 +39,42 @@ describe('accounting', () => {
     const a = buildAccounting(center(), OCT, TODAY)
     // Ali paid, Vali half-paid, Sami nothing (his fee is the Kids group's).
     expect(a.summary).toMatchObject({ expected: 1_300_000, collected: 700_000, missing: 600_000, overdue: 600_000 })
-    expect(a.summary).toMatchObject({ students: 3, paid: 1, partial: 1, unpaid: 1 })
-    expect(a.groups.map((g) => [g.groupName, g.expected, g.collected])).toEqual([
-      ['IELTS 1', 1_000_000, 700_000],
-      ['Kids', 300_000, 0],
+    expect(a.summary).toMatchObject({ students: 3, paid: 1, partial: 1, unpaid: 1, overdueStudents: 2 })
+  })
+
+  it('splits the gap into unpaid, the rest of partial payments, and not yet due', () => {
+    const data = center()
+    data.payments.push({ id: 'p3', studentId: 'vali', year: 2026, month: 11, amountDue: FEE, amountPaid: 100_000, note: null, paidAt: null, createdAt: d('2026-11-02') })
+    const { summary } = buildAccounting(data, NOV, TODAY)
+    // Ali owes all of November (his day passed); Vali 400k is left; Sami's day (10th) is ahead.
+    expect(summary).toMatchObject({ unpaidAmount: FEE, partialAmount: 400_000, upcomingAmount: 300_000 })
+    expect(summary.unpaidAmount + summary.partialAmount + summary.upcomingAmount).toBe(summary.missing)
+    // Vali's day (15th) hasn't come, so only Ali's is overdue.
+    expect([summary.overdue, summary.overdueStudents]).toEqual([FEE, 1])
+  })
+
+  it('keeps a not-yet-due payment apart from an overdue one', () => {
+    const state = Object.fromEntries(monthLines(center(), NOV, TODAY).map((l) => [l.studentId, l.state]))
+    expect(state).toEqual({ ali: 'unpaid', vali: 'upcoming', sami: 'upcoming' })
+  })
+
+  it('lists groups biggest shortfall first, with their teacher', () => {
+    const a = buildAccounting(center(), OCT, TODAY)
+    expect(a.groups.map((g) => [g.groupName, g.teacherName, g.expected, g.collected, g.missing])).toEqual([
+      ['IELTS 1', 'Aziza Karimova', 1_000_000, 700_000, 300_000],
+      ['Kids', 'Rustam Nazarov', 300_000, 0, 300_000],
     ])
   })
 
-  it('keeps a not-yet-due payment apart from the overdue debt', () => {
-    const lines = monthLines(center(), NOV, TODAY)
-    const state = Object.fromEntries(lines.map((l) => [l.studentId, l.state]))
-    // Ali's day (1st) has passed; Vali's (15th) and Sami's (10th) haven't.
-    expect(state).toEqual({ ali: 'unpaid', vali: 'upcoming', sami: 'upcoming' })
+  it('compares with last month by this same day, and by its end', () => {
     const a = buildAccounting(center(), NOV, TODAY)
-    expect(a.summary.missing).toBe(1_300_000)
-    expect(a.summary.overdue).toBe(FEE)
+    // October expected 1.3M. By 6 October only Ali's 500k was in (38%); all told 700k (54%).
+    expect(a.previous).toEqual({ year: 2026, month: 10, sameDayPercent: 38, finalPercent: 54 })
+  })
+
+  it('shows only the end-of-month share when looking back at a past month', () => {
+    const a = buildAccounting(center(), OCT, TODAY)
+    expect(a.previous.sameDayPercent).toBeNull()
   })
 
   it('bills nobody for a month before they joined', () => {
@@ -87,27 +109,5 @@ describe('accounting', () => {
     data.groups[1].monthlyFee = 0
     const sami = monthLines(data, OCT, TODAY).find((l) => l.studentId === 'sami')!
     expect(sami.state).toBe('noFee')
-  })
-
-  it("forecasts next month from today's roster", () => {
-    const a = buildAccounting(center(), OCT, TODAY)
-    expect(a.forecast).toMatchObject({ year: 2026, month: 12, expected: 1_300_000, students: 3 })
-  })
-
-  it('adds up the debt over every month that came due, per student', () => {
-    const a = buildAccounting(center(), OCT, TODAY)
-    // Ali: Sep + Nov unpaid; Vali: Sep + Oct's remaining 300k; Sami: Oct.
-    expect(a.debtors.map((x) => [x.studentId, x.months, x.amount])).toEqual([
-      ['ali', 2, 1_000_000],
-      ['vali', 2, 800_000],
-      ['sami', 1, 300_000],
-    ])
-    expect(a.totalDebt).toBe(2_100_000)
-  })
-
-  it('shows the six months up to the chosen one', () => {
-    const a = buildAccounting(center(), OCT, TODAY)
-    expect(a.trend.map((t) => t.month)).toEqual([5, 6, 7, 8, 9, 10])
-    expect(a.trend.at(-1)).toMatchObject({ expected: 1_300_000, collected: 700_000 })
   })
 })
