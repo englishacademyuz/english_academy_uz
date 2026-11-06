@@ -17,6 +17,7 @@ import type {
   Group,
   GroupLeaderboardEntry,
   GroupChampionMonth,
+  Accounting,
   GroupPaymentEntry,
   GroupPaymentHistory,
   HomeworkFeed,
@@ -263,6 +264,9 @@ export const payments = {
   forGroup: (groupId: string, year: number, month: number) =>
     get<GroupPaymentEntry[]>(`/groups/${groupId}/payments?year=${year}&month=${month}`),
   historyForGroup: (groupId: string) => get<GroupPaymentHistory>(`/groups/${groupId}/payments-history`),
+  /** Expected vs. collected for one month -- the whole center for an admin, own groups for a teacher; or one group. */
+  accounting: (year: number, month: number, groupId?: string) =>
+    get<Accounting>(`/accounting?year=${year}&month=${month}${groupId ? `&groupId=${groupId}` : ''}`),
   /** Sends the student's Telegram chats a reminder about the payment that is due. */
   remind: (studentId: string) =>
     post<{ notifiedChats: number; remindedAt: string }>(`/students/${studentId}/payment-reminder`),

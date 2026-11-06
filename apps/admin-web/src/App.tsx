@@ -11,6 +11,7 @@ import { StudentDetailPage } from './pages/StudentDetailPage'
 import { TeachersPage } from './pages/TeachersPage'
 import { SubjectsPage } from './pages/SubjectsPage'
 import { AnnouncementsPage } from './pages/AnnouncementsPage'
+import { AccountingPage } from './pages/AccountingPage'
 import { useTheme } from './lib/theme'
 import 'react-toastify/dist/ReactToastify.css'
 
@@ -30,6 +31,7 @@ export function App() {
             <Route path="students" element={<StudentsPage />} />
             <Route path="students/:id" element={<StudentDetailPage />} />
             <Route path="announcements" element={<AnnouncementsPage />} />
+            <Route path="accounting" element={<AccountingPage />} />
 
             <Route element={<AdminOnlyRoute />}>
               <Route path="teachers" element={<TeachersPage />} />

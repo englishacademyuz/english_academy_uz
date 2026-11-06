@@ -11,6 +11,7 @@ import {
   School,
   Sun,
   Users,
+  Wallet,
   X,
 } from 'lucide-react'
 import { useAuth } from '../lib/auth'
@@ -23,6 +24,7 @@ const navItems = [
   { to: '/groups', label: 'Guruhlar', icon: School, end: false },
   { to: '/students', label: "Oʻquvchilar", icon: GraduationCap, end: false },
   { to: '/announcements', label: 'Eʼlonlar', icon: Megaphone, end: false },
+  { to: '/accounting', label: 'Moliya', icon: Wallet, end: false },
   { to: '/teachers', label: "Oʻqituvchilar", icon: Users, end: false, adminOnly: true },
   { to: '/subjects', label: "Oʻquv dasturi", icon: BookOpen, end: false, adminOnly: true },
 ]

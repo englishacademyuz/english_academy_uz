@@ -410,3 +410,40 @@ export type AnnouncementInput = {
   /** The picture as a data URL, shrunk in the browser first. */
   image: string | null
 }
+
+/** One student's bill for one month on the accounting page. */
+export type AccountingLineState = 'paid' | 'partial' | 'unpaid' | 'upcoming' | 'noFee'
+export type AccountingLine = {
+  studentId: string
+  studentName: string
+  groupId: string | null
+  groupName: string | null
+  dueDate: string
+  amountDue: number
+  amountPaid: number
+  state: AccountingLineState
+  paymentId: string | null
+  note: string | null
+}
+export type AccountingSummary = {
+  expected: number
+  collected: number
+  missing: number
+  overdue: number
+  students: number
+  paid: number
+  partial: number
+  unpaid: number
+  upcoming: number
+  noFee: number
+}
+export type Accounting = {
+  month: { year: number; month: number }
+  summary: AccountingSummary
+  groups: Array<AccountingSummary & { groupId: string | null; groupName: string | null }>
+  lines: AccountingLine[]
+  trend: Array<{ year: number; month: number; expected: number; collected: number }>
+  forecast: AccountingSummary & { year: number; month: number }
+  totalDebt: number
+  debtors: Array<{ studentId: string; studentName: string; groupName: string | null; months: number; amount: number }>
+}

@@ -110,6 +110,10 @@ The one option chosen for one question within a QuizAttempt. It cannot be change
 An immutable, permanent ledger entry awarding points to a Student for an activity, tagged with the Group the Student belonged to when it was earned. Points are never reset or deducted; "monthly" or "course" totals are always a date-ranged sum over this ledger.
 _Avoid_: Point balance, score — points and academic scores are unrelated concepts (requirements §12).
 
+**Accounting (Moliya)**:
+Not a stored record — a calculated view over Payments for one month: what it should bring in (*expected*: each billed student's recorded amount, else their group's fee), what was paid for it (*collected*), and the gap (*missing*; *overdue* once the payment day has passed). A student is billed for a month once they've joined and were in a group during that cycle, or when a Payment is recorded for it. Money counts toward the month it pays for, not the day it was handed over. An admin sees the whole center, a Teacher only their own groups.
+_Avoid_: Profit — there are no expenses in the system; this is income.
+
 **MonthlyChampion**:
 A Group's points winner for one finished calendar month (Tashkent time) — whoever earned the most points tagged to that Group that month; tied students share it. Recorded once, just after the month ends, and never recomputed. In the Mini App the points table and "my points" count only the current month (starting from 0 on the 1st), and the first open in a new month celebrates last month's champion — fireworks for the champion themself. The bot also tells every chat of the Group once, congratulating the champion's own chats by name.
 _Avoid_: Winner of the week, monthly reset — nothing is reset; the ledger keeps every point.

@@ -41,6 +41,7 @@ export function PaymentsCard({
 
   function handleSaved() {
     queryClient.invalidateQueries({ queryKey: ['student-overview', student.id] })
+    queryClient.invalidateQueries({ queryKey: ['accounting'] })
     queryClient.invalidateQueries({ queryKey: ['students'] })
     setShowAdd(false)
     setAdding(null)

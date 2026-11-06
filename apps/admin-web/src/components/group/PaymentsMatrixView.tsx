@@ -1,13 +1,47 @@
 import { useState } from 'react'
+import { Link } from 'react-router-dom'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { calendarDayOf, daysBetween, paymentDay, tashkentToday, toStoredDate } from '@tashkurgan/shared/billing'
 import { payments as paymentsApi } from '../../lib/api'
-import { formatDayMonth, paymentCountdownLabel, paymentCountdownTone, paymentStatusLabel, paymentStatusTone } from '../../lib/format'
+import { formatDayMonth, formatMoney, paymentCountdownLabel, paymentCountdownTone, paymentStatusLabel, paymentStatusTone } from '../../lib/format'
 import type { Group, Payment } from '../../lib/types'
 import { Badge, ColumnLabel, Spinner } from '../ui'
 import { DetailMatrix, type MatrixColumn } from './DetailMatrix'
 import { MonthNavHeader } from './MonthNavHeader'
 import { PaymentModal } from '../shared/PaymentModal'
+
+/** The month's money for this group in one line: collected of expected, and what's still missing. */
+function GroupMonthSummary({ groupId, year, month }: { groupId: string; year: number; month: number }) {
+  const query = useQuery({
+    queryKey: ['accounting', year, month, groupId],
+    queryFn: () => paymentsApi.accounting(year, month, groupId),
+  })
+  const s = query.data?.summary
+  if (!s || s.students === 0) return null
+  const share = s.expected > 0 ? Math.round((s.collected / s.expected) * 100) : 0
+
+  return (
+    <div className="flex flex-wrap items-center gap-x-5 gap-y-1.5 border-b border-slate-200 px-4 py-2.5 text-xs dark:border-slate-800">
+      <span className="text-slate-500 dark:text-slate-400">
+        Tushdi{' '}
+        <span className="font-semibold tabular-nums text-slate-900 dark:text-slate-100">{formatMoney(s.collected)}</span>
+        {' / '}
+        <span className="tabular-nums">{formatMoney(s.expected)}</span> ({share}%)
+      </span>
+      {s.missing > 0 && (
+        <span className="text-slate-500 dark:text-slate-400">
+          Yetishmayapti <span className="font-semibold tabular-nums text-red-600 dark:text-red-400">{formatMoney(s.missing)}</span>
+        </span>
+      )}
+      <span className="text-slate-500 dark:text-slate-400">
+        {s.paid} toʻlagan · {s.partial} qisman · {s.unpaid} toʻlamagan{s.upcoming > 0 && ` · ${s.upcoming} kutilmoqda`}
+      </span>
+      <Link to="/accounting" className="ml-auto font-semibold text-brand-600 hover:underline dark:text-brand-400">
+        Moliya →
+      </Link>
+    </div>
+  )
+}
 
 /** One calendar month of payment status at a time, newest first -- browsed month-by-month via
  * MonthNavHeader the same way JournalView browses lesson days, rather than dumping every month
@@ -109,6 +143,7 @@ export function PaymentsMatrixView({ group }: { group: Group }) {
 
   return (
     <div className="flex flex-1 flex-col">
+      <GroupMonthSummary groupId={group.id} year={monthAnchor.year} month={monthAnchor.month} />
       {historyQuery.isLoading ? (
         <Spinner />
       ) : (
@@ -140,6 +175,7 @@ export function PaymentsMatrixView({ group }: { group: Group }) {
           onClose={() => setEditing(null)}
           onSaved={() => {
             queryClient.invalidateQueries({ queryKey: ['group-payments-history', group.id] })
+            queryClient.invalidateQueries({ queryKey: ['accounting'] })
             setEditing(null)
           }}
         />

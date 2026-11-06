@@ -4,6 +4,7 @@ import { prisma } from '@tashkurgan/db'
 import {
   assertCan,
   computeOutstanding,
+  getAccounting,
   getGroupPaymentHistory,
   getGroupPaymentStatus,
   getPaymentReminder,
@@ -24,6 +25,7 @@ const studentParams = z.object({ id: z.string() })
 const paymentParams = z.object({ id: z.string() })
 const groupParams = z.object({ groupId: z.string() })
 const groupPaymentsQuery = z.object({ year: z.coerce.number().int(), month: z.coerce.number().int().min(1).max(12) })
+const accountingQuery = groupPaymentsQuery.extend({ groupId: z.string().optional() })
 
 const recordSchema = z.object({
   year: z.number().int(),
@@ -93,6 +95,27 @@ export const paymentRoutes: FastifyPluginAsync<{ notifier?: PaymentReminderNotif
     await requireGroup(groupId)
     const { year, month } = groupPaymentsQuery.parse(request.query)
     return getGroupPaymentStatus(groupId, year, month)
+  })
+
+  // The accounting page: one month's expected vs. collected money, by group and by student, plus
+  // the trend, next month's forecast and everyone in debt. An admin sees the whole center (or one
+  // group); a teacher only the groups they teach.
+  app.get('/accounting', { preHandler: app.authenticate }, async (request) => {
+    const actor = request.actor!
+    assertCan(actor, { resource: 'payment', action: 'view' })
+    const { year, month, groupId } = accountingQuery.parse(request.query)
+
+    let groupIds: string[] | null = null
+    if (actor.role !== 'ADMIN') {
+      const own = await prisma.group.findMany({ where: { teacherId: actor.teacherId ?? '' }, select: { id: true } })
+      groupIds = own.map((g) => g.id)
+    }
+    if (groupId) {
+      const group = await requireGroup(groupId)
+      assertCan(actor, { resource: 'group', action: 'view', ownerTeacherId: group.teacherId })
+      groupIds = [groupId]
+    }
+    return getAccounting({ year, month }, { groupIds })
   })
 
   app.get('/groups/:groupId/payments-history', { preHandler: app.authenticate }, async (request) => {
