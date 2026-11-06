@@ -44,7 +44,7 @@ export function AccountingPage() {
     queryFn: () => paymentsApi.accounting(month.year, month.month),
   })
   const data = accountingQuery.data
-  const today = data ? data.today : null
+  const today = data?.today ?? null
 
   return (
     <div className="space-y-6">
@@ -62,6 +62,8 @@ export function AccountingPage() {
         <Spinner />
       ) : accountingQuery.error || !data ? (
         <ErrorBanner message="Maʼlumotlarni yuklab boʻlmadi" />
+      ) : !isCurrentShape(data) ? (
+        <ErrorBanner message="Server hali yangilanmagan — bir necha daqiqadan soʻng sahifani yangilang." />
       ) : data.lines.length === 0 ? (
         <EmptyState title="Bu oy uchun hisob yoʻq" description="Bu oyda guruhlarda oʻquvchi boʻlmagan." />
       ) : (
@@ -69,6 +71,16 @@ export function AccountingPage() {
       )}
     </div>
   )
+}
+
+/**
+ * Whether the server sent the figures this page reads. The web app and the server deploy
+ * separately, so for a few minutes after a release the page can meet a server that still sends
+ * the older shape -- that gets a message instead of a crash.
+ */
+function isCurrentShape(data: Accounting): boolean {
+  const partial = data as Partial<Accounting>
+  return !!partial.today && !!partial.previous && !!partial.summary && Array.isArray(partial.lines) && Array.isArray(partial.groups)
 }
 
 /** Back through past months; forward only up to the current one. */
