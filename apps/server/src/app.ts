@@ -57,7 +57,9 @@ export async function buildApp(options: BuildAppOptions = {}) {
   await app.register(authPlugin)
   await app.register(studentAuthPlugin, { botToken: options.telegramBotToken ?? config.telegramBotToken })
 
-  app.get('/health', async () => ({ status: 'ok' }))
+  // `commit` says which code is live -- Railway sets RAILWAY_GIT_COMMIT_SHA on every deploy, so
+  // after a push, /health shows whether the server has caught up with the web app.
+  app.get('/health', async () => ({ status: 'ok', commit: process.env.RAILWAY_GIT_COMMIT_SHA?.slice(0, 7) ?? null }))
 
   await app.register(authRoutes, { prefix: '/auth' })
   await app.register(subjectRoutes, { prefix: '/subjects' })
