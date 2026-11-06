@@ -25,6 +25,7 @@ import {
   calculateAttendanceRate,
   chooseChatStudent,
   getGroupLeaderboard,
+  listGroupChampions,
   getPaymentReminder,
   getFamilyThread,
   getProgress,
@@ -40,7 +41,7 @@ import {
   toPercentage,
   upcomingReschedules,
 } from '@tashkurgan/domain'
-import { AppError, NotFoundError, shownToStudent, ValidationError } from '@tashkurgan/shared'
+import { AppError, NotFoundError, shownToStudent, tashkentMonth, tashkentMonthStart, ValidationError } from '@tashkurgan/shared'
 import { telegramDisplayName } from '../telegram/initData'
 import { isSupportedImage, MAX_DOWNLOAD_BYTES, type HomeworkFileStore } from '../telegram/fileStore'
 import { homeworkPhotoCaption, sendHomeworkFile } from './homeworkSubmissions'
@@ -178,8 +179,10 @@ export const miniAppRoutes: FastifyPluginAsync<{ fileStore?: HomeworkFileStore }
     const student = me(request)
     const enrollment = await activeEnrollment(student.id)
     const now = new Date()
+    // Points start from 0 each Tashkent calendar month; earlier months stay in the ledger.
+    const monthStart = tashkentMonthStart(tashkentMonth(now))
 
-    const [lastLesson, latestHomework, quizzes, progress, points, changes, ranking, payment, unreadChat, announcements] = await Promise.all([
+    const [lastLesson, latestHomework, quizzes, progress, points, monthPoints, changes, ranking, champions, payment, unreadChat, announcements] = await Promise.all([
       enrollment
         ? prisma.lessonSession.findFirst({
             where: { groupId: enrollment.groupId, date: { lte: now } },
@@ -209,8 +212,13 @@ export const miniAppRoutes: FastifyPluginAsync<{ fileStore?: HomeworkFileStore }
       listQuizzesForStudent(student.id, now),
       getProgress(student.id, { kind: 'month' }),
       prisma.pointTransaction.findMany({ where: { studentId: student.id }, select: { points: true } }),
+      prisma.pointTransaction.findMany({
+        where: { studentId: student.id, createdAt: { gte: monthStart } },
+        select: { points: true },
+      }),
       scheduleChanges(enrollment),
-      groupRanking(enrollment, student.id),
+      groupRanking(enrollment, student.id, { start: monthStart, end: now }),
+      groupChampions(enrollment, student.id, now),
       getPaymentReminder(student.id),
       familyUnreadCount(student.id),
       listAnnouncementsForStudent(student.id, { home: true, now }),
@@ -236,7 +244,11 @@ export const miniAppRoutes: FastifyPluginAsync<{ fileStore?: HomeworkFileStore }
       openQuizzes: quizzes.filter((q) => q.isOpen && !q.attempt?.completed),
       monthProgress: progress,
       totalPoints: sumPoints(points),
+      // This calendar month's points -- the ranking is by these, and they start from 0 on the 1st.
+      monthPoints: sumPoints(monthPoints),
       groupRanking: ranking,
+      // The group's past monthly champions, newest first.
+      champions,
       // Upcoming or overdue payment -- null when nothing is due within three days, or while a new
       // student's first month is still in its quiet days.
       payment:
@@ -765,22 +777,40 @@ async function scheduleChanges(enrollment: Awaited<ReturnType<typeof activeEnrol
   }))
 }
 
+/** A classmate as the Mini App shows them -- first name and last initial only. */
+const shortName = (s: { firstName: string; lastName: string }) => `${s.firstName} ${s.lastName.charAt(0)}.`.trim()
+
 /**
- * Everyone in the active group, placed by the points they earned in it. Classmates
- * appear by first name and last initial only, and no ids leave the server -- the
- * student's own row is flagged `isMe` instead.
+ * Everyone in the active group, placed by the points they earned in it within `range`
+ * (this month, on the home screen). Classmates appear by first name and last initial
+ * only, and no ids leave the server -- the student's own row is flagged `isMe` instead.
  */
-async function groupRanking(enrollment: Awaited<ReturnType<typeof activeEnrollment>>, studentId: string) {
+async function groupRanking(
+  enrollment: Awaited<ReturnType<typeof activeEnrollment>>,
+  studentId: string,
+  range: { start: Date; end: Date },
+) {
   if (!enrollment) return null
-  const leaderboard = await getGroupLeaderboard(enrollment.groupId)
+  const leaderboard = await getGroupLeaderboard(enrollment.groupId, range)
   const rows = placesByPoints(
     // Classmates tied on points are listed alphabetically.
     leaderboard.map(({ student, points }) => ({
-      name: `${student.firstName} ${student.lastName.charAt(0)}.`.trim(),
+      name: shortName(student),
       points,
       isMe: student.id === studentId,
     })).sort((a, b) => a.name.localeCompare(b.name)),
   )
   const mine = rows.find((row) => row.isMe)
   return { myPlace: mine?.place ?? null, myPoints: mine?.points ?? 0, rows }
+}
+
+/** The active group's last six monthly champions, shaped like the ranking's rows. */
+async function groupChampions(enrollment: Awaited<ReturnType<typeof activeEnrollment>>, studentId: string, now: Date) {
+  if (!enrollment) return []
+  const months = await listGroupChampions(enrollment.groupId, { limit: 6, now })
+  return months.map((m) => ({
+    year: m.year,
+    month: m.month,
+    winners: m.winners.map((w) => ({ name: shortName(w.student), points: w.points, isMe: w.student.id === studentId })),
+  }))
 }

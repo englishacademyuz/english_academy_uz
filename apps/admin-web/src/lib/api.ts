@@ -16,6 +16,7 @@ import type {
   EnrollmentEndReason,
   Group,
   GroupLeaderboardEntry,
+  GroupChampionMonth,
   GroupPaymentEntry,
   GroupPaymentHistory,
   HomeworkFeed,
@@ -284,6 +285,7 @@ export const points = {
     const query = range ? `?start=${range.start.toISOString()}&end=${range.end.toISOString()}` : ''
     return get<GroupLeaderboardEntry[]>(`/groups/${groupId}/leaderboard${query}`)
   },
+  championsForGroup: (groupId: string) => get<GroupChampionMonth[]>(`/groups/${groupId}/champions`),
 }
 
 export const quizzes = {

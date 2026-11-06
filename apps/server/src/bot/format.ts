@@ -350,3 +350,50 @@ export function formatAnnouncement(announcement: {
     `<i>— ${escapeHtml(announcement.authorName)}</i>`,
   ].join('\n')
 }
+
+/** "120 ball", "7.5 ball" */
+const ballText = (points: number) => `${points} ball`
+
+/**
+ * Last month's champion, told to one chat of the group. A chat of the champion themself (or a
+ * parent's) is congratulated by name; every other chat gets the news, with the champion shown as
+ * first name and last initial, the same as in the Mini App's table.
+ */
+export function formatChampionAnnouncement(a: {
+  studentNames: string[]
+  groupName: string
+  month: number
+  winners: Array<{ firstName: string; lastName: string; points: number }>
+}): string {
+  const monthName = UZ_MONTHS[a.month - 1]
+  const nextMonth = UZ_MONTHS[a.month % 12]
+  const capitalized = monthName.charAt(0).toUpperCase() + monthName.slice(1)
+  const fullName = (w: { firstName: string; lastName: string }) => `${w.firstName} ${w.lastName}`
+  const shortName = (w: { firstName: string; lastName: string }) => `${w.firstName} ${w.lastName.charAt(0)}.`
+  const points = ballText(a.winners[0]?.points ?? 0)
+
+  const mine = a.winners.filter((w) => a.studentNames.includes(fullName(w)))
+  if (mine.length > 0) {
+    const others = a.winners.filter((w) => !mine.includes(w))
+    return [
+      `🎉 <b>Tabriklaymiz!</b>`,
+      '',
+      `<b>${mine.map((w) => escapeHtml(fullName(w))).join(' va ')}</b> ${monthName} oyining chempioni boʻldi! 🏆`,
+      `Guruh: <b>${escapeHtml(a.groupName)}</b>`,
+      `${points} bilan guruhda 1-oʻrin.`,
+      ...(others.length > 0 ? [`Chempionlik ${others.map((w) => escapeHtml(shortName(w))).join(', ')} bilan birga.`] : []),
+      '',
+      `${nextMonth.charAt(0).toUpperCase() + nextMonth.slice(1)}da ballar yana 0 dan boshlandi — chempionlikni saqlab qoling! 💪`,
+    ].join('\n')
+  }
+
+  return [
+    `👑 <b>${capitalized} oyi chempioni!</b>`,
+    `Guruh: <b>${escapeHtml(a.groupName)}</b>`,
+    forStudents(a.studentNames),
+    '',
+    ...a.winners.map((w) => `🏆 <b>${escapeHtml(shortName(w))}</b> — ${ballText(w.points)}`),
+    '',
+    `${nextMonth.charAt(0).toUpperCase() + nextMonth.slice(1)}da ballar yana 0 dan boshlandi — bu oy chempion siz boʻlishingiz mumkin! 💪`,
+  ].join('\n')
+}

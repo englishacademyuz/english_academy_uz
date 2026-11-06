@@ -55,6 +55,22 @@ export function addMonths({ year, month }: BillingMonth, by: number): BillingMon
   return { year: Math.floor(index / 12), month: (index % 12) + 1 }
 }
 
+/** The calendar month it is in the center (Tashkent) right now. */
+export function tashkentMonth(now: Date = new Date()): BillingMonth {
+  const { year, month } = tashkentToday(now)
+  return { year, month }
+}
+
+/** The instant a calendar month starts in Tashkent -- 00:00 on its 1st, i.e. 19:00 UTC the evening before. */
+export function tashkentMonthStart({ year, month }: BillingMonth): Date {
+  return new Date(Date.UTC(year, month - 1, 1) - TASHKENT_OFFSET_MS)
+}
+
+/** A Tashkent calendar month as a half-open range of instants: `start <= t < end`. */
+export function tashkentMonthRange(m: BillingMonth): { start: Date; end: Date } {
+  return { start: tashkentMonthStart(m), end: tashkentMonthStart(addMonths(m, 1)) }
+}
+
 /** The day a (year, month) cycle starts: the join day in that month, clamped in shorter months (a 31st joiner's starts on the 30th/28th). */
 export function cycleStart(joinedAt: string | Date, { year, month }: BillingMonth): CalendarDay {
   const lastDay = new Date(Date.UTC(year, month, 0)).getUTCDate()

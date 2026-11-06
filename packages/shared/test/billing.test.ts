@@ -6,6 +6,9 @@ import {
   paymentReminder,
   reminderStage,
   shownToStudent,
+  tashkentMonth,
+  tashkentMonthRange,
+  tashkentMonthStart,
   tashkentToday,
 } from '../src/billing'
 
@@ -138,5 +141,22 @@ describe('billingCycles', () => {
       [10, 'overdue', 200_000],
       [9, 'paid', 400_000],
     ])
+  })
+})
+
+describe('Tashkent calendar months', () => {
+  it('starts a month at 00:00 Tashkent -- 19:00 UTC the evening before', () => {
+    expect(tashkentMonthStart({ year: 2026, month: 11 }).toISOString()).toBe('2026-10-31T19:00:00.000Z')
+  })
+
+  it('runs a month up to the next one, across a year end', () => {
+    const { start, end } = tashkentMonthRange({ year: 2026, month: 12 })
+    expect(start.toISOString()).toBe('2026-11-30T19:00:00.000Z')
+    expect(end.toISOString()).toBe('2026-12-31T19:00:00.000Z')
+  })
+
+  it('is already the new month in Tashkent while it is still the last evening in UTC', () => {
+    expect(tashkentMonth(new Date('2026-10-31T20:00:00Z'))).toEqual({ year: 2026, month: 11 })
+    expect(tashkentMonth(new Date('2026-10-31T18:59:59Z'))).toEqual({ year: 2026, month: 10 })
   })
 })

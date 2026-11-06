@@ -15,6 +15,7 @@ import {
   redeemLinkingCode,
   chatAccess,
   chooseChatStudent,
+  type ChampionAnnouncement,
   type Recipient,
   type StoredPhoto,
   type StoredVideo,
@@ -580,6 +581,28 @@ export async function retractAnnouncement(bot: Bot<BotContext>, messages: SentMe
       await bot.api.deleteMessage(chatId, messageId)
     } catch (err) {
       console.error(`Deleting announcement message ${messageId} in chat ${chatId} failed:`, err)
+    }
+  }
+}
+
+/**
+ * Tells every chat of the group who last month's champion is -- the champion's own chats are
+ * congratulated by name. One failed chat doesn't stop the rest.
+ */
+export async function announceChampions(
+  bot: Bot<BotContext>,
+  miniAppUrl: string,
+  recipients: Recipient[],
+  champions: ChampionAnnouncement,
+) {
+  for (const { chatId, studentNames } of recipients) {
+    try {
+      await bot.api.sendMessage(chatId, fmt.formatChampionAnnouncement({ ...champions, studentNames }), {
+        parse_mode: 'HTML',
+        ...(miniAppUrl ? { reply_markup: openHomeKeyboard(miniAppUrl) } : {}),
+      })
+    } catch (err) {
+      console.error(`Champion announcement to chat ${chatId} failed:`, err)
     }
   }
 }

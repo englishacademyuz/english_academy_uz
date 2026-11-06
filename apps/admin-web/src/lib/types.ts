@@ -249,6 +249,12 @@ export type StudentOverview = {
 }
 
 export type GroupLeaderboardEntry = { student: Student; points: number }
+/** A finished month's winner(s) in a group -- more than one when tied. */
+export type GroupChampionMonth = {
+  year: number
+  month: number
+  winners: Array<{ student: { id: string; firstName: string; lastName: string }; points: number }>
+}
 export type GroupPaymentEntry = { student: Student; payment: Payment | null }
 export type GroupPaymentHistory = { students: Student[]; payments: Payment[] }
 

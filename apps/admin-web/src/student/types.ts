@@ -60,7 +60,11 @@ export type MiniHome = {
   openQuizzes: MiniQuiz[]
   monthProgress: MiniProgressSnapshot
   totalPoints: number
+  /** Points earned this calendar month (Tashkent) -- what the group ranking is by. */
+  monthPoints: number
   groupRanking: MiniGroupRanking | null
+  /** The group's past monthly champions, newest month first. */
+  champions: MiniChampionMonth[]
   payment: MiniPaymentReminder | null
   /** Teacher answers in the family chat not yet opened here. */
   unreadChat: number
@@ -254,6 +258,9 @@ export type MiniScheduleChange = {
 export type MiniRankRow = { name: string; points: number; place: number; isMe: boolean }
 
 export type MiniGroupRanking = { myPlace: number | null; myPoints: number; rows: MiniRankRow[] }
+
+/** A finished month's winner(s) in the student's group -- more than one when tied. */
+export type MiniChampionMonth = { year: number; month: number; winners: Array<{ name: string; points: number; isMe: boolean }> }
 
 /** One message of the family chat. `mine` is this Telegram account's own; other family messages come from the student's other linked chats. */
 export type MiniChatMessage = {

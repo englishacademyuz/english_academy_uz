@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { placesByPoints, sumPoints } from '../src/points/points'
+import { pickChampions } from '../src/points/monthlyChampions'
 
 describe('sumPoints', () => {
   it('sums a ledger of transactions', () => {
@@ -30,5 +31,23 @@ describe('placesByPoints', () => {
 
   it('handles an empty table', () => {
     expect(places([])).toEqual([])
+  })
+})
+
+describe('pickChampions', () => {
+  const winners = (points: number[]) => pickChampions(points.map((p, i) => ({ id: i, points: p }))).map((r) => r.id)
+
+  it('picks the top scorer', () => {
+    expect(winners([12, 30, 7])).toEqual([1])
+  })
+
+  it('shares the title between everyone tied on the top score', () => {
+    expect(winners([30, 12, 30])).toEqual([0, 2])
+  })
+
+  it('names no champion when nobody earned points', () => {
+    expect(winners([0, 0])).toEqual([])
+    expect(winners([])).toEqual([])
+    expect(winners([-2, 0])).toEqual([])
   })
 })

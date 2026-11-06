@@ -10,7 +10,7 @@ export function formatDate(value: string | Date): string {
 }
 
 const UZ_WEEKDAYS = ['Yakshanba', 'Dushanba', 'Seshanba', 'Chorshanba', 'Payshanba', 'Juma', 'Shanba']
-const UZ_MONTHS = [
+export const UZ_MONTHS = [
   'yanvar', 'fevral', 'mart', 'aprel', 'may', 'iyun',
   'iyul', 'avgust', 'sentabr', 'oktabr', 'noyabr', 'dekabr',
 ]

@@ -1,7 +1,7 @@
 import type { FastifyPluginAsync } from 'fastify'
 import { z } from 'zod'
 import { prisma } from '@tashkurgan/db'
-import { assertCan, awardPoints, getGroupLeaderboard, sumPoints } from '@tashkurgan/domain'
+import { assertCan, awardPoints, getGroupLeaderboard, listGroupChampions, sumPoints } from '@tashkurgan/domain'
 import { NotFoundError, isWholeOrHalf } from '@tashkurgan/shared'
 
 const studentParams = z.object({ id: z.string() })
@@ -53,5 +53,13 @@ export const pointRoutes: FastifyPluginAsync = async (app) => {
 
     const { start, end } = leaderboardQuery.parse(request.query)
     return getGroupLeaderboard(groupId, start && end ? { start, end } : undefined)
+  })
+
+  // Each finished month's winner(s), newest first.
+  app.get('/groups/:groupId/champions', { preHandler: app.authenticate }, async (request) => {
+    assertCan(request.actor!, { resource: 'pointTransaction', action: 'view' })
+    const { groupId } = groupParams.parse(request.params)
+    await requireGroup(groupId)
+    return listGroupChampions(groupId)
   })
 }

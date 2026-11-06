@@ -6,7 +6,9 @@ import { dayKeyOf } from '../../lib/schedule'
 import { toDateInputValue } from '../../lib/format'
 import { miniApi } from '../api'
 import { richTextToPlain } from '../../lib/richText'
+import { tashkentMonth } from '@tashkurgan/shared'
 import { AnnouncementCard } from '../components/announcement'
+import { ChampionSpotlight } from '../components/champion'
 import { ClockIcon, CupTile, GradeFace, HomeworkTile, MEDAL, TrophyIcon, isPodium, type Podium } from '../components/art'
 import { homeworkPreviewText } from '../components/HomeworkImages'
 import { deadlineLabel, homeworkDeadline, timeLeft, urgencyOf, useNow, type HomeworkDeadline } from '../deadline'
@@ -37,7 +39,9 @@ export function HomePage() {
     openQuizzes,
     monthProgress,
     totalPoints,
+    monthPoints,
     groupRanking,
+    champions,
     payment,
     unreadChat,
     announcements,
@@ -77,7 +81,9 @@ export function HomePage() {
 
       {unreadChat > 0 && <NewChatMessageCard count={unreadChat} />}
 
-      <PointsCard total={totalPoints} thisMonth={monthProgress.points} ranking={groupRanking} />
+      <ChampionSpotlight champions={champions} studentKey={`${student.firstName}-${student.lastName}`} />
+
+      <PointsCard total={totalPoints} thisMonth={monthPoints} ranking={groupRanking} />
 
       {groupRanking && groupRanking.rows.length > 0 && <GroupRanking ranking={groupRanking} />}
 
@@ -198,6 +204,7 @@ function PointsCard({
   thisMonth: number
   ranking: MiniGroupRanking | null
 }) {
+  // Points start from 0 each month -- the big number is this month's, the all-time total sits under it.
   return (
     <section className="flex flex-col gap-4 rounded-[28px] bg-tg-grape p-5 text-white">
       <div className="flex items-center gap-4">
@@ -205,21 +212,12 @@ function PointsCard({
           <TrophyIcon size={44} cupFill="#FFF3BF" />
         </div>
         <div className="flex min-w-0 grow flex-col gap-0.5">
-          <span className="text-[15px] font-bold text-tg-grape-soft">Mening ballarim</span>
-          <span className="font-tg-display text-5xl font-bold leading-none tabular-nums">{total}</span>
+          <span className="text-[15px] font-bold text-tg-grape-soft">{capitalize(currentMonthName())}dagi ballarim</span>
+          <span className="font-tg-display text-5xl font-bold leading-none tabular-nums">{thisMonth}</span>
           <span className="mt-1 text-sm font-bold">
-            {thisMonth === 0 ? (
-              'Bu oy hali ball yoʻq'
-            ) : (
-              <>
-                Bu oy{' '}
-                <span className="rounded-full bg-tg-sun px-2 py-0.5 text-tg-ink">
-                  {thisMonth > 0 ? '+' : ''}
-                  {thisMonth} ball
-                </span>{' '}
-                yigʻdim
-              </>
-            )}
+            {thisMonth === 0 ? 'Bu oy hali ball yoʻq · ' : ''}
+            Jami:{' '}
+            <span className="rounded-full bg-tg-sun px-2 py-0.5 tabular-nums text-tg-ink">{total} ball</span>
           </span>
         </div>
       </div>
@@ -227,6 +225,9 @@ function PointsCard({
     </section>
   )
 }
+
+/** "noyabr" -- the month in Tashkent, which the points table counts. */
+const currentMonthName = () => MONTHS[tashkentMonth().month - 1]
 
 /** A cup only goes to a place someone actually earned points for -- a fresh group, all on 0, has no winners yet. */
 const cupFor = (place: number | null, points: number) => (points > 0 && isPodium(place) ? place : null)
@@ -265,7 +266,7 @@ function GroupRanking({ ranking }: { ranking: MiniGroupRanking }) {
 
   return (
     <section className="flex flex-col gap-3">
-      <SectionTitle>Guruh reytingi</SectionTitle>
+      <SectionTitle>{capitalize(currentMonthName())} reytingi</SectionTitle>
       <div className="flex flex-col gap-3 rounded-[28px] border-2 border-tg-line bg-white p-4">
         <PodiumView rows={rows} />
         <ol className="flex flex-col gap-1.5">

@@ -176,6 +176,7 @@ model Student {
   assessmentResults   AssessmentResult[]
   payments            Payment[]
   pointTransactions   PointTransaction[]
+  monthlyChampions    MonthlyChampion[]
   conversation        Conversation?
 
   @@index([familyId])
@@ -332,6 +333,7 @@ model Group {
   lessonSessions    LessonSession[]
   assessments       Assessment[]
   pointTransactions PointTransaction[]
+  monthlyChampions  MonthlyChampion[]
   reschedules       LessonReschedule[]
   homeworkImages    HomeworkImage[]
   announcements     AnnouncementGroup[]
@@ -685,6 +687,31 @@ model PointTransaction {
   @@index([studentId])
   @@index([groupId])
   @@map("point_transactions")
+}
+
+// A Group's points winner for one finished calendar month (Tashkent time) --
+// whoever earned the most points tagged to that Group during the month. Ties
+// share the title, one row each. Written once, just after the month ends, and
+// never recomputed: re-grading an old assessment later doesn't take a title
+// away. Points themselves are never reset -- each month's table is just a
+// date-ranged sum over the ledger.
+model MonthlyChampion {
+  id        String   @id @default(cuid())
+  groupId   String
+  group     Group    @relation(fields: [groupId], references: [id], onDelete: Cascade)
+  studentId String
+  student   Student  @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  year      Int
+  month     Int
+  points    Float
+  createdAt DateTime @default(now())
+  // When the group's chats were told in Telegram -- null until then. Set
+  // before sending, so a month is announced once even across restarts.
+  announcedAt DateTime?
+
+  @@unique([groupId, year, month, studentId])
+  @@index([studentId])
+  @@map("monthly_champions")
 }
 
 // A quiz a teacher writes inside one lesson and sends to that lesson's group

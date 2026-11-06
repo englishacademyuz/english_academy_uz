@@ -1,11 +1,18 @@
 import { Api } from 'grammy'
-import { finalizeExpiredAttempts } from '@tashkurgan/domain'
+import {
+  claimChampionAnnouncement,
+  finalizeExpiredAttempts,
+  groupRecipients,
+  pendingChampionAnnouncements,
+  settleLastMonthChampions,
+} from '@tashkurgan/domain'
 import { telegramFileStore } from './telegram/fileStore'
 import { buildApp } from './app'
 import { config } from './config'
 import {
   announceAbsence,
   announceAnnouncement,
+  announceChampions,
   announceHomeworkReview,
   announceLessonChange,
   announcePaymentReminder,
@@ -72,3 +79,19 @@ const QUIZ_SWEEP_MS = 60_000
 setInterval(() => {
   finalizeExpiredAttempts().catch((err) => app.log.error({ err }, 'Quiz deadline sweep failed'))
 }, QUIZ_SWEEP_MS)
+
+// Writes each group's champion for the month that just ended, soon after midnight on the 1st
+// (Tashkent), then tells the group's chats in Telegram. Settled and announced months are skipped,
+// so most runs do nothing. Reads also settle lazily; the announcement still goes out from here.
+const CHAMPION_SWEEP_MS = 5 * 60_000
+async function championSweep() {
+  await settleLastMonthChampions()
+  if (!bot) return
+  for (const champions of await pendingChampionAnnouncements()) {
+    if (!(await claimChampionAnnouncement(champions))) continue
+    await announceChampions(bot, config.miniAppUrl, await groupRecipients(champions.groupId), champions)
+  }
+}
+const runChampionSweep = () => championSweep().catch((err) => app.log.error({ err }, 'Monthly champion sweep failed'))
+runChampionSweep()
+setInterval(runChampionSweep, CHAMPION_SWEEP_MS)

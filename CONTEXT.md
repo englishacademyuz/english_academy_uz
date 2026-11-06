@@ -110,6 +110,10 @@ The one option chosen for one question within a QuizAttempt. It cannot be change
 An immutable, permanent ledger entry awarding points to a Student for an activity, tagged with the Group the Student belonged to when it was earned. Points are never reset or deducted; "monthly" or "course" totals are always a date-ranged sum over this ledger.
 _Avoid_: Point balance, score — points and academic scores are unrelated concepts (requirements §12).
 
+**MonthlyChampion**:
+A Group's points winner for one finished calendar month (Tashkent time) — whoever earned the most points tagged to that Group that month; tied students share it. Recorded once, just after the month ends, and never recomputed. In the Mini App the points table and "my points" count only the current month (starting from 0 on the 1st), and the first open in a new month celebrates last month's champion — fireworks for the champion themself. The bot also tells every chat of the Group once, congratulating the champion's own chats by name.
+_Avoid_: Winner of the week, monthly reset — nothing is reset; the ledger keeps every point.
+
 **Reward**:
 A recorded achievement (e.g., "Monthly Champion") granted to a Student. Granting one never deducts the points that qualified them for it.
 _Avoid_: Prize, gift — the physical prize is just a note on the Reward; there is no inventory.
